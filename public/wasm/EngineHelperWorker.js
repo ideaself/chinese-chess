@@ -10,6 +10,7 @@
  */
 (function () {
   var engine = null
+  var DEBUG = false
 
   function injectShims() {
     var shimFs = {
@@ -65,6 +66,11 @@
     self.postMessage({ error: message })
   }
 
+  /** 例行诊断日志：仅调试模式发送 */
+  function dbg(message) {
+    if (DEBUG) self.postMessage({ log: message })
+  }
+
   self.onmessage = function (e) {
     var msg = e.data || {}
 
@@ -79,7 +85,7 @@
     if (msg.wasm_type != null) {
       var type = msg.wasm_type
       var origin = msg.origin || ''
-      function dbg(text) { self.postMessage({ log: text }) }
+      DEBUG = !!msg.debug
       try {
         injectShims()
         dbg('shims 注入完成')
@@ -98,7 +104,7 @@
           print: function () {},
           printErr: function (text) { dbg('stderr: ' + text) },
           setStatus: function (status) {
-            if (status) { dbg('status: ' + status); self.postMessage({ download: status }) }
+            if (DEBUG && status) dbg('status: ' + status)
           },
         }).then(function (inst) {
           engine = inst

@@ -777,6 +777,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 .games-panel { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
+/* 错题本 */
+.mistake-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.mastered-row { opacity: 0.55; }
+.mastered-row .key-moment-label { color: var(--green); }
+
 .sub-nav {
   display: flex;
   gap: 2px;

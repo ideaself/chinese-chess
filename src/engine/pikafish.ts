@@ -108,7 +108,11 @@ export class PikafishEngine {
         reject(new Error(e.message ? `Worker 出错: ${e.message}` : 'Worker 运行出错'))
       }
 
-      worker.postMessage({ wasm_type: wasmType, origin: window.location.origin })
+      worker.postMessage({
+        wasm_type: wasmType,
+        origin: window.location.origin,
+        debug: import.meta.env.DEV, // 仅开发模式输出诊断日志
+      })
     })
   }
 

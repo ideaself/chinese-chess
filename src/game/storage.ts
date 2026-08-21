@@ -194,6 +194,8 @@ export function getStats(): GameStats {
 
 // ── 错题本（计划第17节 V2） ───────────────────────────────────────
 
+const MASTERED_KEY = 'xiangqi_mastered'
+
 export interface MistakeItem {
   gameId: string
   gameDate: number
@@ -204,25 +206,52 @@ export interface MistakeItem {
   bestMoveCn: string
   classification: string
   moveLoss: number
+  /** 去重/掌握度键（局面+着法，忽略计数器） */
+  key: string
 }
 
-/** 从已分析棋谱中提取玩家的失误局面（新→旧，最多 50 条） */
+/** 已掌握错题键集合 */
+export function getMasteredKeys(): Set<string> {
+  try {
+    const raw = localStorage.getItem(MASTERED_KEY)
+    if (raw) return new Set(JSON.parse(raw))
+  } catch {}
+  return new Set()
+}
+
+/** 切换某题的"已掌握"状态 */
+export function toggleMastered(key: string): void {
+  const keys = getMasteredKeys()
+  if (keys.has(key)) keys.delete(key)
+  else keys.add(key)
+  localStorage.setItem(MASTERED_KEY, JSON.stringify([...keys]))
+}
+
+/** 从已分析棋谱中提取玩家的失误局面（新→旧，同局面同着法去重，最多 50 条） */
 export function getMistakes(): MistakeItem[] {
   const ERROR_LEVELS = new Set(['mistake', 'blunder', 'blunder2'])
   const items: MistakeItem[] = []
+  const seen = new Set<string>()
 
   const games = [...getAllGames()].sort((a, b) => b.updatedAt - a.updatedAt)
   for (const g of games) {
     if (g.analysisStatus !== 'complete') continue
     const isRedPlayer = g.header.Red === '玩家'
     const isBlackPlayer = g.header.Black === '玩家'
-    if (isRedPlayer === isBlackPlayer) continue // 非人机对局
+    if (isRedPlayer === isBlackPlayer) continue // 非人机对局不计入
     const playerTurn = isRedPlayer ? 'w' : 'b'
 
     for (let i = 0; i < g.plies.length; i++) {
       const ply = g.plies[i]
       if (!ply.analysis || ply.turn !== playerTurn) continue
       if (!ERROR_LEVELS.has(ply.analysis.classification)) continue
+
+      // 去重键：局面（棋盘+行棋方，忽略计数器）+ 着法
+      const posKey = ply.fenBefore.split(' ').slice(0, 2).join(' ')
+      const dedupKey = `${posKey}|${ply.move}`
+      if (seen.has(dedupKey)) continue
+      seen.add(dedupKey)
+
       items.push({
         gameId: g.id,
         gameDate: g.updatedAt,
@@ -232,6 +261,7 @@ export function getMistakes(): MistakeItem[] {
         bestMoveCn: ply.analysis.bestMoveCn || '',
         classification: ply.analysis.classification,
         moveLoss: ply.analysis.moveLoss,
+        key: dedupKey,
       })
       if (items.length >= 50) return items
     }
