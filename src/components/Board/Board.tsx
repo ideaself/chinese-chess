@@ -1,0 +1,274 @@
+/**
+ * 棋盘组件 - 点击走棋
+ *
+ * 纯点击交互:
+ *   1. 点击己方棋子 → 选中，高亮合法走法
+ *   2. 点击合法目标格 → 走棋
+ *   3. 点击其他位置 → 取消选择
+ */
+
+import React, { useCallback, useRef, useState, useEffect } from 'react'
+import { useStore } from '../../store/useStore'
+import type { Pos } from '../../game/board'
+import { isRed } from '../../game/board'
+import { isInCheck, findKing } from '../../game/rules'
+import { getSettings } from '../../game/storage'
+
+const CELL = 60
+const BOARD_COLS = 9
+const BOARD_ROWS = 10
+const BOARD_PADDING = 40
+const BOARD_WIDTH = BOARD_PADDING * 2 + (BOARD_COLS - 1) * CELL
+const BOARD_HEIGHT = BOARD_PADDING * 2 + (BOARD_ROWS - 1) * CELL
+const PIECE_RADIUS = 26
+
+interface AnimState {
+  piece: string
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+}
+
+function posToSvg(pos: Pos, flipped: boolean): { x: number; y: number } {
+  const col = flipped ? (BOARD_COLS - 1 - pos.col) : pos.col
+  // row 0 = 红方底线 = SVG 底部 (y 最大)
+  const row = flipped ? pos.row : (BOARD_ROWS - 1 - pos.row)
+  return { x: BOARD_PADDING + col * CELL, y: BOARD_PADDING + row * CELL }
+}
+
+function svgToPos(x: number, y: number, flipped: boolean): Pos {
+  let col = Math.round((x - BOARD_PADDING) / CELL)
+  let svgRow = Math.round((y - BOARD_PADDING) / CELL)
+  // svgRow 0 = 顶部 = row 9, svgRow 9 = 底部 = row 0
+  let row = flipped ? svgRow : (BOARD_ROWS - 1 - svgRow)
+  if (flipped) col = BOARD_COLS - 1 - col
+  return { col, row }
+}
+
+const GLYPHS: Record<string, string> = {
+  K: '帅', k: '将', A: '仕', a: '士', B: '相', b: '象',
+  N: '马', n: '马', R: '车', r: '车', C: '炮', c: '炮', P: '兵', p: '卒',
+}
+
+/** 棋子字符 → 皮肤文件名 (w=红, b=黑) */
+function pieceSkinFile(piece: string): string {
+  const side = isRed(piece) ? 'w' : 'b'
+  return `${side}${piece.toLowerCase()}`
+}
+
+export const Board: React.FC = () => {
+  const board = useStore(s => s.board)
+  const selected = useStore(s => s.selected)
+  const legalTargets = useStore(s => s.legalTargets)
+  const lastMove = useStore(s => s.lastMove)
+  const boardFlipped = useStore(s => s.boardFlipped)
+  const selectPiece = useStore(s => s.selectPiece)
+  const isThinking = useStore(s => s.isThinking)
+  const mode = useStore(s => s.mode)
+  const redTime = useStore(s => s.redTime)
+  const blackTime = useStore(s => s.blackTime)
+
+  const svgRef = useRef<SVGSVGElement>(null)
+  const prevBoardRef = useRef<string>('')
+  const [anim, setAnim] = useState<AnimState | null>(null)
+  const [settings] = useState(() => getSettings())
+  const inCheck = isInCheck(board)
+  const kingPos = inCheck ? findKing(board, board.turn === 'w') : null
+
+  const useSkin = settings.pieceStyle !== 'classic'
+  const boardSkin = settings.boardStyle !== 'classic' ? `/skins/boards/${settings.boardStyle}.webp` : null
+  const pieceSkin = useSkin ? `/skins/pieces/${settings.pieceStyle}` : null
+
+  // 走子动画
+  useEffect(() => {
+    if (!lastMove || mode !== 'play') { prevBoardRef.current = board.board.map(c => c.join('')).join(''); return }
+    const prev = prevBoardRef.current
+    const curr = board.board.map(c => c.join('')).join('')
+    if (prev && prev !== curr) {
+      const from = posToSvg(lastMove.from, boardFlipped)
+      const to = posToSvg(lastMove.to, boardFlipped)
+      const piece = board.board[lastMove.to.col][lastMove.to.row]
+      // 先渲染在旧位置，下一帧移到新位置触发 CSS transition
+      setAnim({ piece, fromX: from.x, fromY: from.y, toX: from.x, toY: from.y })
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAnim(a => a ? { ...a, toX: to.x, toY: to.y } : null)
+        })
+      })
+      const t = setTimeout(() => setAnim(null), 250)
+      prevBoardRef.current = curr
+      return () => clearTimeout(t)
+    }
+    prevBoardRef.current = curr
+  }, [board, lastMove, boardFlipped, mode])
+
+  const getSvgCoords = useCallback((clientX: number, clientY: number) => {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect) return null
+    return {
+      x: (clientX - rect.left) * (BOARD_WIDTH / rect.width),
+      y: (clientY - rect.top) * (BOARD_HEIGHT / rect.height),
+    }
+  }, [])
+
+  // 点击处理（直接读取最新 store 状态，避免闭包过期问题）
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const { mode, isThinking, boardFlipped, selectPiece, setupClick } = useStore.getState()
+    if (isThinking) return
+    const coords = getSvgCoords(e.clientX, e.clientY)
+    if (!coords) return
+    const pos = svgToPos(coords.x, coords.y, boardFlipped)
+    if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
+    if (mode === 'setup') { setupClick(pos); return }
+    if (mode !== 'play') return
+    selectPiece(pos)
+  }, [getSvgCoords])
+
+  // 触摸处理
+  const handleTouch = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+    const { mode, isThinking, boardFlipped, selectPiece, setupClick } = useStore.getState()
+    if (isThinking) return
+    const touch = e.touches[0]
+    if (!touch) return
+    const coords = getSvgCoords(touch.clientX, touch.clientY)
+    if (!coords) return
+    const pos = svgToPos(coords.x, coords.y, boardFlipped)
+    if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
+    if (mode === 'setup') { setupClick(pos); return }
+    if (mode !== 'play') return
+    selectPiece(pos)
+  }, [getSvgCoords])
+
+  // ── 棋盘网格 ──
+  const gridLines = React.useMemo(() => {
+    const lines: React.ReactNode[] = []
+    for (let r = 0; r < BOARD_ROWS; r++) {
+      const y = BOARD_PADDING + r * CELL
+      lines.push(<line key={`h${r}`} x1={BOARD_PADDING} y1={y} x2={BOARD_WIDTH - BOARD_PADDING} y2={y} stroke="#8B5A2B" strokeWidth="1.5" />)
+    }
+    for (let c = 0; c < BOARD_COLS; c++) {
+      const x = BOARD_PADDING + c * CELL
+      lines.push(<line key={`vt${c}`} x1={x} y1={BOARD_PADDING} x2={x} y2={BOARD_PADDING + 4 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
+      lines.push(<line key={`vb${c}`} x1={x} y1={BOARD_PADDING + 5 * CELL} x2={x} y2={BOARD_PADDING + 9 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
+    }
+    const diags = [[3, 0, 5, 2], [5, 0, 3, 2], [3, 7, 5, 9], [5, 7, 3, 9]]
+    diags.forEach(([x1, y1, x2, y2], i) => {
+      lines.push(<line key={`d${i}`} x1={BOARD_PADDING + x1 * CELL} y1={BOARD_PADDING + y1 * CELL} x2={BOARD_PADDING + x2 * CELL} y2={BOARD_PADDING + y2 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
+    })
+    return lines
+  }, [])
+
+  // ── 棋子 ──
+  const pieces = React.useMemo(() => {
+    const nodes: React.ReactNode[] = []
+    for (let c = 0; c < BOARD_COLS; c++) {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        const piece = board.board[c][r]
+        if (piece === '.') continue
+        // 动画期间隐藏目标位置的静态棋子
+        if (anim && lastMove && c === lastMove.to.col && r === lastMove.to.row) continue
+        const { x, y } = posToSvg({ col: c, row: r }, boardFlipped)
+        const isSel = selected?.col === c && selected?.row === r
+        const isLast = lastMove && ((lastMove.from.col === c && lastMove.from.row === r) || (lastMove.to.col === c && lastMove.to.row === r))
+        const isCheck = kingPos?.col === c && kingPos?.row === r
+        const color = isRed(piece) ? 'red' : 'black'
+        const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(piece)}.webp` : null
+        nodes.push(
+          <g key={`p${c}${r}`}>
+            {isLast && <circle cx={x} cy={y} r={PIECE_RADIUS + 4} fill="rgba(255,200,0,0.3)" />}
+            {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 6} fill="none" stroke="#e74c3c" strokeWidth="3" opacity="0.8">
+              <animate attributeName="r" values={`${PIECE_RADIUS + 4};${PIECE_RADIUS + 8};${PIECE_RADIUS + 4}`} dur="1s" repeatCount="indefinite" />
+            </circle>}
+            {isSel && <circle cx={x} cy={y} r={PIECE_RADIUS + 4} fill="rgba(0,150,255,0.3)" stroke="#4a9eff" strokeWidth="2" />}
+            {skinFile ? (
+              <image href={skinFile} x={x - PIECE_RADIUS} y={y - PIECE_RADIUS} width={PIECE_RADIUS * 2} height={PIECE_RADIUS * 2}
+                style={{ pointerEvents: 'none' }} />
+            ) : (
+              <>
+                <circle cx={x} cy={y} r={PIECE_RADIUS} fill={color === 'red' ? '#f8e8c8' : '#2c2c2c'} stroke={color === 'red' ? '#c41e1e' : '#666'} strokeWidth="2.5" />
+                <circle cx={x} cy={y} r={PIECE_RADIUS - 5} fill="none" stroke={color === 'red' ? '#c41e1e' : '#777'} strokeWidth="1" />
+                <text x={x} y={y + 8} textAnchor="middle" fontSize="26" fontWeight="bold" fill={color === 'red' ? '#c41e1e' : '#eee'} style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                  {GLYPHS[piece]}
+                </text>
+              </>
+            )}
+          </g>
+        )
+      }
+    }
+    return nodes
+  }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin])
+
+  // ── 合法走法标记 ──
+  const targetMarks = React.useMemo(() =>
+    settings.showLegalMoves ? legalTargets.map((pos, i) => {
+      const { x, y } = posToSvg(pos, boardFlipped)
+      return board.board[pos.col][pos.row] !== '.' ? (
+        <circle key={i} cx={x} cy={y} r={PIECE_RADIUS + 4} fill="none" stroke="#e74c3c" strokeWidth="2.5" strokeDasharray="6 3" />
+      ) : (
+        <circle key={i} cx={x} cy={y} r="9" fill="rgba(76,175,80,0.4)" />
+      )
+    }) : []
+  , [legalTargets, board, boardFlipped, settings.showLegalMoves])
+
+  return (
+    <div className="board-container">
+      <div className="player-info black-info">
+        <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方</span>
+        <span className="timer">{formatTime(blackTime)}</span>
+      </div>
+      <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
+        onClick={handleClick}
+        onTouchStart={handleTouch}
+        style={{ touchAction: 'none', cursor: 'pointer' }}>
+        <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
+        {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
+        <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="16" style={{ userSelect: 'none' }}>楚河 汉界</text>
+        {gridLines}{targetMarks}{pieces}
+        {anim && (() => {
+          const color = isRed(anim.piece) ? 'red' : 'black'
+          const glyph = GLYPHS[anim.piece] || '?'
+          const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(anim.piece)}.webp` : null
+          return (
+            <g className="piece-anim" style={{
+              position: 'absolute',
+              transition: 'transform 0.18s ease-out',
+              transform: `translate(${anim.toX - anim.fromX}px, ${anim.toY - anim.fromY}px)`,
+            }}>
+              {skinFile ? (
+                <image href={skinFile} x={anim.fromX - PIECE_RADIUS} y={anim.fromY - PIECE_RADIUS}
+                  width={PIECE_RADIUS * 2} height={PIECE_RADIUS * 2} style={{ pointerEvents: 'none' }} />
+              ) : (
+                <>
+                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS}
+                    fill={color === 'red' ? '#f8e8c8' : '#2c2c2c'}
+                    stroke={color === 'red' ? '#c41e1e' : '#666'} strokeWidth="2.5" />
+                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS - 5}
+                    fill="none" stroke={color === 'red' ? '#c41e1e' : '#777'} strokeWidth="1" />
+                  <text x={anim.fromX} y={anim.fromY + 8} textAnchor="middle" fontSize="26"
+                    fontWeight="bold" fill={color === 'red' ? '#c41e1e' : '#eee'}
+                    style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                    {glyph}
+                  </text>
+                </>
+              )}
+            </g>
+          )
+        })()}
+      </svg>
+      <div className="player-info red-info">
+        <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方</span>
+        <span className="timer">{formatTime(redTime)}</span>
+      </div>
+    </div>
+  )
+}
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}

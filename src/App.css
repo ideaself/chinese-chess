@@ -1,0 +1,629 @@
+/* ═══════════════════════════════════════════════════════════════
+   中国象棋 App - 主样式
+   ═══════════════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+}
+
+body { overflow: hidden; }
+
+/* ── 布局 ── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #2d3436, #3d3d5c);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.app-title { font-size: 18px; color: #ffd700; }
+
+/* ── 导航标签 ── */
+
+.tab-nav { display: flex; gap: 4px; }
+
+.tab-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #aaa;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn:hover { color: #eee; background: rgba(255,255,255,0.08); }
+.tab-btn.tab-active { background: #4a90e2; color: white; }
+
+/* ── 状态栏 ── */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.turn-indicator { padding: 3px 10px; border-radius: 12px; font-weight: bold; }
+.turn-red { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.turn-black { background: rgba(52,152,219,0.15); color: #3498db; }
+
+.check-badge { background: #e74c3c; color: white; padding: 2px 8px; border-radius: 8px; font-size: 12px; animation: pulse 1s infinite; }
+.game-over-badge { background: #27ae60; color: white; padding: 2px 8px; border-radius: 8px; font-size: 12px; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+/* ── 主内容 ── */
+
+.app-main { display: flex; gap: 12px; flex: 1; min-height: 0; }
+
+.board-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2d2d44;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.board-container svg {
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  border-radius: 8px;
+}
+
+.player-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 8px;
+  margin: 8px 0;
+  min-width: 400px;
+}
+
+.player-name {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.black-info .player-name { color: #3498db; }
+.red-info .player-name { color: #e74c3c; }
+
+.timer {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffd700;
+}
+
+.piece-anim {
+  transition: transform 0.18s ease-out;
+  pointer-events: none;
+}
+
+.side-panel { width: 320px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+
+/* ── 通用面板 ── */
+
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.panel-header h3 { margin: 0; color: #ddd; font-size: 14px; }
+.panel-body { font-size: 13px; }
+.panel-hint { color: #888; font-size: 12px; line-height: 1.6; }
+
+/* ── 控制面板 ── */
+
+.controls { background: #2d2d44; border-radius: 10px; padding: 12px; }
+.controls-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.controls-row:last-child { margin-bottom: 0; }
+.label { color: #aaa; font-size: 12px; }
+
+/* ── 按钮 ── */
+
+.btn {
+  padding: 6px 12px; border: none; border-radius: 6px;
+  background: #3d3d5c; color: #eee; font-size: 13px;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: #4d4d6c; transform: translateY(-1px); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-active { background: #4a90e2; color: white; }
+.btn-sm { padding: 4px 8px; font-size: 11px; }
+.btn-icon { background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px; padding: 4px; }
+.btn-icon:hover { color: #eee; }
+
+/* ── 引擎状态 ── */
+
+.engine-status { display: flex; gap: 8px; font-size: 11px; margin-top: 6px; }
+.status-ready { color: #2ecc71; }
+.status-loading { color: #f39c12; }
+.status-thinking { color: #4a90e2; }
+
+/* ── 分析面板 ── */
+
+.analysis-panel { background: #2d2d44; border-radius: 10px; padding: 12px; }
+.analysis-info { display: flex; flex-direction: column; gap: 6px; }
+.info-row { display: flex; justify-content: space-between; }
+.info-label { color: #888; }
+.info-value { color: #eee; font-weight: bold; }
+.score-red { color: #e74c3c; }
+.score-black { color: #3498db; }
+.pv-line { margin-top: 4px; }
+.pv-moves { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.pv-move { background: #3d3d5c; color: #ddd; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: monospace; }
+.pv-more { color: #888; }
+.fen-display { margin-top: 6px; padding: 6px; background: #1a1a2e; border-radius: 6px; }
+.fen-label { color: #888; font-size: 10px; }
+.fen-text { color: #aaa; font-size: 10px; font-family: monospace; word-break: break-all; line-height: 1.4; }
+
+/* ── 棋谱列表 ── */
+
+.game-list { background: #2d2d44; border-radius: 10px; padding: 12px; }
+.game-list-items { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
+
+.game-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.03); transition: background 0.15s;
+}
+.game-item:hover { background: rgba(255,255,255,0.08); }
+.game-item-left { display: flex; align-items: center; gap: 10px; }
+.game-item-right { display: flex; gap: 4px; }
+.game-item-players { font-size: 13px; color: #eee; }
+.game-item-meta { font-size: 11px; color: #888; margin-top: 2px; }
+
+.game-result { font-size: 12px; font-weight: bold; min-width: 50px; }
+.result-win { color: #2ecc71; }
+.result-loss { color: #e74c3c; }
+.result-draw { color: #f39c12; }
+
+/* ── 导入面板 ── */
+
+.import-panel { margin-bottom: 10px; }
+.import-textarea {
+  width: 100%; background: #1a1a2e; color: #eee; border: 1px solid #555;
+  border-radius: 6px; padding: 8px; font-family: monospace; font-size: 11px;
+  resize: vertical; line-height: 1.5;
+}
+.import-textarea:focus { outline: none; border-color: #4a90e2; }
+.import-error {
+  margin-top: 6px; padding: 6px 10px; border-radius: 6px;
+  font-size: 12px;
+}
+.import-error:not(:empty) {
+  background: rgba(231,76,60,0.15); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3);
+}
+
+/* ── 拖拽覆盖层 ── */
+
+.drag-overlay {
+  position: absolute; inset: 0; z-index: 100;
+  background: rgba(74, 144, 226, 0.15); border: 2px dashed #4a90e2;
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.drag-overlay-text {
+  font-size: 16px; color: #4a90e2; font-weight: bold;
+  background: rgba(26, 26, 46, 0.9); padding: 16px 24px; border-radius: 12px;
+}
+
+/* ── 历史走法 ── */
+
+.history-list { display: flex; flex-wrap: wrap; gap: 3px; }
+.history-move {
+  background: #3d3d5c; color: #bbb; padding: 2px 5px;
+  border-radius: 3px; font-size: 11px; font-family: monospace;
+  cursor: pointer; transition: background 0.15s;
+}
+.history-move:hover { background: #4d4d6c; }
+
+/* ── 设置 ── */
+
+.settings-panel { background: #2d2d44; border-radius: 10px; padding: 12px; }
+.settings-group { margin-bottom: 12px; }
+.settings-group h4 { margin-bottom: 6px; color: #ccc; font-size: 13px; }
+.settings-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.settings-select { background: #3d3d5c; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 3px 8px; font-size: 12px; }
+
+/* ── 对局结束结果面板 ── */
+
+.game-over-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.game-over-content {
+  background: linear-gradient(135deg, #2d3436, #3d3d5c);
+  border-radius: 16px;
+  padding: 32px;
+  min-width: 320px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+}
+
+.game-over-title {
+  text-align: center;
+  font-size: 28px;
+  margin-bottom: 24px;
+  color: #ffd700;
+  text-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+.game-over-stats {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: bold;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+}
+
+.game-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #4a90e2, #357abd);
+  color: white;
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(74, 144, 226, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── 战绩统计 ── */
+
+.stats-panel { background: #2d2d44; border-radius: 10px; padding: 12px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.stat-item { text-align: center; padding: 8px 4px; background: rgba(255,255,255,0.04); border-radius: 8px; }
+.stat-value { font-size: 22px; font-weight: bold; color: #eee; }
+.stat-label { font-size: 11px; color: #888; margin-top: 2px; }
+.stat-win .stat-value { color: #2ecc71; }
+.stat-loss .stat-value { color: #e74c3c; }
+.stat-draw .stat-value { color: #f39c12; }
+.stats-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(255,255,255,0.04); border-radius: 6px; font-size: 13px; }
+.stats-label { color: #888; }
+.stats-value { color: #eee; font-weight: bold; }
+
+/* 最近20局走势 */
+.recent-results { display: flex; flex-wrap: wrap; gap: 4px; }
+.result-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+}
+.result-win { background: rgba(46,204,113,0.2); color: #2ecc71; }
+.result-loss { background: rgba(231,76,60,0.2); color: #e74c3c; }
+.result-draw { background: rgba(243,156,18,0.2); color: #f39c12; }
+
+/* ── 优势曲线 ── */
+
+.eval-curve { margin-bottom: 12px; }
+.eval-curve-empty {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.eval-curve-svg {
+  width: 100%;
+  height: 96px;
+  display: block;
+  background: rgba(0,0,0,0.15);
+  border-radius: 8px;
+  cursor: crosshair;
+}
+.eval-curve-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #777;
+  margin-top: 2px;
+}
+
+/* ── 关键时刻 ── */
+
+.key-moments { margin-bottom: 12px; }
+.key-moments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.key-moments-filter { display: flex; gap: 4px; }
+.filter-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  color: #999;
+  cursor: pointer;
+}
+.filter-btn.btn-active { background: #4a90e2; color: #fff; }
+.key-moments-list { display: flex; flex-direction: column; gap: 4px; }
+.key-moment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.key-moment-row:hover { background: rgba(255,255,255,0.09); }
+.key-moment-row.btn-active { outline: 1px solid #4a90e2; }
+.key-moment-icon { flex-shrink: 0; }
+.key-moment-round { color: #bbb; flex-shrink: 0; }
+.key-moment-label { color: #e74c3c; flex-shrink: 0; font-weight: bold; }
+.key-moment-detail {
+  color: #888;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 摆棋模式 ── */
+
+.setup-palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.setup-piece-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.setup-piece-btn.btn-active { border-color: #4a9eff; background: rgba(74,158,255,0.2); }
+.setup-glyph-red { color: #e05555; }
+.setup-glyph-black { color: #ddd; }
+.setup-turn-row { display: flex; gap: 8px; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.setup-error { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+.setup-candidates { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.setup-candidate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.setup-candidate-idx { color: #888; }
+.setup-candidate-move { color: #eee; font-weight: bold; flex: 1; }
+.setup-candidate-score { color: #4a9eff; font-family: 'Courier New', monospace; }
+
+/* ── 错误重走 ── */
+
+.key-moment-retry { padding: 3px 10px; font-size: 12px; flex-shrink: 0; }
+.puzzle-result {
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.puzzle-correct { background: rgba(46,204,113,0.15); color: #2ecc71; }
+.puzzle-wrong { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.puzzle-answer {
+  padding: 10px 12px;
+  background: rgba(74,158,255,0.1);
+  border-radius: 8px;
+  color: #ccc;
+  margin-bottom: 6px;
+}
+.puzzle-answer b { color: #4a9eff; }
+
+/* ── 本局总结 ── */
+
+.game-summary {
+  padding: 10px 12px;
+  background: rgba(74,158,255,0.07);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.summary-line {
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.6;
+  padding-left: 10px;
+  position: relative;
+}
+.summary-line::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: #4a9eff;
+}
+
+/* ── 全局 toast ── */
+
+.toast {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(46,204,113,0.92);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  animation: fadeIn 0.2s;
+}
+
+/* ── 导入反馈 ── */
+
+.import-status {
+  padding: 8px 12px;
+  background: rgba(46,204,113,0.12);
+  border: 1px solid rgba(46,204,113,0.4);
+  border-radius: 8px;
+  color: #2ecc71;
+  font-size: 13px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+/* ── 提示横幅 ── */
+
+.hint-banner {
+  padding: 8px 12px;
+  background: rgba(74,158,255,0.12);
+  border: 1px solid rgba(74,158,255,0.35);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hint-banner b { color: #4a9eff; }
+.hint-score { margin-left: auto; font-family: 'Courier New', monospace; color: #999; font-size: 13px; }
+
+/* ── 棋谱页子导航 / 错题本 / 训练 ── */
+
+.sub-nav { display: flex; gap: 6px; margin-bottom: 10px; }
+.games-panel { width: 100%; }
+
+.training-list { display: flex; flex-direction: column; gap: 8px; }
+.training-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+}
+.training-info { flex: 1; min-width: 0; }
+.training-name { font-size: 15px; font-weight: bold; color: #eee; margin-bottom: 4px; }
+.training-desc { font-size: 12px; color: #888; line-height: 1.5; }
+
+/* 弱点分析 */
+.weakness-box {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(243,156,18,0.06);
+  border-radius: 8px;
+}
+.weakness-box .stats-row { background: rgba(255,255,255,0.03); margin-bottom: 4px; }
+.weakness-worst { outline: 1px solid rgba(231,76,60,0.5); }
+
+/* ── 响应式 ── */
+
+@media (max-width: 800px) {
+  .app-main { flex-direction: column; }
+  .board-area { order: 1; }
+  .side-panel { order: 2; width: 100%; max-height: 45vh; }
+  .app-header { flex-direction: column; gap: 6px; }
+  .tab-nav { flex-wrap: wrap; justify-content: center; }
+}
