@@ -26,8 +26,9 @@ interface AnimState {
   piece: string
   fromX: number
   fromY: number
-  toX: number
-  toY: number
+  /** 位移增量（CSS 变量 --dx/--dy 驱动 keyframes） */
+  dx: number
+  dy: number
 }
 
 function posToSvg(pos: Pos, flipped: boolean): { x: number; y: number } {
@@ -80,7 +81,7 @@ export const Board: React.FC = () => {
   const boardSkin = settings.boardStyle !== 'classic' ? `/skins/boards/${settings.boardStyle}.webp` : null
   const pieceSkin = useSkin ? `/skins/pieces/${settings.pieceStyle}` : null
 
-  // 走子动画
+  // 走子动画：挂载即从起点播放 keyframes 到终点，结束后由 onAnimationEnd 清除
   useEffect(() => {
     if (!lastMove || mode !== 'play') { prevBoardRef.current = board.board.map(c => c.join('')).join(''); return }
     const prev = prevBoardRef.current
@@ -89,14 +90,15 @@ export const Board: React.FC = () => {
       const from = posToSvg(lastMove.from, boardFlipped)
       const to = posToSvg(lastMove.to, boardFlipped)
       const piece = board.board[lastMove.to.col][lastMove.to.row]
-      // 先渲染在旧位置，下一帧移到新位置触发 CSS transition
-      setAnim({ piece, fromX: from.x, fromY: from.y, toX: from.x, toY: from.y })
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setAnim(a => a ? { ...a, toX: to.x, toY: to.y } : null)
-        })
+      setAnim({
+        piece,
+        fromX: from.x,
+        fromY: from.y,
+        dx: to.x - from.x,
+        dy: to.y - from.y,
       })
-      const t = setTimeout(() => setAnim(null), 250)
+      // 兜底清除（页面隐藏等情况下 onAnimationEnd 可能不触发）
+      const t = setTimeout(() => setAnim(null), 400)
       prevBoardRef.current = curr
       return () => clearTimeout(t)
     }
@@ -232,11 +234,11 @@ export const Board: React.FC = () => {
           const glyph = GLYPHS[anim.piece] || '?'
           const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(anim.piece)}.webp` : null
           return (
-            <g className="piece-anim" style={{
-              position: 'absolute',
-              transition: 'transform 0.18s ease-out',
-              transform: `translate(${anim.toX - anim.fromX}px, ${anim.toY - anim.fromY}px)`,
-            }}>
+            <g
+              className="piece-anim"
+              style={{ '--dx': `${anim.dx}px`, '--dy': `${anim.dy}px` } as React.CSSProperties}
+              onAnimationEnd={() => setAnim(null)}
+            >
               {skinFile ? (
                 <image href={skinFile} x={anim.fromX - PIECE_RADIUS} y={anim.fromY - PIECE_RADIUS}
                   width={PIECE_RADIUS * 2} height={PIECE_RADIUS * 2} style={{ pointerEvents: 'none' }} />
