@@ -25,6 +25,7 @@ export const Controls: React.FC = () => {
   const setDifficulty = useStore(s => s.setDifficulty)
   const aiHint = useStore(s => s.aiHint)
   const resign = useStore(s => s.resign)
+  const offerDraw = useStore(s => s.offerDraw)
   const goToStart = useStore(s => s.goToStart)
   const goToEnd = useStore(s => s.goToEnd)
   const goBack = useStore(s => s.goBack)
@@ -81,10 +82,16 @@ export const Controls: React.FC = () => {
           <button className={`btn ${showNewGame ? 'btn-active' : ''}`} onClick={() => setShowNewGame(!showNewGame)}>
             🎮 新对局
           </button>
-          <button className="btn" onClick={undo} disabled={isThinking || currentPlyIndex < 2}>↺ 悔棋</button>
+          <button className="btn"
+            onClick={undo}
+            disabled={isThinking || currentPlyIndex < 1 || game.result !== '*'}
+            title={isThinking ? '对方思考中，暂不能悔棋' : '悔棋（撤回到你上一次行棋前）'}>
+            ↺ 悔棋
+          </button>
           <button className="btn" onClick={() => aiHint()} disabled={!engineReady || isThinking}>
             {isThinking ? '⏳ 思考中' : '💡 提示'}
           </button>
+          <button className="btn" onClick={offerDraw} disabled={isThinking || game.result !== '*'} title="判为和棋并保存">🤝 求和</button>
           <button className="btn" onClick={resign} disabled={game.result !== '*'}>🏳 认输</button>
           <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
         </div>

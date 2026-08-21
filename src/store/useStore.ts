@@ -76,6 +76,8 @@ interface AppState {
   engineDepth: number
   analysis: AnalysisInfo | null
   hintInfo: HintInfo | null
+  /** 整盘分析进度 */
+  analysisProgress: { current: number; total: number } | null
 
   // ── 对局状态 ──
   mode: GameMode
@@ -154,6 +156,8 @@ interface AppState {
   // ── AI 分析 ──
   analyzeCurrentGame: () => Promise<void>
   analyzePosition: () => Promise<void>
+  /** 取消整盘分析（当前局面完成后停止） */
+  cancelAnalysis: () => void
 
   // ── 摆棋模式 (计划第16节) ──
   enterSetup: () => void
@@ -216,6 +220,9 @@ function generateId(): string {
 /** toast 自动消失定时器 */
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
+/** 整盘分析取消标记 */
+let analysisCancelFlag = false
+
 // ── Store ─────────────────────────────────────────────────────────
 
 export const useStore = create<AppState>((set, get) => ({
@@ -226,6 +233,7 @@ export const useStore = create<AppState>((set, get) => ({
   engineDepth: 10,
   analysis: null,
   hintInfo: null,
+  analysisProgress: null,
 
   // ── 对局状态 ──
   mode: 'play',
@@ -443,28 +451,46 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   undo: () => {
-    const { game, mode, currentPlyIndex, timerInterval } = get()
-    if (mode !== 'play') return
-    if (currentPlyIndex < 2) return
+    const { game, mode, currentPlyIndex, playerSide } = get()
+    if (mode !== 'play' || get().isThinking) return
+    if (game.result !== '*') return
+    if (currentPlyIndex <= 0) return
 
-    // AI 模式撤回两步
-    const steps = mode === 'play' ? 2 : 1
-    const newPlyIndex = Math.max(0, currentPlyIndex - steps)
-    const newBoard = boardFromGame(game, newPlyIndex)
+    /** 第 k 个局面轮到谁走 */
+    const turnAt = (k: number): Turn => {
+      if (k === 0) return boardFromFen(game.startFen).turn
+      return game.plies[k - 1].turn === 'w' ? 'b' : 'w'
+    }
 
-    // 移除后面的 Plies
-    const updatedGame = { ...game, plies: game.plies.slice(0, newPlyIndex) }
+    // 撤回到最近的"轮到玩家行棋"的局面（严格早于当前）
+    let target = currentPlyIndex - 1
+    while (target > 0 && turnAt(target) !== playerSide) target--
+
+    const updatedGame: Game = {
+      ...game,
+      plies: game.plies.slice(0, target),
+      result: '*',
+      updatedAt: Date.now(),
+    }
+    updatedGame.header = { ...updatedGame.header, Result: '*' }
 
     set({
       game: updatedGame,
-      board: newBoard,
-      currentPlyIndex: newPlyIndex,
+      board: boardFromGame(updatedGame, target),
+      currentPlyIndex: target,
       selected: null,
       legalTargets: [],
-      lastMove: newPlyIndex > 0
-        ? parseMoveFromUci(updatedGame.plies[newPlyIndex - 1].move, updatedGame.plies[newPlyIndex - 1].turn)
+      lastMove: target > 0
+        ? parseMoveFromUci(updatedGame.plies[target - 1].move, updatedGame.plies[target - 1].turn)
         : null,
+      analysis: null,
+      hintInfo: null,
     })
+
+    // 撤完轮到 AI（如玩家执黑撤回开局）→ 让 AI 重走
+    if (turnAt(target) !== playerSide) {
+      setTimeout(() => get().aiMove(), 300)
+    }
   },
 
   restart: () => {
@@ -748,17 +774,23 @@ export const useStore = create<AppState>((set, get) => ({
     if (!engine || !engine.isReady || game.plies.length === 0) return
 
     const depth = Math.min(get().engineDepth, 16)
-    set({ isThinking: true })
+    const total = game.plies.length + 1
+    analysisCancelFlag = false
+    set({ isThinking: true, analysisProgress: { current: 0, total } })
 
     try {
       // ── 第一遍：分析全部 N+1 个局面（每步之前 + 终局）──
       // evals[i] = 第 i 步之前局面的评估（走棋方视角）
       interface PosEval { score: number; depth: number; bestMove: string; pv: string[] }
       const evals: PosEval[] = []
+      let cancelled = false
 
       for (let i = 0; i <= game.plies.length; i++) {
         // 用户中途开新局/换棋谱时中止
         if (get().game.id !== game.id) { engine.stop(); return }
+        if (analysisCancelFlag) { cancelled = true; break }
+
+        set({ analysisProgress: { current: i + 1, total } })
 
         const board = boardFromGame(game, i)
         const fen = boardToFen(board)
@@ -785,12 +817,14 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
 
-      // ── 第二遍：计算每步损失并分类 ──
+      // ── 第二遍：计算已完成部分的每步损失并分类 ──
       // before.score 为走棋方视角；after.score 为对方视角 → 取负回到走棋方视角
-      // loss = max(0, score_before + score_after)
       const clamp = (v: number) => Math.max(-1500, Math.min(1500, v))
+      // ply i 需要 evals[i] 与 evals[i+1]
+      const computable = Math.max(0, evals.length - 1)
 
       const updatedPlies = game.plies.map((ply, i) => {
+        if (i >= computable) return ply // 未分析部分保留原样（含旧分析）
         const before = evals[i]
         const after = evals[i + 1]
         const moveLoss = Math.max(0, clamp(before.score) + clamp(after.score))
@@ -813,20 +847,32 @@ export const useStore = create<AppState>((set, get) => ({
         }
       })
 
-      // 分析完成，标记为完整并缓存到本地（不重复计战绩）
+      const finished = !cancelled && computable === game.plies.length
       const analyzedGame: Game = {
         ...get().game,
         plies: updatedPlies,
-        analysisStatus: 'complete',
+        analysisStatus: finished ? 'complete' : (computable > 0 ? 'partial' : 'none'),
       }
-      set({ game: analyzedGame })
-      storageSaveGame(analyzedGame)
-      set({ savedGames: getAllGames() })
+      set({ game: analyzedGame, analysisProgress: null })
+
+      if (finished) {
+        // 完整分析缓存到本地（不重复计战绩）
+        storageSaveGame(analyzedGame)
+        set({ savedGames: getAllGames() })
+      } else if (cancelled) {
+        get().showToast(`分析已取消（完成 ${computable}/${game.plies.length} 步）`)
+      }
+      analysisCancelFlag = false
     } catch (e) {
       console.error('整盘分析失败:', e)
     } finally {
-      set({ isThinking: false })
+      set({ isThinking: false, analysisProgress: null })
     }
+  },
+
+  cancelAnalysis: () => {
+    analysisCancelFlag = true
+    get().engine?.stop() // 尽快结束当前局面搜索
   },
 
   refreshSavedGames: () => {

@@ -34,6 +34,8 @@ export const AnalysisPanel: React.FC = () => {
   const analyzeCurrentGame = useStore(s => s.analyzeCurrentGame)
   const enterSetup = useStore(s => s.enterSetup)
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
+  const analysisProgress = useStore(s => s.analysisProgress)
+  const cancelAnalysis = useStore(s => s.cancelAnalysis)
 
   const currentFen = currentPlyIndex === 0
     ? game.startFen
@@ -69,7 +71,23 @@ export const AnalysisPanel: React.FC = () => {
       </div>
 
       <div className="panel-body">
-        {!engineReady && <div className="panel-hint">引擎加载中…</div>}
+        {/* 整盘分析进度（计划 V1.5 体验项） */}
+        {analysisProgress && (
+          <div className="analysis-progress">
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{ width: `${Math.round((analysisProgress.current / analysisProgress.total) * 100)}%` }}
+              />
+            </div>
+            <div className="progress-meta">
+              <span>正在分析 {analysisProgress.current}/{analysisProgress.total} 个局面</span>
+              <button className="btn btn-sm" onClick={cancelAnalysis}>取消</button>
+            </div>
+          </div>
+        )}
+
+        {!engineReady && !analysisProgress && <div className="panel-hint">引擎加载中…</div>}
 
         {engineReady && !analysis && (
           <div className="panel-hint">

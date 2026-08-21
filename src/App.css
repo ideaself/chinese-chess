@@ -362,6 +362,48 @@ body { overflow: hidden; }
 .status-loading { color: #f39c12; }
 .status-thinking { color: var(--accent); }
 
+/* ── 分析进度 ─────────────────────────────────────────────────── */
+
+.analysis-progress { margin-bottom: 12px; }
+.progress-bar {
+  height: 8px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #6aa5e8);
+  border-radius: 4px;
+  transition: width 0.3s ease-out;
+}
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ── 棋谱搜索 / 星标 ──────────────────────────────────────────── */
+
+.search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+}
+.search-input:focus { outline: none; border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-3); }
+
+.btn-icon.starred { color: var(--gold); }
+
 /* ── 分析面板 ─────────────────────────────────────────────────── */
 
 .analysis-panel {

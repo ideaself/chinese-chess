@@ -13,7 +13,7 @@ import React, { useState, useRef, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Game } from '../../game/model'
 import { parsePGN, splitPGNGames } from '../../game/pgn'
-import { saveGame as storageSaveGame } from '../../game/storage'
+import { saveGame as storageSaveGame, toggleStar as storageToggleStar } from '../../game/storage'
 
 export const GameList: React.FC = () => {
   const savedGames = useStore(s => s.savedGames)
@@ -24,6 +24,7 @@ export const GameList: React.FC = () => {
   const showToast = useStore(s => s.showToast)
 
   const [filter, setFilter] = useState<'all' | 'starred' | 'wins' | 'losses' | 'draws'>('all')
+  const [query, setQuery] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState('')
@@ -37,7 +38,22 @@ export const GameList: React.FC = () => {
     if (filter === 'losses') return g.result === '0-1'
     if (filter === 'draws') return g.result === '1/2-1/2'
     return true
+  }).filter(g => {
+    if (!query.trim()) return true
+    const q = query.trim().toLowerCase()
+    return (
+      (g.header.Red || '').toLowerCase().includes(q) ||
+      (g.header.Black || '').toLowerCase().includes(q) ||
+      (g.header.Event || '').toLowerCase().includes(q) ||
+      (g.header.Date || '').includes(q)
+    )
   })
+
+  /** 收藏/取消收藏（计划第7.2节） */
+  const handleToggleStar = (id: string) => {
+    storageToggleStar(id)
+    refreshSavedGames()
+  }
 
   const formatDate = (ts: number) => {
     const d = new Date(ts)
@@ -214,6 +230,14 @@ export const GameList: React.FC = () => {
         </div>
       )}
 
+      {/* 搜索框（计划第7.2节） */}
+      <input
+        className="search-input"
+        placeholder="搜索对手 / 赛事 / 日期…"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+      />
+
       {/* 筛选按钮 */}
       <div className="controls-row" style={{ marginBottom: 8 }}>
         {(['all', 'starred', 'wins', 'losses', 'draws'] as const).map(f => (
@@ -249,6 +273,13 @@ export const GameList: React.FC = () => {
                 </div>
               </div>
               <div className="game-item-right" onClick={e => e.stopPropagation()}>
+                <button
+                  className={`btn-icon ${game.starred ? 'starred' : ''}`}
+                  title={game.starred ? '取消收藏' : '收藏'}
+                  onClick={() => handleToggleStar(game.id)}
+                >
+                  {game.starred ? '★' : '☆'}
+                </button>
                 <button className="btn-icon" title="删除"
                   onClick={() => { if (confirm('确定删除这局棋谱？')) deleteGameById(game.id) }}>
                   🗑
