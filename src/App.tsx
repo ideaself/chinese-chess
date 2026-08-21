@@ -13,6 +13,7 @@ import { Controls } from './components/Controls/Controls'
 import { AnalysisPanel } from './components/Analysis/AnalysisPanel'
 import { SetupPanel } from './components/Analysis/SetupPanel'
 import { PuzzlePanel } from './components/Analysis/PuzzlePanel'
+import { VariationPanel } from './components/Analysis/VariationPanel'
 import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
@@ -38,6 +39,7 @@ export const App: React.FC = () => {
   const blackTime = useStore(s => s.blackTime)
   const setDifficulty = useStore(s => s.setDifficulty)
   const toast = useStore(s => s.toast)
+  const variation = useStore(s => s.variation)
 
   useEffect(() => {
     init()
@@ -68,13 +70,15 @@ export const App: React.FC = () => {
       {/* 状态栏 */}
       <div className="status-bar">
         <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
-          {mode === 'setup'
-            ? '摆棋模式'
-            : mode === 'puzzle'
-              ? '错误重走'
-              : mode === 'replay'
-                ? `第 ${currentPlyIndex}/${game.plies.length} 步`
-                : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
+          {variation
+            ? '主变推演'
+            : mode === 'setup'
+              ? '摆棋模式'
+              : mode === 'puzzle'
+                ? '错误重走'
+                : mode === 'replay'
+                  ? `第 ${currentPlyIndex}/${game.plies.length} 步`
+                  : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
         </span>
         {inCheck && <span className="check-badge">将军!</span>}
         {game.result !== '*' && (
@@ -108,6 +112,8 @@ export const App: React.FC = () => {
             <SetupPanel />
           ) : mode === 'puzzle' ? (
             <PuzzlePanel />
+          ) : variation ? (
+            <VariationPanel />
           ) : (
             <>
               {activeTab === 'play' && <Controls />}

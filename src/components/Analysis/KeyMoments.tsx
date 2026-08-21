@@ -43,6 +43,7 @@ export const KeyMoments: React.FC = () => {
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const goToPly = useStore(s => s.goToPly)
   const startPuzzle = useStore(s => s.startPuzzle)
+  const enterVariationFromPly = useStore(s => s.enterVariationFromPly)
   const [filter, setFilter] = useState<SideFilter>('all')
 
   const hasAnalysis = game.plies.some(p => p.analysis)
@@ -154,6 +155,15 @@ export const KeyMoments: React.FC = () => {
                     onClick={(e) => { e.stopPropagation(); startPuzzle(m.index) }}
                   >
                     重走
+                  </button>
+                )}
+                {/* 主变推演入口 - 计划第15节 */}
+                {ply.analysis!.pv.length > 0 && (
+                  <button
+                    className="btn btn-sm key-moment-retry"
+                    onClick={(e) => { e.stopPropagation(); enterVariationFromPly(m.index) }}
+                  >
+                    变化
                   </button>
                 )}
               </div>

@@ -21,7 +21,7 @@ import {
 } from '../game/board'
 import type { Move, Pos, Turn } from '../game/board'
 import {
-  getLegalMoves, getGameStatus, isInCheck, getAllLegalMoves, chineseFromFen,
+  getLegalMoves, getGameStatus, isInCheck, getAllLegalMoves, chineseFromFen, pvToChinese,
 } from '../game/rules'
 import type { Game, Ply, PlyAnalysis } from '../game/model'
 import {
@@ -34,6 +34,7 @@ import {
 } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
 import { moveToUci, uciToMove } from '../engine/uci'
+import { getBookMove } from '../game/book'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio } from '../game/sound'
 
 // ── 类型定义 ──────────────────────────────────────────────────────
@@ -103,6 +104,18 @@ interface AppState {
   puzzleAttempts: number
   puzzleResult: 'waiting' | 'correct' | 'wrong'
   puzzleRevealed: boolean
+
+  // ── 变化推演 (计划第15节) ──
+  variation: {
+    /** 推演起点局面（0-based ply 序号，棋盘处于该局面） */
+    basePly: number
+    /** PV 着法（UCI） */
+    moves: string[]
+    /** PV 中文记谱 */
+    moveCns: string[]
+    /** 当前推演到第几步（0..moves.length） */
+    index: number
+  } | null
 
   // ── UI 状态 ──
   activeTab: TabType
@@ -174,6 +187,14 @@ interface AppState {
   exitPuzzle: () => void
   puzzleTryMove: (from: Pos, to: Pos) => boolean
   revealPuzzleAnswer: () => void
+  /** 从某步的 PV 进入主变推演（计划第15节） */
+  enterVariationFromPly: (plyIndex: number) => void
+  /** 从当前单局面分析结果进入主变推演 */
+  enterVariationFromLive: () => void
+  variationGo: (k: number) => void
+  exitVariation: () => void
+  /** 内部：在起点局面上应用前 k 步 PV */
+  _applyVariation: (basePly: number, moves: string[], k: number) => BoardState
   /** 从错题本跨棋谱发起重走 */
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
@@ -255,6 +276,9 @@ export const useStore = create<AppState>((set, get) => ({
   puzzleAttempts: 0,
   puzzleResult: 'waiting',
   puzzleRevealed: false,
+
+  // ── 变化推演 ──
+  variation: null,
 
   // ── UI 状态 ──
   activeTab: 'play',
@@ -529,7 +553,21 @@ export const useStore = create<AppState>((set, get) => ({
       const fen = boardToFen(currentBoard)
       const moveList = game.plies.map(p => p.move)
 
-      const bestUci = await engine.go(fen, moveList, engineDepth)
+      // 开局库优先（计划外增强: 提升开局质量与多样性）
+      let bestUci: string | null = null
+      const bookMove = getBookMove(moveList)
+      if (bookMove) {
+        const legal = getAllLegalMoves(currentBoard)
+        const bf = { col: bookMove.charCodeAt(0) - 97, row: parseInt(bookMove[1]) }
+        const bt = { col: bookMove.charCodeAt(2) - 97, row: parseInt(bookMove[3]) }
+        if (legal.some(m => m.from.col === bf.col && m.from.row === bf.row && m.to.col === bt.col && m.to.row === bt.row)) {
+          bestUci = bookMove
+        }
+      }
+
+      if (!bestUci) {
+        bestUci = await engine.go(fen, moveList, engineDepth)
+      }
 
       if (bestUci && bestUci !== '(none)' && bestUci.length >= 4) {
         const from = { col: bestUci.charCodeAt(0) - 97, row: parseInt(bestUci[1]) }
@@ -948,8 +986,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   clearSetupBoard: () => {
     const { board } = get()
+    // 清空但保留双方将/帅（分析必需）
+    const empty = createEmptyBoard()
+    empty[4][0] = 'K'
+    empty[4][9] = 'k'
     set({
-      board: { ...board, board: createEmptyBoard() },
+      board: { ...board, board: empty },
       setupCandidates: null,
       setupError: '',
     })
@@ -1117,6 +1159,96 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }, 100)
     set({ timerInterval: interval })
+  },
+
+  // ══════════════════════════════════════════════════════════════════
+  // 变化推演 (计划第15节)
+  // ══════════════════════════════════════════════════════════════════
+
+  /** 在 base 局面上应用前 k 步 PV */
+  _applyVariation: (basePly: number, moves: string[], k: number): BoardState => {
+    const { game } = get()
+    let st = boardFromGame(game, basePly)
+    for (let i = 0; i < k && i < moves.length; i++) {
+      const u = moves[i]
+      st = makeMove(st, {
+        from: { col: u.charCodeAt(0) - 97, row: parseInt(u[1]) },
+        to: { col: u.charCodeAt(2) - 97, row: parseInt(u[3]) },
+        turn: st.turn,
+      })
+    }
+    return st
+  },
+
+  enterVariationFromPly: (plyIndex) => {
+    const { game } = get()
+    const ply = game.plies[plyIndex]
+    const pv = ply?.analysis?.pv
+    if (!pv || pv.length === 0) return
+
+    const moves = pv.slice(0, 10)
+    set({
+      variation: {
+        basePly: plyIndex,
+        moves,
+        moveCns: pvToChinese(ply.fenBefore, moves, 10),
+        index: 0,
+      },
+      board: boardFromGame(game, plyIndex),
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+    })
+  },
+
+  enterVariationFromLive: () => {
+    const { analysis, currentPlyIndex, game } = get()
+    if (!analysis || analysis.pv.length === 0) return
+
+    const moves = analysis.pv.slice(0, 10)
+    set({
+      variation: {
+        basePly: currentPlyIndex,
+        moves,
+        moveCns: pvToChinese(analysis.fen, moves, 10),
+        index: 0,
+      },
+      board: boardFromGame(game, currentPlyIndex),
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+    })
+  },
+
+  variationGo: (k) => {
+    const { variation } = get()
+    if (!variation) return
+    const index = Math.max(0, Math.min(k, variation.moves.length))
+    const apply = get() as any
+    const st = apply._applyVariation(variation.basePly, variation.moves, index)
+    const lastUci = index > 0 ? variation.moves[index - 1] : null
+    set({
+      variation: { ...variation, index },
+      board: st,
+      lastMove: lastUci
+        ? {
+            from: { col: lastUci.charCodeAt(0) - 97, row: parseInt(lastUci[1]) },
+            to: { col: lastUci.charCodeAt(2) - 97, row: parseInt(lastUci[3]) },
+            turn: st.turn === 'w' ? 'b' : 'w',
+          }
+        : null,
+    })
+  },
+
+  exitVariation: () => {
+    const { game, currentPlyIndex } = get()
+    set({
+      variation: null,
+      board: boardFromGame(game, currentPlyIndex),
+      lastMove: currentPlyIndex > 0
+        ? parseMoveFromUci(game.plies[currentPlyIndex - 1].move, game.plies[currentPlyIndex - 1].turn)
+        : null,
+    })
   },
 }))
 

@@ -36,6 +36,7 @@ export const AnalysisPanel: React.FC = () => {
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const analysisProgress = useStore(s => s.analysisProgress)
   const cancelAnalysis = useStore(s => s.cancelAnalysis)
+  const enterVariationFromLive = useStore(s => s.enterVariationFromLive)
 
   const currentFen = currentPlyIndex === 0
     ? game.startFen
@@ -126,6 +127,14 @@ export const AnalysisPanel: React.FC = () => {
                   ))}
                   {analysis!.pv.length > 8 && <span className="pv-more">…</span>}
                 </div>
+                {/* 主变推演入口 - 计划第15节 */}
+                <button
+                  className="btn btn-sm"
+                  style={{ marginTop: 6 }}
+                  onClick={enterVariationFromLive}
+                >
+                  ▶ 在棋盘上推演此变化
+                </button>
               </div>
             )}
             <div className="fen-display">

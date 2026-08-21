@@ -339,6 +339,20 @@ body { overflow: hidden; }
 
 .speed-row { display: flex; align-items: center; gap: 6px; }
 
+/* ── 主变推演 ── */
+
+.variation-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.variation-moves .history-move { opacity: 0.45; }
+.variation-moves .history-move.played {
+  opacity: 1;
+  background: var(--accent);
+  color: #fff;
+}
+
 /* 难度下拉 */
 .difficulty-select {
   width: 100%;
