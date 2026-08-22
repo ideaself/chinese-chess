@@ -9,12 +9,13 @@
  *   - 优势曲线
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { getStateAtPly } from '../../game/model'
 import { boardToFen } from '../../game/board'
 import { chineseFromFen, pvToChinese } from '../../game/rules'
 import { generateGameSummary } from '../../game/summary'
+import { getSettings, saveSettings } from '../../game/storage'
 import { EvalCurve } from './EvalCurve'
 import { KeyMoments } from './KeyMoments'
 
@@ -37,6 +38,14 @@ export const AnalysisPanel: React.FC = () => {
   const analysisProgress = useStore(s => s.analysisProgress)
   const cancelAnalysis = useStore(s => s.cancelAnalysis)
   const enterVariationFromLive = useStore(s => s.enterVariationFromLive)
+
+  // 分析深度档位（计划9.1）
+  const [settings, setSettingsState] = useState(() => getSettings())
+  const setAnalysisDepth = (d: number) => {
+    const next = { ...settings, analysisDepth: d }
+    setSettingsState(next)
+    saveSettings(next)
+  }
 
   const currentFen = currentPlyIndex === 0
     ? game.startFen
@@ -69,6 +78,19 @@ export const AnalysisPanel: React.FC = () => {
             摆棋
           </button>
         </div>
+      </div>
+
+      {/* 分析深度档位（计划9.1） */}
+      <div className="depth-row">
+        <span className="label">分析深度</span>
+        {([[8, '快速'], [12, '标准'], [16, '深度']] as [number, string][]).map(([d, label]) => (
+          <button
+            key={d}
+            className={`filter-btn ${settings.analysisDepth === d ? 'btn-active' : ''}`}
+            onClick={() => setAnalysisDepth(d)}
+          >{label}</button>
+        ))}
+        <span className="depth-hint">影响整盘分析速度</span>
       </div>
 
       <div className="panel-body">

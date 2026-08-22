@@ -23,8 +23,8 @@ export function getAllGames(): Game[] {
   }
 }
 
-/** 保存棋谱 */
-export function saveGame(game: Game): void {
+/** 保存棋谱（返回是否成功，失败多为容量超限） */
+export function saveGame(game: Game): boolean {
   const games = getAllGames()
   const idx = games.findIndex(g => g.id === game.id)
   if (idx >= 0) {
@@ -32,7 +32,66 @@ export function saveGame(game: Game): void {
   } else {
     games.unshift(game) // 新棋谱放最前面
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+    return true
+  } catch (e) {
+    // 容量超限：回滚内存外不做持久化，由调用方提示用户备份/清理
+    console.error('保存棋谱失败（可能超出存储容量）:', e)
+    return false
+  }
+}
+
+// ── 备份 / 恢复 / 容量 ────────────────────────────────────────────
+
+const BACKUP_VERSION = 1
+
+/** 导出全部棋谱为 JSON 字符串 */
+export function exportAllGames(): string {
+  return JSON.stringify({
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    games: getAllGames(),
+  })
+}
+
+/**
+ * 从备份恢复：按 id 合并（已存在的跳过）
+ * @returns 恢复的对局数
+ */
+export function importAllGames(json: string): number {
+  try {
+    const data = JSON.parse(json)
+    const incoming: Game[] = Array.isArray(data) ? data : data.games
+    if (!Array.isArray(incoming)) return 0
+    const existing = getAllGames()
+    const ids = new Set(existing.map(g => g.id))
+    let added = 0
+    for (const g of incoming) {
+      if (!g?.id || !Array.isArray(g.plies)) continue
+      if (ids.has(g.id)) continue // 已存在跳过
+      existing.unshift(g)
+      ids.add(g.id)
+      added++
+    }
+    if (added > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing))
+    }
+    return added
+  } catch (e) {
+    console.error('恢复备份失败:', e)
+    return 0
+  }
+}
+
+/** 当前棋谱库占用估算 */
+export function getStorageUsage(): { bytes: number; games: number; limitBytes: number } {
+  const raw = localStorage.getItem(STORAGE_KEY) ?? '[]'
+  return {
+    bytes: raw.length * 2, // UTF-16 粗略估算
+    games: getAllGames().length,
+    limitBytes: 5 * 1024 * 1024,
+  }
 }
 
 /** 删除棋谱 */
@@ -91,13 +150,17 @@ export interface AppSettings {
   showLegalMoves: boolean
   animationEnabled: boolean
   autoPlaySpeed: number // ms per move
-  // 音效
+  // 音效与触感
   soundMove: boolean
   soundCapture: boolean
   soundCheck: boolean
+  /** 落子/将军震动反馈（移动端） */
+  hapticEnabled: boolean
   // 对局
   defaultSide: 'w' | 'b' | 'random'
   defaultDifficulty: string
+  /** 整盘分析深度档位（计划9.1）: 8 快速 / 12 标准 / 16 深度 */
+  analysisDepth: number
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -110,8 +173,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundMove: true,
   soundCapture: true,
   soundCheck: true,
+  hapticEnabled: true,
   defaultSide: 'w',
   defaultDifficulty: 'medium',
+  analysisDepth: 16,
 }
 
 export function getSettings(): AppSettings {

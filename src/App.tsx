@@ -52,6 +52,34 @@ export const App: React.FC = () => {
     }
   }, [init, setDifficulty])
 
+  // 键盘快捷键: 重放导航 / 推演步进（←→ 空格 Home End）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      const s = useStore.getState()
+
+      if (s.variation) {
+        if (e.key === 'ArrowLeft') { s.variationGo(s.variation.index - 1); e.preventDefault() }
+        else if (e.key === 'ArrowRight') { s.variationGo(s.variation.index + 1); e.preventDefault() }
+        return
+      }
+
+      if (s.mode === 'replay') {
+        switch (e.key) {
+          case 'ArrowLeft': s.goBack(); e.preventDefault(); break
+          case 'ArrowRight': s.goForward(); e.preventDefault(); break
+          case 'Home': s.goToStart(); e.preventDefault(); break
+          case 'End': s.goToEnd(); e.preventDefault(); break
+          case ' ': s.setAutoPlaying(!s.autoPlaying); e.preventDefault(); break
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const inCheck = isInCheck(board)
 
   return (

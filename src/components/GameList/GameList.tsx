@@ -13,7 +13,10 @@ import React, { useState, useRef, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Game } from '../../game/model'
 import { parsePGN, splitPGNGames } from '../../game/pgn'
-import { saveGame as storageSaveGame, toggleStar as storageToggleStar } from '../../game/storage'
+import {
+  saveGame as storageSaveGame, toggleStar as storageToggleStar,
+  exportAllGames, importAllGames, getStorageUsage,
+} from '../../game/storage'
 
 export const GameList: React.FC = () => {
   const savedGames = useStore(s => s.savedGames)
@@ -31,6 +34,36 @@ export const GameList: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const backupInputRef = useRef<HTMLInputElement>(null)
+
+  const usage = getStorageUsage()
+  const usagePct = Math.round((usage.bytes / usage.limitBytes) * 100)
+  const usageKB = Math.max(1, Math.round(usage.bytes / 1024))
+
+  /** 导出全部备份 */
+  const handleBackup = () => {
+    const json = exportAllGames()
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `xiangqi_backup_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('已导出全部棋谱备份')
+  }
+
+  /** 从 JSON 备份恢复 */
+  const handleRestoreFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const added = importAllGames(text)
+      refreshSavedGames()
+      showToast(added > 0 ? `恢复完成，新增 ${added} 局` : '备份中的棋谱均已存在')
+    } catch {
+      showToast('⚠ 备份文件无法读取')
+    }
+  }
 
   const filtered = savedGames.filter(g => {
     if (filter === 'starred') return g.starred
@@ -196,14 +229,34 @@ export const GameList: React.FC = () => {
 
       <div className="panel-header">
         <h3>棋谱</h3>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>📂 浏览文件</button>
-          <button className="btn btn-sm" onClick={() => setShowImport(!showImport)}>📝 粘贴导入</button>
+        <div className="storage-actions">
+          <button className="btn btn-sm" title="导出全部棋谱为 JSON 备份" onClick={handleBackup}>💾 备份</button>
+          <button className="btn btn-sm" title="从 JSON 备份恢复" onClick={() => backupInputRef.current?.click()}>📥 恢复</button>
         </div>
       </div>
 
-      {/* 隐藏的文件输入 */}
-      <input ref={fileInputRef} type="file" accept=".pgn,.txt"
+      {/* 隐藏的备份恢复输入 */}
+      <input ref={backupInputRef} type="file" accept=".json" data-backup-input="1"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) handleRestoreFile(f)
+          e.target.value = ''
+        }} />
+
+      {/* 容量占用 */}
+      <div className={`storage-line ${usagePct > 80 ? 'storage-warn' : ''}`}>
+        <span>共 {usage.games} 局 · 约 {usageKB} KB{usagePct > 80 ? ' · 空间告急，建议备份' : ''}</span>
+      </div>
+
+      {/* 导入按钮 */}
+      <div className="controls-row" style={{ marginBottom: 8 }}>
+        <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>📂 浏览文件</button>
+        <button className="btn btn-sm" onClick={() => setShowImport(!showImport)}>📝 粘贴导入</button>
+      </div>
+
+      {/* PGN 文件输入 */}
+      <input ref={fileInputRef} type="file" accept=".pgn,.txt" data-pgn-input="1"
         style={{ display: 'none' }}
         onChange={(e) => {
           handleFileUpload(e.target.files)

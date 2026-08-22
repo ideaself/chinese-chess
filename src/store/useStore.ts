@@ -36,7 +36,7 @@ import { PikafishEngine } from '../engine/pikafish'
 import { moveToUci, uciToMove } from '../engine/uci'
 import { getBookMove } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
-import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio } from '../game/sound'
+import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio, playMoveHaptic, playCheckHaptic, playGameOverHaptic } from '../game/sound'
 
 // ── 类型定义 ──────────────────────────────────────────────────────
 
@@ -110,6 +110,10 @@ interface AppState {
   /** 棋谱页子导航（供训练计划等外部跳转） */
   gamesSubTab: 'list' | 'mistakes' | 'training'
   setGamesSubTab: (t: 'list' | 'mistakes' | 'training') => void
+
+  /** 重放自动播放（提升到 store 以支持键盘快捷键） */
+  autoPlaying: boolean
+  setAutoPlaying: (v: boolean) => void
 
   // ── 错误重走 (计划第17节) ──
   /** 正在重走的 Ply 序号（0-based，决策局面 = 该步之前） */
@@ -296,6 +300,10 @@ export const useStore = create<AppState>((set, get) => ({
   gamesSubTab: 'list',
   setGamesSubTab: (t) => set({ gamesSubTab: t }),
 
+  // ── 重放自动播放 ──
+  autoPlaying: false,
+  setAutoPlaying: (v) => set({ autoPlaying: v }),
+
   // ── 错误重走 ──
   puzzlePlyIndex: null,
   puzzleAttempts: 0,
@@ -469,7 +477,7 @@ export const useStore = create<AppState>((set, get) => ({
       hintInfo: null,
     })
 
-    // 音效
+    // 音效 + 触感
     const settings = getSettings()
     const captured = board.board[to.col][to.row] !== '.'
     if (captured) {
@@ -479,6 +487,9 @@ export const useStore = create<AppState>((set, get) => ({
     }
     if (status.inCheck) {
       playCheckSound(settings.soundCheck)
+      playCheckHaptic(settings.hapticEnabled)
+    } else {
+      playMoveHaptic(settings.hapticEnabled)
     }
 
     // 对局结束
@@ -486,6 +497,7 @@ export const useStore = create<AppState>((set, get) => ({
       const { timerInterval } = get()
       if (timerInterval) clearInterval(timerInterval)
       set({ timerInterval: null })
+      playGameOverHaptic(settings.hapticEnabled)
       get().saveCurrentGame()
       return true
     }
@@ -673,7 +685,10 @@ export const useStore = create<AppState>((set, get) => ({
   saveCurrentGame: () => {
     const { game } = get()
     if (game.plies.length === 0) return
-    storageSaveGame(game)
+    const ok = storageSaveGame(game)
+    if (!ok) {
+      get().showToast('⚠ 保存失败：存储空间已满，请在棋谱页备份或删除旧棋谱')
+    }
     set({ savedGames: getAllGames() })
   },
 
@@ -839,7 +854,8 @@ export const useStore = create<AppState>((set, get) => ({
     const { game, engine } = get()
     if (!engine || !engine.isReady || game.plies.length === 0) return
 
-    const depth = Math.min(get().engineDepth, 16)
+    // 整盘分析深度取设置档位（计划9.1: 快速/标准/深度）
+    const depth = Math.min(getSettings().analysisDepth, 16)
     const total = game.plies.length + 1
     analysisCancelFlag = false
     set({ isThinking: true, analysisProgress: { current: 0, total } })

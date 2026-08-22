@@ -376,6 +376,46 @@ body { overflow: hidden; }
 .status-loading { color: #f39c12; }
 .status-thinking { color: var(--accent); }
 
+/* ── 分析深度档位 ─────────────────────────────────────────────── */
+
+.depth-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.depth-row .label { margin-right: 2px; }
+.depth-hint { font-size: 11px; color: var(--text-3); margin-left: auto; }
+
+/* ── 棋谱库容量 ───────────────────────────────────────────────── */
+
+.storage-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.storage-line.storage-warn { color: #f39c12; background: rgba(243,156,18,0.08); }
+.storage-actions { display: flex; gap: 6px; }
+
+/* ── 键盘提示 ─────────────────────────────────────────────────── */
+
+.kbd-hint { font-size: 11px; color: var(--text-3); }
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 10px;
+  background: rgba(0,0,0,0.25);
+}
+
 /* ── 分析进度 ─────────────────────────────────────────────────── */
 
 .analysis-progress { margin-bottom: 12px; }

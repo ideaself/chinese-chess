@@ -103,3 +103,28 @@ export function resumeAudio() {
     if (ctx.state === 'suspended') ctx.resume()
   } catch {}
 }
+
+// ── 触感反馈（移动端） ────────────────────────────────────────────
+
+function vibrate(pattern: number | number[]) {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(pattern)
+    }
+  } catch {}
+}
+
+/** 落子轻震 */
+export function playMoveHaptic(enabled: boolean = true) {
+  if (enabled) vibrate(12)
+}
+
+/** 将军警示震 */
+export function playCheckHaptic(enabled: boolean = true) {
+  if (enabled) vibrate([30, 40, 30])
+}
+
+/** 对局结束震 */
+export function playGameOverHaptic(enabled: boolean = true) {
+  if (enabled) vibrate([50, 60, 50, 60, 80])
+}

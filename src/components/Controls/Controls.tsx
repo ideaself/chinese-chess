@@ -32,8 +32,10 @@ export const Controls: React.FC = () => {
   const goForward = useStore(s => s.goForward)
   const exportCurrentPGN = useStore(s => s.exportCurrentPGN)
 
+  const autoPlay = useStore(s => s.autoPlaying)
+  const setAutoPlay = useStore(s => s.setAutoPlaying)
+
   const [showNewGame, setShowNewGame] = useState(false)
-  const [autoPlay, setAutoPlay] = useState(false)
   // 自动播放速度初始值来自设置（计划第20节）
   const [autoPlaySpeed, setAutoPlaySpeed] = useState(() => getSettings().autoPlaySpeed)
 
@@ -137,6 +139,9 @@ export const Controls: React.FC = () => {
                 {['慢', '中', '快', '极快'][i]}
               </button>
             ))}
+            <span className="kbd-hint" style={{ marginLeft: 'auto' }}>
+              <kbd>←</kbd><kbd>→</kbd> 步进 · <kbd>空格</kbd> 播放
+            </span>
           </div>
         </div>
 
