@@ -5,9 +5,11 @@
  *   总局数、胜、负、和、胜率、最近20局、平均分析评价
  */
 
-import React from 'react'
-import { getStats, getWeaknessAnalysis } from '../../game/storage'
+import React, { useMemo } from 'react'
+import { useStore } from '../../store/useStore'
+import { getStats, getWeaknessAnalysis, getMistakes, getAllGames } from '../../game/storage'
 import type { PlayerOutcome } from '../../game/storage'
+import { generateTrainingPlan } from '../../game/training'
 
 const OUTCOME_CHAR: Record<PlayerOutcome, string> = {
   win: '胜',
@@ -24,7 +26,26 @@ const PHASE_NAMES: Record<string, string> = {
 export const StatsPanel: React.FC = () => {
   const stats = getStats()
   const weakness = getWeaknessAnalysis()
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0'
+  const winRateNum = stats.totalGames > 0 ? (stats.wins / stats.totalGames) * 100 : 0
+  const setTab = useStore(s => s.setTab)
+  const setGamesSubTab = useStore(s => s.setGamesSubTab)
+
+  // 个人训练计划（规划 V3: 弱点 → 行动清单）
+  const plan = useMemo(() => {
+    const games = getAllGames()
+    const unanalyzed = games.filter(
+      g => g.analysisStatus !== 'complete' && (g.header.Red === '玩家' || g.header.Black === '玩家'),
+    ).length
+    return generateTrainingPlan(weakness, getMistakes(), unanalyzed, winRateNum, stats.totalGames)
+  }, [weakness, winRateNum, stats.totalGames])
+
+  const goAction = (type: string) => {
+    if (type === 'retry-mistakes') { setGamesSubTab('mistakes'); setTab('games') }
+    else if (type === 'endgame-training' || type === 'opening-training') { setGamesSubTab('training'); setTab('games') }
+    else { setGamesSubTab('list'); setTab('games') }
+  }
+
+  const winRate = stats.totalGames > 0 ? winRateNum.toFixed(1) : '0.0'
 
   return (
     <div className="stats-panel">
@@ -98,6 +119,23 @@ export const StatsPanel: React.FC = () => {
                 你的{PHASE_NAMES[weakness.weakestPhase]}是当前短板，建议多复盘该阶段的失误。
               </div>
             )}
+          </div>
+        )}
+
+        {/* 我的训练计划 - 规划 V3 */}
+        {plan && plan.items.length > 0 && (
+          <div className="training-plan-box">
+            <div className="stats-label" style={{ marginBottom: 8 }}>📋 我的训练计划</div>
+            {plan.items.map((item, i) => (
+              <div key={i} className="plan-item">
+                <div className="plan-item-title">{item.title}</div>
+                <div className="plan-item-reason">{item.reason}</div>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => goAction(item.action.type)}
+                >{item.actionLabel} →</button>
+              </div>
+            ))}
           </div>
         )}
       </div>

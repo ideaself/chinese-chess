@@ -684,6 +684,24 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .weakness-box .stats-row { background: rgba(255,255,255,0.03); margin-bottom: 4px; }
 .weakness-worst { border-color: rgba(224,85,85,0.45); }
 
+/* 训练计划 */
+.training-plan-box {
+  margin-top: 10px;
+  padding: 11px;
+  background: rgba(46,204,113,0.05);
+  border: 1px solid rgba(46,204,113,0.18);
+  border-radius: var(--radius-sm);
+}
+.plan-item {
+  padding: 9px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+.plan-item:last-child { margin-bottom: 0; }
+.plan-item-title { font-size: 13px; font-weight: bold; color: var(--text); }
+.plan-item-reason { font-size: 12px; color: var(--text-3); line-height: 1.5; margin: 4px 0 7px; }
+
 /* ── 对局结束结果面板 ─────────────────────────────────────────── */
 
 .game-over-modal {

@@ -14,6 +14,7 @@ import { AnalysisPanel } from './components/Analysis/AnalysisPanel'
 import { SetupPanel } from './components/Analysis/SetupPanel'
 import { PuzzlePanel } from './components/Analysis/PuzzlePanel'
 import { VariationPanel } from './components/Analysis/VariationPanel'
+import { OpeningTrainingPanel } from './components/Games/OpeningTrainingPanel'
 import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
@@ -40,6 +41,7 @@ export const App: React.FC = () => {
   const setDifficulty = useStore(s => s.setDifficulty)
   const toast = useStore(s => s.toast)
   const variation = useStore(s => s.variation)
+  const openingTraining = useStore(s => s.openingTraining)
 
   useEffect(() => {
     init()
@@ -76,9 +78,11 @@ export const App: React.FC = () => {
               ? '摆棋模式'
               : mode === 'puzzle'
                 ? '错误重走'
-                : mode === 'replay'
-                  ? `第 ${currentPlyIndex}/${game.plies.length} 步`
-                  : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
+                : openingTraining
+                  ? '开局训练'
+                  : mode === 'replay'
+                    ? `第 ${currentPlyIndex}/${game.plies.length} 步`
+                    : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
         </span>
         {inCheck && <span className="check-badge">将军!</span>}
         {game.result !== '*' && (
@@ -114,6 +118,8 @@ export const App: React.FC = () => {
             <PuzzlePanel />
           ) : variation ? (
             <VariationPanel />
+          ) : activeTab === 'play' && openingTraining ? (
+            <OpeningTrainingPanel />
           ) : (
             <>
               {activeTab === 'play' && <Controls />}

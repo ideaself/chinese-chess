@@ -7,6 +7,7 @@ import { splitPGNGames, parsePGN } from '../pgn'
 import { boardFromFen, makeMove, START_FEN } from '../board'
 import { getAllLegalMoves, getGameStatus } from '../rules'
 import { getBookMove } from '../book'
+import { OPENING_LINES } from '../openings'
 import type { Game } from '../model'
 import { saveGame, getMistakes, toggleMastered, getMasteredKeys } from '../storage'
 
@@ -82,6 +83,28 @@ describe('开局库', () => {
     for (let i = 0; i < 100; i++) seen.add(getBookMove([])!)
     expect(seen.size).toBeGreaterThanOrEqual(3)
     expect(getBookMove(['a0a1'])).toBeNull()
+  })
+})
+
+describe('开局训练线路', () => {
+  it('全部线路逐步合法且名称数量对应', () => {
+    for (const line of OPENING_LINES) {
+      expect(line.moves.length).toBe(line.names.length)
+      expect(line.moves.length).toBe(line.notes.length)
+
+      let st = boardFromFen(START_FEN)
+      for (let i = 0; i < line.moves.length; i++) {
+        const uci = line.moves[i]
+        const f = { col: uci.charCodeAt(0) - 97, row: parseInt(uci[1]) }
+        const t = { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) }
+        const legal = getAllLegalMoves(st)
+        expect(
+          legal.some(x => x.from.col === f.col && x.from.row === f.row && x.to.col === t.col && x.to.row === t.row),
+          `${line.name} 第 ${i + 1} 步 ${line.names[i]} (${uci}) 应合法`,
+        ).toBe(true)
+        st = makeMove(st, { from: f, to: t, turn: st.turn })
+      }
+    }
   })
 })
 

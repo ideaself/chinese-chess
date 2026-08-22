@@ -35,6 +35,7 @@ import {
 import { PikafishEngine } from '../engine/pikafish'
 import { moveToUci, uciToMove } from '../engine/uci'
 import { getBookMove } from '../game/book'
+import { OPENING_LINES } from '../game/openings'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio } from '../game/sound'
 
 // ── 类型定义 ──────────────────────────────────────────────────────
@@ -97,6 +98,18 @@ interface AppState {
   /** 摆棋分析结果（多 PV 候选） */
   setupCandidates: CandidateLine[] | null
   setupError: string
+
+  // ── 开局训练 (计划第22节) ──
+  openingTraining: {
+    lineId: string
+    /** 已完成的 ply 数 */
+    index: number
+    status: 'playing' | 'wrong' | 'done'
+  } | null
+
+  /** 棋谱页子导航（供训练计划等外部跳转） */
+  gamesSubTab: 'list' | 'mistakes' | 'training'
+  setGamesSubTab: (t: 'list' | 'mistakes' | 'training') => void
 
   // ── 错误重走 (计划第17节) ──
   /** 正在重走的 Ply 序号（0-based，决策局面 = 该步之前） */
@@ -200,6 +213,11 @@ interface AppState {
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
   startEndgameTraining: (fen: string, name: string) => void
 
+  // ── 开局训练 (计划第22节) ──
+  startOpeningTraining: (lineId: string) => void
+  exitOpeningTraining: () => void
+  openingTryMove: (from: Pos, to: Pos) => boolean
+
   // ── 刷新 ──
   refreshSavedGames: () => void
 }
@@ -270,6 +288,13 @@ export const useStore = create<AppState>((set, get) => ({
   setupTurn: 'w',
   setupCandidates: null,
   setupError: '',
+
+  // ── 开局训练 ──
+  openingTraining: null,
+
+  // ── 棋谱页子导航 ──
+  gamesSubTab: 'list',
+  setGamesSubTab: (t) => set({ gamesSubTab: t }),
 
   // ── 错误重走 ──
   puzzlePlyIndex: null,
@@ -407,6 +432,8 @@ export const useStore = create<AppState>((set, get) => ({
     const { board, mode, game, engine, engineReady, playerSide } = get()
 
     if (mode === 'puzzle') return get().puzzleTryMove(from, to)
+    // 开局训练模式: 只校验理论着法，不落子到棋谱
+    if (mode === 'play' && get().openingTraining) return get().openingTryMove(from, to)
     if (mode !== 'play') return false
 
     const piece = board.board[from.col][from.row]
@@ -477,6 +504,7 @@ export const useStore = create<AppState>((set, get) => ({
   undo: () => {
     const { game, mode, currentPlyIndex, playerSide } = get()
     if (mode !== 'play' || get().isThinking) return
+    if (get().openingTraining) return // 开局训练中不可悔棋
     if (game.result !== '*') return
     if (currentPlyIndex <= 0) return
 
@@ -1249,6 +1277,91 @@ export const useStore = create<AppState>((set, get) => ({
         ? parseMoveFromUci(game.plies[currentPlyIndex - 1].move, game.plies[currentPlyIndex - 1].turn)
         : null,
     })
+  },
+
+  // ══════════════════════════════════════════════════════════════════
+  // 开局训练 (计划第22节"开局训练")
+  // ══════════════════════════════════════════════════════════════════
+
+  startOpeningTraining: (lineId) => {
+    const { timerInterval } = get()
+    if (timerInterval) clearInterval(timerInterval)
+
+    set({
+      mode: 'play',
+      openingTraining: { lineId, index: 0, status: 'playing' },
+      game: createEmptyGame(),
+      board: boardFromFen(START_FEN),
+      playerSide: 'w',
+      currentPlyIndex: 0,
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+      analysis: null,
+      hintInfo: null,
+      puzzlePlyIndex: null,
+      redTime: 0,
+      blackTime: 0,
+      activeTab: 'play',
+    })
+  },
+
+  exitOpeningTraining: () => {
+    set({ openingTraining: null })
+    get().restart() // 回到普通对局
+  },
+
+  /** 训练走子校验: 对理论着法，错则提示不落子 */
+  openingTryMove: (from, to) => {
+    const ot = get().openingTraining
+    if (!ot) return false
+    const line = OPENING_LINES.find(l => l.id === ot.lineId)
+    if (!line || ot.index >= line.moves.length) return false
+
+    const uci = `${String.fromCharCode(97 + from.col)}${from.row}${String.fromCharCode(97 + to.col)}${to.row}`
+
+    if (uci !== line.moves[ot.index]) {
+      set({ openingTraining: { ...ot, status: 'wrong' } })
+      return true
+    }
+
+    // 正确: 演示到棋盘
+    const before = get().board
+    const st = makeMove(before, { from, to, turn: before.turn })
+    const idx = ot.index + 1
+
+    set({
+      openingTraining: { ...ot, index: idx, status: 'playing' },
+      board: st,
+      lastMove: { from, to, turn: before.turn },
+      selected: null,
+      legalTargets: [],
+    })
+
+    // 对手一侧自动按理论行棋
+    if (idx < line.moves.length) {
+      setTimeout(() => {
+        const s2 = get()
+        const ot2 = s2.openingTraining
+        if (!ot2 || ot2.lineId !== ot.lineId || ot2.index !== idx) return
+        const oppUci = line.moves[idx]
+        const ob = s2.board
+        const oppFrom = { col: oppUci.charCodeAt(0) - 97, row: parseInt(oppUci[1]) }
+        const oppTo = { col: oppUci.charCodeAt(2) - 97, row: parseInt(oppUci[3]) }
+        const st2 = makeMove(ob, { from: oppFrom, to: oppTo, turn: ob.turn })
+        const done = idx + 1 >= line.moves.length
+        set({
+          openingTraining: { ...ot2, index: idx + 1, status: done ? 'done' : 'playing' },
+          board: st2,
+          lastMove: { from: oppFrom, to: oppTo, turn: ob.turn },
+        })
+        if (done) get().showToast('🎉 定式走完！你已掌握这条开局')
+      }, 600)
+    } else {
+      get().showToast('🎉 定式走完！你已掌握这条开局')
+      set({ openingTraining: { ...get().openingTraining!, status: 'done' } })
+    }
+    return true
   },
 }))
 
