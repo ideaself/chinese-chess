@@ -16,7 +16,7 @@
 import { create } from 'zustand'
 import type { BoardState } from '../game/board'
 import {
-  createGame as createBoardGame, makeMove, boardToFen,
+  makeMove, boardToFen,
   boardFromFen, createEmptyBoard, START_FEN,
 } from '../game/board'
 import type { Move, Pos, Turn } from '../game/board'
@@ -33,7 +33,6 @@ import {
   deleteGame as storageDeleteGame,
 } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
-import { moveToUci, uciToMove } from '../engine/uci'
 import { getBookMove } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio, playMoveHaptic, playCheckHaptic, playGameOverHaptic } from '../game/sound'
@@ -824,7 +823,7 @@ export const useStore = create<AppState>((set, get) => ({
   // ══════════════════════════════════════════════════════════════════
 
   analyzePosition: async () => {
-    const { game, engine, engineDepth, currentPlyIndex } = get()
+    const { game, engine, currentPlyIndex } = get()
     if (!engine || !engine.isReady) return
 
     const currentBoard = boardFromGame(game, currentPlyIndex)
@@ -832,7 +831,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     set({ isThinking: true })
     try {
-      await engine.analyze(fen, game.plies.slice(0, currentPlyIndex).map(p => p.move), engineDepth, (info) => {
+      // 单局面分析用设置的分析深度（比整盘更深，只搜一个局面）
+      await engine.analyze(fen, game.plies.slice(0, currentPlyIndex).map(p => p.move), getSettings().analysisDepth + 4, (info) => {
         set({
           analysis: {
             depth: info.depth,

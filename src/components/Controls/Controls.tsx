@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react'
 import { useStore, DIFFICULTY_LABELS } from '../../store/useStore'
 import type { Difficulty } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
+import { exportGameImage } from '../../game/imageExport'
 
 export const Controls: React.FC = () => {
   const mode = useStore(s => s.mode)
@@ -93,8 +94,8 @@ export const Controls: React.FC = () => {
           <button className="btn" onClick={() => aiHint()} disabled={!engineReady || isThinking}>
             {isThinking ? '⏳ 思考中' : '💡 提示'}
           </button>
-          <button className="btn" onClick={offerDraw} disabled={isThinking || game.result !== '*'} title="判为和棋并保存">🤝 求和</button>
-          <button className="btn" onClick={resign} disabled={game.result !== '*'}>🏳 认输</button>
+          <button className="btn" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }} disabled={isThinking || game.result !== '*'} title="判为和棋并保存">🤝 求和</button>
+          <button className="btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }} disabled={game.result !== '*'}>🏳 认输</button>
           <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
         </div>
 
@@ -145,7 +146,7 @@ export const Controls: React.FC = () => {
           </div>
         </div>
 
-        <div className="action-grid cols-2">
+        <div className="action-grid">
           <button className="btn btn-primary" onClick={() => {
             const side = getSettings().defaultSide
             startNewGame(difficulty, side === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : side)
@@ -153,7 +154,8 @@ export const Controls: React.FC = () => {
             ⚔ 新对局
           </button>
           <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
-          <button className="btn" style={{ gridColumn: '1 / -1' }} onClick={() => {
+          <button className="btn" onClick={() => exportGameImage(game)}>🖼 导出图片</button>
+          <button className="btn" onClick={() => {
             const pgn = exportCurrentPGN()
             const blob = new Blob([pgn], { type: 'text/plain' })
             const url = URL.createObjectURL(blob)

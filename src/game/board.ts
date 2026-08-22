@@ -335,38 +335,3 @@ export function coordToPos(coord: string): Pos {
     row: parseInt(coord[1]),
   }
 }
-
-// ── 对局状态 ──────────────────────────────────────────────────────
-
-export interface GameState {
-  board: BoardState
-  history: Move[]
-  isGameOver: boolean
-  result: string | null
-}
-
-/** 创建新对局 */
-export function createGame(fen: string = START_FEN): GameState {
-  return {
-    board: boardFromFen(fen),
-    history: [],
-    isGameOver: false,
-    result: null,
-  }
-}
-
-/** 判断是否将军/将死 (简化实现) */
-export function isCheckmate(state: BoardState): boolean {
-  // 简化：检查当前方是否无合法走法
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      const piece = state.board[c][r]
-      if (piece === '.') continue
-      const red = isRed(piece)
-      if (red !== (state.turn === 'w')) continue
-      const { moves } = generateMoves(state, c, r)
-      if (moves.length > 0) return false
-    }
-  }
-  return true
-}
