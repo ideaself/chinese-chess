@@ -793,6 +793,61 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .result-dot.result-loss { background: rgba(224,85,85,0.16); color: var(--red); }
 .result-dot.result-draw { background: rgba(243,156,18,0.16); color: #f39c12; }
 
+/* 棋力等级（Elo + 段位） */
+.rating-card {
+  padding: 12px;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, rgba(74,144,226,0.10), rgba(240,201,74,0.06));
+  border: 1px solid rgba(74,144,226,0.22);
+  border-radius: var(--radius-sm);
+}
+.rating-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.rating-value { font-size: 30px; font-weight: bold; line-height: 1.1; color: var(--text); }
+.rating-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.rank-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  background: rgba(240,201,74,0.14);
+  border: 1px solid rgba(240,201,74,0.35);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: bold;
+}
+.rank-progress {
+  height: 5px;
+  margin: 10px 0 6px;
+  background: var(--slot);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rank-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.sparkline { width: 100%; height: 30px; margin-top: 8px; opacity: 0.85; }
+.link-btn {
+  margin-top: 8px;
+  background: none; border: none;
+  color: var(--text-3); font-size: 11px;
+  text-decoration: underline; cursor: pointer; padding: 0;
+}
+.link-btn:hover { color: var(--text-2); }
+
+/* 结果页棋力分变化 */
+.rating-change-line {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-2);
+  margin: -2px 0 10px;
+}
+.rating-change-line strong { color: var(--text); font-size: 15px; }
+.rating-change-line .delta-up { color: var(--green); font-weight: bold; }
+.rating-change-line .delta-down { color: var(--red); font-weight: bold; }
+.rank-inline { color: var(--gold); }
+
 /* 弱点分析 */
 .weakness-box {
   margin-top: 10px;

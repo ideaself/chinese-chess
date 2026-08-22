@@ -20,6 +20,7 @@ import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
 import { getSettings } from './game/storage'
 import type { AppSettings } from './game/storage'
+import { getRank } from './game/rating'
 import { resumeAudio } from './game/sound'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import './App.css'
@@ -187,6 +188,8 @@ const GameOverModal: React.FC<{
   const game = useStore(s => s.game)
   const setTab = useStore(s => s.setTab)
   const analyzeCurrentGame = useStore(s => s.analyzeCurrentGame)
+  const lastRatingChange = useStore(s => s.lastRatingChange)
+  const rank = useStore(s => (s.lastRatingChange ? getRank(s.lastRatingChange.after).tier.name : null))
 
   const handleReview = () => {
     loadGame(game.id)
@@ -200,6 +203,15 @@ const GameOverModal: React.FC<{
         <h2 className="game-over-title">
           {result === '1-0' ? '红方胜!' : result === '0-1' ? '黑方胜!' : '和棋!'}
         </h2>
+        {lastRatingChange && (
+          <div className="rating-change-line">
+            棋力分 <strong>{lastRatingChange.before} → {lastRatingChange.after}</strong>
+            <span className={lastRatingChange.delta > 0 ? 'delta-up' : lastRatingChange.delta < 0 ? 'delta-down' : ''}>
+              {' '}({lastRatingChange.delta > 0 ? '+' : ''}{lastRatingChange.delta})
+            </span>
+            {rank && <span className="rank-inline"> · {rank}</span>}
+          </div>
+        )}
         <div className="game-over-stats">
           <div className="stat-item">
             <span className="stat-label">回合数</span>

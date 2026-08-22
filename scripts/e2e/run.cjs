@@ -58,7 +58,7 @@ function http_get(url) {
 }
 
 async function main() {
-  const suites = ['core', 'training'].map(f => require(path.join(__dirname, `${f}.cjs`)))
+  const suites = ['core', 'training', 'rating'].map(f => require(path.join(__dirname, `${f}.cjs`)))
   const procs = []
 
   // 1. preview server

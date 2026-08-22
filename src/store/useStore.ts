@@ -37,6 +37,11 @@ import { PikafishEngine } from '../engine/pikafish'
 import { getBookMove } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio, playMoveHaptic, playCheckHaptic, playGameOverHaptic } from '../game/sound'
+import { applyGameResult } from '../game/rating'
+import type { RatingChange } from '../game/rating'
+
+/** 终局结算的棋力分变化（结果页展示） */
+export type LastRatingChange = RatingChange
 
 // ── 类型定义 ──────────────────────────────────────────────────────
 
@@ -94,6 +99,8 @@ interface AppState {
   difficulty: Difficulty
   playerSide: Turn
   boardFlipped: boolean
+  /** 最近一局人机对局结算的棋力分变化 */
+  lastRatingChange: LastRatingChange | null
 
   // ── 摆棋模式 (计划第16节) ──
   modeBeforeSetup: GameMode
@@ -257,6 +264,32 @@ const DIFFICULTY_LABELS: Record<Difficulty, string> = {
 
 export { DIFFICULTY_LABELS }
 
+/**
+ * 终局棋力分结算。
+ * 难度取 header.Difficulty（v1.2 起写入）；
+ * 旧棋谱按对手名回推；残局/导入等非人机对局返回 null 不计分。
+ */
+function settleRating(game: Game): LastRatingChange | null {
+  const isRedPlayer = game.header.Red === '玩家'
+  const isBlackPlayer = game.header.Black === '玩家'
+  if (isRedPlayer === isBlackPlayer) return null
+
+  let difficulty = game.header.Difficulty as Difficulty | undefined
+  if (!difficulty || !(difficulty in DIFFICULTY_LABELS)) {
+    const oppName = isRedPlayer ? game.header.Black : game.header.Red
+    difficulty = (Object.entries(DIFFICULTY_LABELS) as [Difficulty, string][])
+      .find(([, label]) => label === oppName)?.[0]
+    if (!difficulty) return null
+  }
+
+  const outcome =
+    game.result === '1/2-1/2' ? 'draw'
+      : game.result === '1-0' ? (isRedPlayer ? 'win' : 'loss')
+        : (isBlackPlayer ? 'win' : 'loss')
+
+  return applyGameResult(game.id, difficulty, outcome)
+}
+
 // ── 辅助函数 ──────────────────────────────────────────────────────
 
 function boardFromGame(game: Game, plyIndex: number): BoardState {
@@ -295,6 +328,7 @@ export const useStore = create<AppState>((set, get) => ({
   difficulty: 'medium',
   playerSide: 'w',
   boardFlipped: false,
+  lastRatingChange: null,
 
   // ── 摆棋模式 ──
   modeBeforeSetup: 'play',
@@ -381,6 +415,7 @@ export const useStore = create<AppState>((set, get) => ({
     const game = createEmptyGame()
     game.header.Red = playerSide === 'w' ? '玩家' : DIFFICULTY_LABELS[difficulty]
     game.header.Black = playerSide === 'b' ? '玩家' : DIFFICULTY_LABELS[difficulty]
+    game.header.Difficulty = difficulty
 
     set({
       mode: 'play',
@@ -394,6 +429,7 @@ export const useStore = create<AppState>((set, get) => ({
       lastMove: null,
       analysis: null,
       hintInfo: null,
+      lastRatingChange: null,
       redTime: 0,
       blackTime: 0,
     })
@@ -707,6 +743,13 @@ export const useStore = create<AppState>((set, get) => ({
   saveCurrentGame: () => {
     const { game } = get()
     if (game.plies.length === 0) return
+
+    // 棋力分结算（计划19节 V3: 仅人机对局终局，同局去重）
+    if (game.result !== '*') {
+      const change = settleRating(game)
+      if (change) set({ lastRatingChange: change })
+    }
+
     const ok = storageSaveGame(game)
     if (!ok) {
       get().showToast('⚠ 保存失败：存储空间已满，请在棋谱页备份或删除旧棋谱')
