@@ -114,27 +114,14 @@ export const Board: React.FC = () => {
     }
   }, [])
 
-  // 点击处理（直接读取最新 store 状态，避免闭包过期问题）
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  // 统一指针处理（鼠标/触摸/笔均只触发一次）
+  // 注意: 不能混用 onTouchStart+onClick —— 移动端触摸后浏览器会补发合成 click,
+  // 造成"选中→立即取消"的一闪现象。
+  const handlePointer = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return // 仅主键/触摸
     const { mode, isThinking, boardFlipped, selectPiece, setupClick } = useStore.getState()
     if (isThinking) return
     const coords = getSvgCoords(e.clientX, e.clientY)
-    if (!coords) return
-    const pos = svgToPos(coords.x, coords.y, boardFlipped)
-    if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
-    if (mode === 'setup') { setupClick(pos); return }
-    if (mode !== 'play') return
-    selectPiece(pos)
-  }, [getSvgCoords])
-
-  // 触摸处理
-  const handleTouch = useCallback((e: React.TouchEvent) => {
-    e.preventDefault()
-    const { mode, isThinking, boardFlipped, selectPiece, setupClick } = useStore.getState()
-    if (isThinking) return
-    const touch = e.touches[0]
-    if (!touch) return
-    const coords = getSvgCoords(touch.clientX, touch.clientY)
     if (!coords) return
     const pos = svgToPos(coords.x, coords.y, boardFlipped)
     if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
@@ -222,8 +209,7 @@ export const Board: React.FC = () => {
         <span className="timer">{formatTime(blackTime)}</span>
       </div>
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
-        onClick={handleClick}
-        onTouchStart={handleTouch}
+        onPointerDown={handlePointer}
         style={{ touchAction: 'none', cursor: 'pointer' }}>
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
