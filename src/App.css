@@ -41,7 +41,13 @@ html[data-theme='light'] {
 }
 html[data-theme='light'] body { background: var(--bg); color: var(--text); }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  /* 抑制移动端点击时的蓝色高亮闪块 */
+  -webkit-tap-highlight-color: transparent;
+}
 
 html, body, #root {
   height: 100%;
@@ -155,7 +161,10 @@ body { overflow: hidden; }
   display: flex;
   flex-direction: column;
   max-width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
 }
+.board-container svg:focus { outline: none; }
 
 .board-container svg {
   max-width: 100%;
