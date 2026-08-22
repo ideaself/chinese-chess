@@ -29,9 +29,10 @@ import {
 } from '../game/model'
 import { parsePGN, exportPGN } from '../game/pgn'
 import {
-  saveGame as storageSaveGame, getAllGames, getSettings,
+  saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
   deleteGame as storageDeleteGame,
 } from '../game/storage'
+import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
 import { getBookMove } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
@@ -109,6 +110,10 @@ interface AppState {
   /** 棋谱页子导航（供训练计划等外部跳转） */
   gamesSubTab: 'list' | 'mistakes' | 'training'
   setGamesSubTab: (t: 'list' | 'mistakes' | 'training') => void
+
+  /** 应用设置（响应式：改皮肤/主题即时生效） */
+  settings: AppSettings
+  updateSettings: (patch: Partial<AppSettings>) => void
 
   /** 重放自动播放（提升到 store 以支持键盘快捷键） */
   autoPlaying: boolean
@@ -302,6 +307,14 @@ export const useStore = create<AppState>((set, get) => ({
   // ── 重放自动播放 ──
   autoPlaying: false,
   setAutoPlaying: (v) => set({ autoPlaying: v }),
+
+  // ── 设置 ──
+  settings: getSettings(),
+  updateSettings: (patch) => {
+    const next = { ...get().settings, ...patch }
+    saveSettings(next)
+    set({ settings: next })
+  },
 
   // ── 错误重走 ──
   puzzlePlyIndex: null,

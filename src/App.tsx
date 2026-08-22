@@ -18,7 +18,7 @@ import { OpeningTrainingPanel } from './components/Games/OpeningTrainingPanel'
 import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
-import { getSettings, saveSettings } from './game/storage'
+import { getSettings } from './game/storage'
 import type { AppSettings } from './game/storage'
 import { resumeAudio } from './game/sound'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
@@ -42,6 +42,7 @@ export const App: React.FC = () => {
   const toast = useStore(s => s.toast)
   const variation = useStore(s => s.variation)
   const openingTraining = useStore(s => s.openingTraining)
+  const theme = useStore(s => s.settings.theme)
 
   useEffect(() => {
     init()
@@ -51,6 +52,13 @@ export const App: React.FC = () => {
       setDifficulty(settings.defaultDifficulty as Difficulty)
     }
   }, [init, setDifficulty])
+
+  // 主题应用（深色/浅色）
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'light' ? '#f1eee7' : '#16162a')
+  }, [theme])
 
   // 键盘快捷键: 重放导航 / 推演步进（←→ 空格 Home End）
   useEffect(() => {
@@ -226,14 +234,14 @@ function formatTime(ms: number): string {
 /** 设置面板 */
 
 const SettingsPanel: React.FC = () => {
-  const [settings, setSettings] = useState<AppSettings>(getSettings)
+  // 响应式设置：修改即时生效（皮肤/主题/音效等）
+  const settings = useStore(s => s.settings)
+  const updateSettings = useStore(s => s.updateSettings)
   const flipBoard = useStore(s => s.flipBoard)
   const boardFlipped = useStore(s => s.boardFlipped)
 
   const update = (patch: Partial<AppSettings>) => {
-    const next = { ...settings, ...patch }
-    setSettings(next)
-    saveSettings(next)
+    updateSettings(patch)
     if (patch.boardFlipped !== undefined && patch.boardFlipped !== boardFlipped) {
       flipBoard()
     }
@@ -243,6 +251,17 @@ const SettingsPanel: React.FC = () => {
     <div className="settings-panel">
       <div className="panel-header"><h3>设置</h3></div>
       <div className="panel-body">
+        <div className="settings-group">
+          <h4>外观</h4>
+          <div className="settings-row">
+            <span>主题</span>
+            <select className="settings-select" value={settings.theme}
+              onChange={e => update({ theme: e.target.value as AppSettings['theme'] })}>
+              <option value="dark">深色</option>
+              <option value="light">浅色</option>
+            </select>
+          </div>
+        </div>
         <div className="settings-group">
           <h4>棋盘</h4>
           <div className="settings-row">

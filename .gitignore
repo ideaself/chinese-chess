@@ -4,3 +4,5 @@ dist/
 .DS_Store
 android/
 ios/
+android/key.properties
+*.keystore

@@ -161,6 +161,8 @@ export interface AppSettings {
   defaultDifficulty: string
   /** 整盘分析深度档位（计划9.1）: 8 快速 / 12 标准 / 16 深度 */
   analysisDepth: number
+  // 外观
+  theme: 'dark' | 'light'
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -177,6 +179,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultSide: 'w',
   defaultDifficulty: 'medium',
   analysisDepth: 16,
+  theme: 'dark',
 }
 
 export function getSettings(): AppSettings {

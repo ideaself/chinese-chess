@@ -12,7 +12,6 @@ import { useStore } from '../../store/useStore'
 import type { Pos } from '../../game/board'
 import { isRed } from '../../game/board'
 import { isInCheck, findKing } from '../../game/rules'
-import { getSettings } from '../../game/storage'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -73,7 +72,8 @@ export const Board: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')
   const [anim, setAnim] = useState<AnimState | null>(null)
-  const [settings] = useState(() => getSettings())
+  // 响应式设置：改皮肤立即生效
+  const settings = useStore(s => s.settings)
   const inCheck = isInCheck(board)
   const kingPos = inCheck ? findKing(board, board.turn === 'w') : null
 
