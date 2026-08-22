@@ -152,7 +152,8 @@ export function getResult(state: BoardState): string {
     return state.turn === 'w' ? '0-1' : '1-0'
   }
   if (end === 'stalemate') {
-    return '1/2-1/2'
+    // 困毙判负：无子可动的一方输
+    return state.turn === 'w' ? '0-1' : '1-0'
   }
   return '*' // 未结束
 }
@@ -212,7 +213,9 @@ export function getGameStatus(
       const result = state.turn === 'w' ? '0-1' : '1-0'
       return { isGameOver: true, result, reason: '将死', inCheck, legalMoveCount }
     } else {
-      return { isGameOver: true, result: '1/2-1/2', reason: '困毙（无子可动）', inCheck, legalMoveCount }
+      // 困毙判负（中国象棋规则，非和棋）
+      const result = state.turn === 'w' ? '0-1' : '1-0'
+      return { isGameOver: true, result, reason: '困毙（无子可动判负）', inCheck, legalMoveCount }
     }
   }
 

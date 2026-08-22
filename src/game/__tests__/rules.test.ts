@@ -40,13 +40,13 @@ describe('终局判定', () => {
   })
 
   it('一步成杀全链路（兵锁肋线+车贴脸）', () => {
-    // 前置局面红先行，e7e8 绝杀
+    // 前置局面红先行，车 e7→e8 绝杀
     const before = '4k4/3P1P3/4R4/9/9/9/9/9/9/4K4 w'
     const stB = boardFromFen(before)
     expect(getGameStatus(stB).isGameOver).toBe(false)
 
-    // 车进到 (4,8) 后黑方无解
-    const after = '4k4/3P1PR2/9/9/9/9/9/9/9/4K4 b'
+    // 车进到 (4,8) 贴脸，双兵锁住 3/5 路，黑方无解
+    const after = '4k4/3PRP3/9/9/9/9/9/9/9/4K4 b'
     const status = getGameStatus(boardFromFen(after))
     expect(status.isGameOver).toBe(true)
     expect(status.result).toBe('1-0')
@@ -55,6 +55,42 @@ describe('终局判定', () => {
   it('轮到行棋方时不误判终局', () => {
     const st = boardFromFen('3ak3/2C1k4/9/9/9/9/9/9/9/4K4 w')
     expect(getGameStatus(st).isGameOver).toBe(false)
+  })
+
+  it('困毙判负（无合法着法且未被将军）', () => {
+    // 双兵锁 3/5 路与 (4,8), 车(6,8)被己方兵挡住不构成将军
+    const st = boardFromFen('4k4/3P1PR2/9/9/9/9/9/9/9/4K4 b')
+    const status = getGameStatus(st)
+    expect(status.isGameOver).toBe(true)
+    expect(status.inCheck).toBe(false)
+    expect(status.result).toBe('1-0')
+    expect(status.reason).toBe('困毙（无子可动判负）')
+  })
+})
+
+describe('兵过河横移', () => {
+  it('红兵过河后: 可前进+左右横移, 不能斜走', () => {
+    // FEN 第5行(idx4)=棋盘 row5: 红兵(4,5)已过河; 红帅挪开4路避免飞将过滤横移
+    const st = boardFromFen('4k4/9/9/9/4P4/9/9/9/9/3K5 w')
+    const moves = getLegalMoves(st, 4, 5)
+    expect(has(moves, 4, 6)).toBe(true)  // 前进
+    expect(has(moves, 3, 5)).toBe(true)  // 左移
+    expect(has(moves, 5, 5)).toBe(true)  // 右移
+    expect(has(moves, 3, 6)).toBe(false) // 不是斜前
+    expect(has(moves, 5, 6)).toBe(false)
+  })
+
+  it('未过河的兵只能前进', () => {
+    const st = boardFromFen('4k4/9/9/9/9/9/4P4/9/9/4K4 w')
+    const moves = getLegalMoves(st, 4, 3)
+    expect(moves.length).toBe(1)
+    expect(has(moves, 4, 4)).toBe(true)
+  })
+
+  it('过河兵侧向攻击能被将军检测识别', () => {
+    // 黑王(4,7), 红兵(3,7)同行相邻(FEN 第3行=棋盘 row7) → 兵横吃王 = 将军
+    const st = boardFromFen('9/9/3Pk4/9/9/9/9/9/9/3K5 b')
+    expect(getGameStatus(st).inCheck).toBe(true)
   })
 })
 

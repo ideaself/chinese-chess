@@ -278,11 +278,11 @@ export function generateMoves(state: BoardState, col: number, row: number): Move
       const fr = row + forward
       if (isInBounds(col, fr)) {
         tryMove(col, fr)
-        // 过河后可左右
-        if (crossedRiver(row)) {
-          tryMove(col - 1, fr)
-          tryMove(col + 1, fr)
-        }
+      }
+      // 过河后可在当前行左右横移
+      if (crossedRiver(row)) {
+        tryMove(col - 1, row)
+        tryMove(col + 1, row)
       }
       break
     }
