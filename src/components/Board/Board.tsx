@@ -12,6 +12,7 @@ import { useStore } from '../../store/useStore'
 import type { Pos } from '../../game/board'
 import { isRed } from '../../game/board'
 import { isInCheck, findKing } from '../../game/rules'
+import { EvalBar } from './EvalBar'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -204,6 +205,7 @@ export const Board: React.FC = () => {
 
   return (
     <div className="board-container">
+      <EvalBar />
       <div className="player-info black-info">
         <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方</span>
         <span className="timer">{formatTime(blackTime)}</span>

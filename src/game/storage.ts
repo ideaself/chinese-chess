@@ -163,6 +163,8 @@ export interface AppSettings {
   analysisDepth: number
   // 外观
   theme: 'dark' | 'light'
+  /** 对战时自动评估局面（评估条） */
+  autoEval: boolean
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -180,6 +182,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultDifficulty: 'medium',
   analysisDepth: 16,
   theme: 'dark',
+  autoEval: true,
 }
 
 export function getSettings(): AppSettings {

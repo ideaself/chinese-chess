@@ -174,6 +174,56 @@ body { overflow: hidden; }
   border-radius: 8px;
 }
 
+/* ── 局面评估条 ── */
+
+.eval-bar {
+  position: relative;
+  width: 100%;
+  margin-bottom: 7px;
+}
+.eval-bar-track {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
+}
+.eval-bar-red {
+  background: linear-gradient(180deg, #e86060, #c23a3a);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.eval-bar-black {
+  background: linear-gradient(180deg, #3d3d52, #23232f);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.eval-bar-notch {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: rgba(255,255,255,0.55);
+}
+.eval-bar-label {
+  position: absolute;
+  right: 6px;
+  top: -3px;
+  font-size: 10px;
+  font-family: 'SF Mono', monospace;
+  font-weight: bold;
+  line-height: 20px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  pointer-events: none;
+}
+.eval-bar-label.label-red { color: #ffb3b3; }
+html[data-theme='light'] .eval-bar-label.label-red { color: #c23a3a; }
+.eval-bar-label.label-black { color: #9db8d8; }
+html[data-theme='light'] .eval-bar-label.label-black { color: #35608f; }
+
 .player-info {
   display: flex;
   justify-content: space-between;

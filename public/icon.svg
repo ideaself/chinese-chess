@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#16162a"/>
-  <circle cx="256" cy="256" r="170" fill="#f8e8c8" stroke="#c41e1e" stroke-width="18"/>
-  <circle cx="256" cy="256" r="140" fill="none" stroke="#c41e1e" stroke-width="6"/>
-  <text x="256" y="330" text-anchor="middle" font-size="190" font-weight="bold" font-family="'PingFang SC','Microsoft YaHei',sans-serif" fill="#c41e1e">帅</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F7C948"/>
+      <stop offset="1" stop-color="#DDA416"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="182" fill="#FFF6DE" stroke="#B45309" stroke-width="17"/>
+  <circle cx="256" cy="256" r="156" fill="none" stroke="#B45309" stroke-width="6"/>
+  <text x="256" y="332" text-anchor="middle" font-size="196" font-weight="bold" font-family="'PingFang SC','Microsoft YaHei',sans-serif" fill="#B45309">帅</text>
 </svg>

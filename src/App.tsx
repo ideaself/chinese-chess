@@ -298,6 +298,11 @@ const SettingsPanel: React.FC = () => {
             <input type="checkbox" checked={settings.animationEnabled}
               onChange={e => update({ animationEnabled: e.target.checked })} />
           </div>
+          <div className="settings-row">
+            <span>自动局面评估</span>
+            <input type="checkbox" checked={settings.autoEval !== false}
+              onChange={e => update({ autoEval: e.target.checked })} />
+          </div>
         </div>
         <div className="settings-group">
           <h4>音效</h4>

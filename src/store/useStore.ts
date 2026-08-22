@@ -81,6 +81,11 @@ interface AppState {
   /** 整盘分析进度 */
   analysisProgress: { current: number; total: number } | null
 
+  /** 局面评估条（对战页棋盘上方，分数为行棋方视角） */
+  evalBar: { score: number; fen: string } | null
+  /** 轮到玩家且引擎空闲时快速评估当前局面 */
+  quickEval: () => Promise<void>
+
   // ── 对局状态 ──
   mode: GameMode
   game: Game
@@ -281,6 +286,7 @@ export const useStore = create<AppState>((set, get) => ({
   analysis: null,
   hintInfo: null,
   analysisProgress: null,
+  evalBar: null,
 
   // ── 对局状态 ──
   mode: 'play',
@@ -566,6 +572,8 @@ export const useStore = create<AppState>((set, get) => ({
     // 撤完轮到 AI（如玩家执黑撤回开局）→ 让 AI 重走
     if (turnAt(target) !== playerSide) {
       setTimeout(() => get().aiMove(), 300)
+    } else {
+      setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 150)
     }
   },
 
@@ -630,6 +638,8 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('AI 走棋失败:', e)
     } finally {
       set({ isThinking: false })
+      // AI 走完轮到玩家，自动评估局面供评估条显示
+      setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 120)
     }
   },
 
@@ -835,6 +845,31 @@ export const useStore = create<AppState>((set, get) => ({
   // AI 分析
   // ══════════════════════════════════════════════════════════════════
 
+  /** 快速评估当前局面（轮到玩家时自动触发，供评估条显示） */
+  quickEval: async () => {
+    const s = get()
+    if (!s.engine?.isReady || s.isThinking) return
+    if (s.mode !== 'play' || s.openingTraining || s.game.result !== '*') return
+    const board = boardFromGame(s.game, s.game.plies.length)
+    if (board.turn !== s.playerSide) return // 只在玩家回合评估
+
+    const fen = boardToFen(board)
+    try {
+      await s.engine.analyze(fen, s.game.plies.map(p => p.move), Math.min(getSettings().analysisDepth, 12), (info) => {
+        set({
+          analysis: {
+            depth: info.depth,
+            score: info.score,
+            bestMove: info.move,
+            pv: info.pv,
+            fen,
+          },
+          evalBar: { score: info.score, fen },
+        })
+      })
+    } catch {}
+  },
+
   analyzePosition: async () => {
     const { game, engine, currentPlyIndex } = get()
     if (!engine || !engine.isReady) return
@@ -854,6 +889,7 @@ export const useStore = create<AppState>((set, get) => ({
             pv: info.pv,
             fen,
           },
+          evalBar: { score: info.score, fen },
         })
       })
     } catch (e) {
