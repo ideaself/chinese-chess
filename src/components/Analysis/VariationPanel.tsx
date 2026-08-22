@@ -6,6 +6,7 @@
 
 import React from 'react'
 import { useStore } from '../../store/useStore'
+import { TriRight } from '../ui/icons'
 
 export const VariationPanel: React.FC = () => {
   const variation = useStore(s => s.variation)
@@ -25,7 +26,7 @@ export const VariationPanel: React.FC = () => {
         <div className="transport">
           <button className="t-btn" onClick={() => variationGo(0)} title="起点">⏮</button>
           <button className="t-btn" onClick={() => variationGo(index - 1)} disabled={index <= 0} title="上一步">◀</button>
-          <button className="t-btn t-main" onClick={() => variationGo(index + 1)} disabled={index >= moves.length} title="下一步">⏵</button>
+          <button className="t-btn t-main" onClick={() => variationGo(index + 1)} disabled={index >= moves.length} title="下一步"><TriRight /></button>
           <button className="t-btn" onClick={() => variationGo(moves.length)} title="终点">⏭</button>
         </div>
 

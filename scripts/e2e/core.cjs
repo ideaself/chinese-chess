@@ -34,7 +34,7 @@ async function run(ctx) {
   await evalJs(`window.__store.getState().goToStart()`)
   await sleep(150)
   const atStart = await evalJs(`window.__store.getState().currentPlyIndex`)
-  await evalJs(`[...document.querySelectorAll('button')].find(b => b.textContent === '⏵')?.click()`)
+  await evalJs(`[...document.querySelectorAll('button')].find(b => b.title === '下一步')?.click()`)
   await sleep(250)
   const afterFwd = await evalJs(`window.__store.getState().currentPlyIndex`)
   check('逐步导航 0→1', atStart === 0 && afterFwd === 1, `${atStart}→${afterFwd}`)

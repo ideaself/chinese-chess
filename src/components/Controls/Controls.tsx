@@ -10,6 +10,7 @@ import { useStore, DIFFICULTY_LABELS } from '../../store/useStore'
 import type { Difficulty } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportGameImage } from '../../game/imageExport'
+import { TriRight } from '../ui/icons'
 
 export const Controls: React.FC = () => {
   const mode = useStore(s => s.mode)
@@ -129,7 +130,7 @@ export const Controls: React.FC = () => {
               onClick={() => setAutoPlay(!autoPlay)} title="自动播放">
               {autoPlay ? '⏸' : '▶'}
             </button>
-            <button className="t-btn" onClick={goForward} disabled={currentPlyIndex >= game.plies.length} title="下一步">⏵</button>
+            <button className="t-btn" onClick={goForward} disabled={currentPlyIndex >= game.plies.length} title="下一步"><TriRight /></button>
             <button className="t-btn" onClick={goToEnd} title="末局">⏭</button>
           </div>
           <div className="speed-row">
