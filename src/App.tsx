@@ -22,6 +22,7 @@ import { getSettings } from './game/storage'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
 import { resumeAudio } from './game/sound'
+import { fetchModels } from './game/coach/aiCoach'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import './App.css'
 
@@ -245,12 +246,37 @@ function formatTime(ms: number): string {
 
 /** 设置面板 */
 
+const FALLBACK_MODELS = ['deepseek-chat', 'deepseek-reasoner']
+
 const SettingsPanel: React.FC = () => {
   // 响应式设置：修改即时生效（皮肤/主题/音效等）
   const settings = useStore(s => s.settings)
   const updateSettings = useStore(s => s.updateSettings)
   const flipBoard = useStore(s => s.flipBoard)
   const boardFlipped = useStore(s => s.boardFlipped)
+
+  // AI 模型列表自动获取（防抖，Key/地址变化后 600ms 触发）
+  const [models, setModels] = useState<string[]>(FALLBACK_MODELS)
+  const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const apiKey = settings.aiCoachApiKey || ''
+  const baseUrl = settings.aiCoachBaseUrl || '/ai-proxy'
+
+  useEffect(() => {
+    if (!apiKey.trim()) { setModels(FALLBACK_MODELS); setModelStatus('idle'); return }
+    setModelStatus('loading')
+    const timer = setTimeout(() => {
+      fetchModels()
+        .then(list => {
+          // 兼容手动填过列表外的模型名
+          const merged = [...new Set([...list, ...(settings.aiCoachModel && !list.includes(settings.aiCoachModel) ? [settings.aiCoachModel] : [])])]
+          setModels(merged)
+          setModelStatus('idle')
+        })
+        .catch(() => setModelStatus('error'))
+    }, 600)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey, baseUrl])
 
   const update = (patch: Partial<AppSettings>) => {
     updateSettings(patch)
@@ -381,10 +407,22 @@ const SettingsPanel: React.FC = () => {
           <div className="settings-row">
             <span>模型</span>
             <select className="settings-select" value={settings.aiCoachModel || 'deepseek-chat'}
-              onChange={e => update({ aiCoachModel: e.target.value })}>
-              <option value="deepseek-chat">deepseek-chat（V3）</option>
-              <option value="deepseek-reasoner">deepseek-reasoner（R1 推理）</option>
+              onChange={e => update({ aiCoachModel: e.target.value })}
+              disabled={!apiKey.trim()}>
+              {modelStatus === 'loading' && <option value={settings.aiCoachModel || 'deepseek-chat'}>
+                {settings.aiCoachModel || 'deepseek-chat'}（获取列表中…）
+              </option>}
+              {models.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
+          </div>
+          <div style={{ fontSize: 12, color: '#888' }}>
+            {!apiKey.trim()
+              ? '填入 API Key 后自动获取可用模型列表'
+              : modelStatus === 'loading'
+                ? '正在获取模型列表…'
+                : modelStatus === 'error'
+                  ? '⚠ 模型列表获取失败，显示默认模型；可检查 Key 或接口地址后重试（修改任一项自动重试）'
+                  : `已从接口获取 ${models.length} 个可用模型`}
           </div>
           <div className="settings-row">
             <span>接口地址</span>

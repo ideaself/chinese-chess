@@ -55,18 +55,15 @@ const SYSTEM_PROMPT = `你是一位资深中国象棋高级教练，擅长指导
 export async function askCoach(ctx: CoachContext, question: string): Promise<string> {
   const cfg = getCoachConfig()
   if (!cfg.apiKey) throw new Error('未配置 AI 教练 API Key')
+  return chatCompletion(cfg, [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: `${buildFacts(ctx)}\n\n学生的问题: ${question}` },
+  ])
+}
 
-  const facts: string[] = []
-  facts.push(`当前局面 FEN: ${ctx.fen}`)
-  if (ctx.openingName) facts.push(`开局体系: ${ctx.openingName}`)
-  if (ctx.red || ctx.black) facts.push(`对局双方: 红方 ${ctx.red || '?'} vs 黑方 ${ctx.black || '?'}`)
-  if (typeof ctx.score === 'number') {
-    const adv = ctx.score >= 0 ? `红方领先约 ${(ctx.score / 100).toFixed(1)} 兵` : `黑方领先约 ${(-ctx.score / 100).toFixed(1)} 兵`
-    facts.push(`引擎评估: ${adv}`)
-  }
-  if (ctx.bestMoveCn) facts.push(`引擎推荐着法: ${ctx.bestMoveCn}`)
-  if (ctx.movesCn) facts.push(`对局着法:\n${ctx.movesCn}`)
+// ── OpenAI 兼容基础请求 ───────────────────────────────────────────
 
+async function chatCompletion(cfg: CoachConfig, messages: Array<{ role: string; content: string }>): Promise<string> {
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -75,13 +72,7 @@ export async function askCoach(ctx: CoachContext, question: string): Promise<str
     },
     body: JSON.stringify({
       model: cfg.model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `${facts.join('\n')}\n\n学生的问题: ${question}`,
-        },
-      ],
+      messages,
       temperature: 0.7,
       max_tokens: 800,
       stream: false,
@@ -99,4 +90,52 @@ export async function askCoach(ctx: CoachContext, question: string): Promise<str
     throw new Error('AI 教练返回内容为空')
   }
   return content.trim()
+}
+
+function buildFacts(ctx: CoachContext): string {
+  const facts: string[] = []
+  facts.push(`当前局面 FEN: ${ctx.fen}`)
+  if (ctx.openingName) facts.push(`开局体系: ${ctx.openingName}`)
+  if (ctx.red || ctx.black) facts.push(`对局双方: 红方 ${ctx.red || '?'} vs 黑方 ${ctx.black || '?'}`)
+  if (typeof ctx.score === 'number') {
+    const adv = ctx.score >= 0 ? `红方领先约 ${(ctx.score / 100).toFixed(1)} 兵` : `黑方领先约 ${(-ctx.score / 100).toFixed(1)} 兵`
+    facts.push(`引擎评估: ${adv}`)
+  }
+  if (ctx.bestMoveCn) facts.push(`引擎推荐着法: ${ctx.bestMoveCn}`)
+  if (ctx.movesCn) facts.push(`对局着法:\n${ctx.movesCn}`)
+  return facts.join('\n')
+}
+
+// ── 模型列表自动获取（OpenAI 兼容 /models） ───────────────────────
+
+let modelsCache: { key: string; models: string[] } | null = null
+
+/**
+ * 获取可用模型列表；按 baseUrl+Key 缓存，避免重复请求。
+ * Key 未配置时抛错。
+ */
+export async function fetchModels(): Promise<string[]> {
+  const cfg = getCoachConfig()
+  if (!cfg.apiKey) throw new Error('未配置 API Key')
+
+  const cacheKey = `${cfg.baseUrl}|${cfg.apiKey}`
+  if (modelsCache && modelsCache.key === cacheKey) return modelsCache.models
+
+  const res = await fetch(`${cfg.baseUrl}/models`, {
+    headers: { Authorization: `Bearer ${cfg.apiKey}` },
+  })
+  if (!res.ok) {
+    throw new Error(`获取模型列表失败 (HTTP ${res.status})`)
+  }
+
+  const data = await res.json()
+  const models: string[] = (data?.data ?? [])
+    .map((m: { id?: unknown }) => m.id)
+    .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+    .sort()
+
+  if (models.length === 0) throw new Error('模型列表为空')
+
+  modelsCache = { key: cacheKey, models }
+  return models
 }

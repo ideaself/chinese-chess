@@ -2,7 +2,7 @@
  * AI 教练服务测试（mock fetch + localStorage）
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { askCoach } from '../coach/aiCoach'
+import { askCoach, fetchModels } from '../coach/aiCoach'
 
 const store: Record<string, string> = {}
 
@@ -69,5 +69,44 @@ describe('askCoach', () => {
 
     await expect(askCoach({ fen: 'x', movesCn: '' }, '?'))
       .rejects.toThrow('401')
+  })
+})
+
+describe('fetchModels', () => {
+  it('未配置 Key 抛错', async () => {
+    store['xiangqi_settings'] = JSON.stringify({})
+    await expect(fetchModels()).rejects.toThrow('未配置 API Key')
+  })
+
+  it('请求 /models 并返回排序后的模型 ID', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ object: 'list', data: [{ id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] }),
+      text: async () => '',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    store['xiangqi_settings'] = JSON.stringify({ aiCoachApiKey: 'sk-test' })
+
+    const models = await fetchModels()
+    expect(models).toEqual(['deepseek-chat', 'deepseek-reasoner'])
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/ai-proxy/models')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test')
+
+    // 相同 Key+地址命中缓存，不再发请求
+    await fetchModels()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('HTTP 失败抛错', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+      text: async () => '',
+    })))
+    store['xiangqi_settings'] = JSON.stringify({ aiCoachApiKey: 'sk-x' })
+    await expect(fetchModels()).rejects.toThrow('500')
   })
 })
