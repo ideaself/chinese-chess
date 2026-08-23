@@ -43,13 +43,16 @@ export const VariationPanel: React.FC = () => {
           ))}
         </div>
 
-        {index >= moves.length && (
-          <div className="panel-hint">推演结束（共 {moves.length} 步）</div>
+        {moves.length === 0 && (
+          <div className="panel-hint">在棋盘上点击棋子落子，试走你的变化；◀ ▶ 回退重走</div>
+        )}
+        {index >= moves.length && moves.length > 0 && (
+          <div className="panel-hint">推演结束（共 {moves.length} 步）· 可回退后改走另一手形成新分支</div>
         )}
       </div>
 
       <div className="action-grid">
-        <button className="btn btn-primary" onClick={exitVariation}>✕ 退出推演</button>
+        <button className="btn btn-primary" onClick={exitVariation}>✕ 退出推演 · 回到主线</button>
       </div>
     </div>
   )

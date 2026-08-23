@@ -169,6 +169,13 @@ export const Controls: React.FC = () => {
           }}>📥 导出 PGN</button>
         </div>
 
+        {/* 变化试走入口：从当前局面自由分支 */}
+        <button className="btn btn-primary" style={{ width: '100%', marginBottom: 8 }}
+          title="从当前局面在棋盘上试走自己的着法，随时回到主线"
+          onClick={() => useStore.getState().startReplayVariation()}>
+          🌿 试走变化（分支推演）
+        </button>
+
         {/* 教练指导（复盘研习） */}
         <CoachPanel />
 

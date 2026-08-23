@@ -225,8 +225,12 @@ interface AppState {
   enterVariationFromPly: (plyIndex: number) => void
   /** 从当前单局面分析结果进入主变推演 */
   enterVariationFromLive: () => void
+  /** 复盘中从当前局面开始试走变化 */
+  startReplayVariation: () => void
   variationGo: (k: number) => void
   exitVariation: () => void
+  /** 推演中在棋盘上落子（覆盖式改写后续分支） */
+  variationTryMove: (from: Pos, to: Pos) => boolean
   /** 内部：在起点局面上应用前 k 步 PV */
   _applyVariation: (basePly: number, moves: string[], k: number) => BoardState
   /** 从错题本跨棋谱发起重走 */
@@ -463,7 +467,8 @@ export const useStore = create<AppState>((set, get) => ({
   selectPiece: (pos) => {
     const state = get()
     const { board, selected, mode } = state
-    if (mode !== 'play' && mode !== 'puzzle') return
+    // 推演模式下允许在棋盘上试走变化
+    if (mode !== 'play' && mode !== 'puzzle' && !(mode === 'replay' && state.variation)) return
 
     const piece = board.board[pos.col][pos.row]
 
@@ -497,8 +502,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (mode === 'puzzle') return get().puzzleTryMove(from, to)
     // 开局训练模式: 只校验理论着法，不落子到棋谱
     if (mode === 'play' && get().openingTraining) return get().openingTryMove(from, to)
+    // 变化推演中: 落子写入分支
+    if (get().variation) return get().variationTryMove(from, to)
     if (mode !== 'play') return false
-
     const piece = board.board[from.col][from.row]
 
     const legalMoves = getLegalMoves(board, from.col, from.row)
@@ -1361,6 +1367,22 @@ export const useStore = create<AppState>((set, get) => ({
     })
   },
 
+  /** 复盘：从当前局面开始自由试走变化 */
+  startReplayVariation: () => {
+    const { mode, currentPlyIndex } = get()
+    if (mode !== 'replay') return
+    set({
+      variation: {
+        basePly: currentPlyIndex,
+        moves: [],
+        moveCns: [],
+        index: 0,
+      },
+      selected: null,
+      legalTargets: [],
+    })
+  },
+
   variationGo: (k) => {
     const { variation } = get()
     if (!variation) return
@@ -1390,6 +1412,36 @@ export const useStore = create<AppState>((set, get) => ({
         ? parseMoveFromUci(game.plies[currentPlyIndex - 1].move, game.plies[currentPlyIndex - 1].turn)
         : null,
     })
+  },
+
+  /** 推演中在棋盘上落子：校验合法性 → 写入分支 → 前进 */
+  variationTryMove: (from, to) => {
+    const { board, variation } = get()
+    if (!variation) return false
+
+    const legalMoves = getLegalMoves(board, from.col, from.row)
+    if (!legalMoves.some(m => m.col === to.col && m.row === to.row)) {
+      set({ selected: null, legalTargets: [] })
+      return false
+    }
+
+    // 覆盖式改写：回退后落子将截断后续着法（分支树语义）
+    const uci = `${String.fromCharCode(97 + from.col)}${from.row}${String.fromCharCode(97 + to.col)}${to.row}`
+    const moves = [...variation.moves.slice(0, variation.index), uci]
+
+    // 从起点局面重算中文记谱
+    const baseFen = boardToFen(boardFromGame(get().game, variation.basePly))
+    const moveCns = pvToChinese(baseFen, moves)
+
+    set({ variation: { ...variation, moves, moveCns } })
+    get().variationGo(variation.index + 1)
+
+    // 音效反馈
+    const settings = getSettings()
+    const captured = board.board[to.col][to.row] !== '.'
+    if (captured) playCaptureSound(settings.soundCapture)
+    else playMoveSound(settings.soundMove)
+    return true
   },
 
   // ══════════════════════════════════════════════════════════════════
