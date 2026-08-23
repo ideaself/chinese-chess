@@ -66,7 +66,7 @@ export const MasterQuizPanel: React.FC = () => {
               <span className="info-value">第 {quiz.ply + 1}/{quiz.total} 手</span>
             </div>
             <div className="info-row">
-              <span className="info-label">战绩</span>
+              <span className="info-label">累计战绩</span>
               <span className="info-value">
                 {quiz.right}/{quiz.asked}
                 {accuracy !== null ? ` · ${accuracy}%` : ''} · 连对 {quiz.streak} 🔥

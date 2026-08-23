@@ -271,6 +271,82 @@ export function getGameCount(): number {
   return getAllGames().length
 }
 
+// ── 名局拆解战绩与错题 ────────────────────────────────────────────
+
+export interface QuizStats {
+  asked: number
+  right: number
+  bestStreak: number
+}
+
+const QUIZ_STATS_KEY = 'xiangqi_quiz_stats'
+const QUIZ_MISTAKES_KEY = 'xiangqi_quiz_mistakes'
+
+export function getQuizStats(): QuizStats {
+  try {
+    const raw = localStorage.getItem(QUIZ_STATS_KEY)
+    if (raw) {
+      const s = JSON.parse(raw)
+      return { asked: s.asked || 0, right: s.right || 0, bestStreak: s.bestStreak || 0 }
+    }
+  } catch { /* ignore */ }
+  return { asked: 0, right: 0, bestStreak: 0 }
+}
+
+export function saveQuizStats(s: QuizStats): void {
+  try {
+    localStorage.setItem(QUIZ_STATS_KEY, JSON.stringify(s))
+  } catch { /* ignore */ }
+}
+
+export interface QuizMistake {
+  /** 提问局面 FEN */
+  fen: string
+  /** 行棋方 ('w' | 'b') */
+  turn: 'w' | 'b'
+  /** 玩家的选择（UCI） */
+  playerUci?: string
+  /** 大师实战着法 */
+  masterUci: string
+  masterMoveCn: string
+  date: number
+}
+
+/** 获取拆解错题（新→旧，最多 50 条） */
+export function getQuizMistakes(): QuizMistake[] {
+  try {
+    const raw = localStorage.getItem(QUIZ_MISTAKES_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr : []
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
+function saveQuizMistakes(list: QuizMistake[]): void {
+  try {
+    localStorage.setItem(QUIZ_MISTAKES_KEY, JSON.stringify(list.slice(0, 50)))
+  } catch { /* ignore */ }
+}
+
+/** 记录一道拆解错题（同局面同着法去重，新题置顶） */
+export function addQuizMistake(m: QuizMistake): void {
+  const list = getQuizMistakes().filter(x => !(x.fen === m.fen && x.masterUci === m.masterUci))
+  list.unshift({ ...m, date: Date.now() })
+  saveQuizMistakes(list)
+}
+
+/** 移除一道拆解错题（AI 追认正确时回滚） */
+export function removeQuizMistake(fen: string, masterUci: string): void {
+  saveQuizMistakes(getQuizMistakes().filter(x => !(x.fen === fen && x.masterUci === masterUci)))
+}
+
+/** 清空拆解错题 */
+export function clearQuizMistakes(): void {
+  saveQuizMistakes([])
+}
+
 // ── 设置存储 ──────────────────────────────────────────────────────
 
 export interface AppSettings {

@@ -31,6 +31,7 @@ import { parsePGN, exportPGN } from '../game/pgn'
 import {
   saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
   deleteGame as storageDeleteGame, initGameStorage,
+  getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
 } from '../game/storage'
 import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
@@ -262,7 +263,9 @@ interface AppState {
   /** 从错题本跨棋谱发起重走 */
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
-  startEndgameTraining: (fen: string, name: string) => void
+  startEndgameTraining: (fen: string, name: string, side?: 'w' | 'b') => void
+  /** 重演拆解错题局面（执提问方行棋 vs 引擎） */
+  replayQuizMistake: (m: { fen: string; turn: 'w' | 'b' }) => void
 
   // ── 开局训练 (计划第22节) ──
   startOpeningTraining: (lineId: string) => void
@@ -369,16 +372,18 @@ function makeMasterQuizQuestion(
   prev?: { asked: number; right: number; streak: number; bestStreak: number; keyOnly: boolean },
 ): NonNullable<AppState['masterQuiz']> {
   const { options, correct } = buildQuizOptions(game, ply)
+  // 战绩累计持久化：进行中从上一题续接，新会话从存档续接
+  const saved = getQuizStats()
   return {
     ply,
     total: game.plies.length,
     options,
     correct,
     status: 'asking',
-    asked: prev?.asked ?? 0,
-    right: prev?.right ?? 0,
+    asked: prev ? prev.asked : saved.asked,
+    right: prev ? prev.right : saved.right,
     streak: prev?.streak ?? 0,
-    bestStreak: prev?.bestStreak ?? 0,
+    bestStreak: Math.max(prev?.bestStreak ?? 0, saved.bestStreak),
     keyOnly: prev?.keyOnly ?? true,
   }
 }
@@ -411,6 +416,12 @@ async function judgeQuizAlternative(uci: string): Promise<void> {
             bestStreak: Math.max(q.bestStreak, q.streak + 1),
           },
         })
+        // 战绩回滚更新 + 移除刚记的错题
+        const q2 = useStore.getState().masterQuiz!
+        saveQuizStats({ asked: q2.asked, right: q2.right, bestStreak: q2.bestStreak })
+        const game = useStore.getState().game
+        const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
+        removeQuizMistake(fen, quiz.correct)
       }
     }
   } catch { /* 引擎不可用时静默跳过 */ } finally {
@@ -1394,21 +1405,21 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /** 残局训练: 自定义起始局面，玩家执红先行 */
-  startEndgameTraining: (fen, name) => {
+  startEndgameTraining: (fen, name, side = 'w') => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
 
     const game = createEmptyGame()
     game.startFen = fen
-    game.header.Event = '残局训练'
-    game.header.Red = '玩家'
-    game.header.Black = name
+    game.header.Event = side === 'w' ? '残局训练' : '残局训练（执黑）'
+    game.header.Red = side === 'w' ? '玩家' : name
+    game.header.Black = side === 'b' ? '玩家' : name
 
     set({
       mode: 'play',
       game,
       board: boardFromFen(fen),
-      playerSide: 'w',
+      playerSide: side,
       currentPlyIndex: 0,
       selected: null,
       legalTargets: [],
@@ -1434,6 +1445,12 @@ export const useStore = create<AppState>((set, get) => ({
   // ══════════════════════════════════════════════════════════════════
   // 变化推演 (计划第15节)
   // ══════════════════════════════════════════════════════════════════
+
+  /** 重演拆解错题：退出拆解，从提问局面执原行棋方 vs 引擎 */
+  replayQuizMistake: (m) => {
+    set({ masterQuiz: null })
+    get().startEndgameTraining(m.fen, '错题重演', m.turn)
+  },
 
   /** 在 base 局面上应用前 k 步 PV */
   _applyVariation: (basePly: number, moves: string[], k: number): BoardState => {
@@ -1613,10 +1630,25 @@ export const useStore = create<AppState>((set, get) => ({
         bestStreak: Math.max(quiz.bestStreak, correct ? quiz.streak + 1 : 0),
       },
     })
+    // 持久化累计战绩
+    const q = get().masterQuiz!
+    saveQuizStats({ asked: q.asked, right: q.right, bestStreak: q.bestStreak })
+    // 答错记入拆解错题本
+    if (!correct) {
+      const game = get().game
+      const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
+      addQuizMistake({
+        fen,
+        turn: boardFromFen(fen).turn,
+        playerUci: uci,
+        masterUci: quiz.correct,
+        masterMoveCn: chineseFromFen(fen, quiz.correct),
+        date: Date.now(),
+      })
+      void judgeQuizAlternative(uci)
+    }
     // 展示大师的实际着法
     get().goToPly(quiz.ply + 1)
-    // 答错时异步请求引擎判定是否殊途同归
-    if (!correct) void judgeQuizAlternative(uci)
   },
 
   nextQuizPly: () => {

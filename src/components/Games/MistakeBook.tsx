@@ -7,7 +7,10 @@
 
 import React, { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { getMistakes, getMasteredKeys, toggleMastered } from '../../game/storage'
+import {
+  getMistakes, getMasteredKeys, toggleMastered,
+  getQuizMistakes, clearQuizMistakes, removeQuizMistake,
+} from '../../game/storage'
 
 const LABELS: Record<string, { icon: string; text: string }> = {
   mistake: { icon: '⚠️', text: '疑问' },
@@ -31,12 +34,15 @@ export const MistakeBook: React.FC = () => {
   const mistakes = all.filter(m =>
     filter === 'all' ? true : filter === 'mastered' ? masteredKeys.has(m.key) : !masteredKeys.has(m.key),
   )
+  const quizMistakes = getQuizMistakes()
+  const replayQuizMistake = useStore(s => s.replayQuizMistake)
 
-  if (all.length === 0) {
+  if (all.length === 0 && quizMistakes.length === 0) {
     return (
       <div className="mistake-book">
         <div className="panel-hint">
-          还没有错题。完成整盘分析后，你的失误会自动收录到这里。
+          还没有错题。完成整盘分析后，你的失误会自动收录到这里；
+          名局拆解答错的局面也会收录。
         </div>
       </div>
     )
@@ -46,6 +52,45 @@ export const MistakeBook: React.FC = () => {
 
   return (
     <div className="mistake-book" key={version}>
+      {/* 拆解错题（来自名局拆解训练） */}
+      {quizMistakes.length > 0 && (
+        <>
+          <div className="mistake-header" style={{ marginTop: 4 }}>
+            <div className="key-moments-filter" style={{ justifyContent: 'space-between', width: '100%' }}>
+              <span style={{ fontSize: 13, fontWeight: 'bold' }}>🎯 名局拆解错题 {quizMistakes.length}</span>
+              <button className="btn btn-sm"
+                onClick={() => { if (confirm('清空全部拆解错题？')) { clearQuizMistakes(); setVersion(v => v + 1) } }}>
+                清空
+              </button>
+            </div>
+          </div>
+          <div className="key-moments-list">
+            {quizMistakes.map(qm => (
+              <div key={`${qm.fen}-${qm.masterUci}`} className="key-moment-row">
+                <span className="key-moment-icon">🎯</span>
+                <span className="key-moment-round">{qm.turn === 'w' ? '红先' : '黑先'}</span>
+                <span className="key-moment-label">拆解</span>
+                <span className="key-moment-detail">大师实战走 {qm.masterMoveCn}</span>
+                <button
+                  className="btn btn-sm key-moment-retry"
+                  title="从该局面执原行棋方 vs 引擎，重找大师着法"
+                  onClick={() => replayQuizMistake(qm)}
+                >重演</button>
+                <button
+                  className="btn btn-sm"
+                  style={{ padding: '3px 8px', fontSize: 12 }}
+                  title="移除此题"
+                  onClick={() => {
+                    removeQuizMistake(qm.fen, qm.masterUci)
+                    setVersion(v => v + 1)
+                  }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="mistake-header">
         <div className="key-moments-filter">
           {([['todo', `待练习 ${all.length - masteredCount}`], ['mastered', `已掌握 ${masteredCount}`], ['all', `全部 ${all.length}`]] as [Filter, string][]).map(([k, label]) => (
