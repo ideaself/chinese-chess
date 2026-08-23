@@ -79,6 +79,8 @@ const files = readdirSync(SRC_DIR).filter(f => /^master_\d+\.txt$/.test(f)).sort
 /** positions: key(空格分隔uci序列) -> Map(move -> {n, redWin, blackWin, draw}) */
 const positions = new Map()
 let gamesUsed = 0
+// 同一棋谱可能以不同 gameid 重复收录，按 movelist 去重
+const mvSeen = new Set()
 
 for (const f of files) {
   if (gamesUsed >= MAX_GAMES) break
@@ -90,8 +92,10 @@ for (const f of files) {
   const mv = extractField(text, 'movelist')
   const res = extractField(text, 'result')
   if (!mv || mv.length / 4 < 16 || !validMovelist(mv)) continue
+  if (mvSeen.has(mv)) continue
   // 结果未知的不参与胜率统计
   if (res !== '红胜' && res !== '黑胜' && res !== '和棋') continue
+  mvSeen.add(mv)
   gamesUsed++
 
   let redWin = 0, blackWin = 0, draw = 0

@@ -140,8 +140,11 @@ try {
 } catch { /* 首次运行 */ }
 
 const records = []
-let scanned = 0, fromCache = 0, reparsed = 0, invalid = 0, dupIds = new Set()
+let scanned = 0, fromCache = 0, reparsed = 0, invalid = 0, dupIds = new Set(), dupGames = 0
 let stopScan = false
+
+// 同一棋谱可能以不同 gameid 重复收录，按 movelist 去重
+const mvSeen = new Set()
 
 for (const f of files) {
   if (stopScan) break
@@ -168,7 +171,9 @@ for (const f of files) {
 
   if (!rec) { invalid++; continue }
   if (dupIds.has(rec.id)) continue
+  if (mvSeen.has(rec.mv)) { dupGames++; continue }
   dupIds.add(rec.id)
+  mvSeen.add(rec.mv)
   records.push(rec)
 
   if (records.length >= MAX_GAMES) stopScan = true
@@ -201,6 +206,6 @@ writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest))
 writeFileSync(STATE_FILE, JSON.stringify(state))
 
 console.log(`完成: 扫描 ${scanned} 文件（缓存命中 ${fromCache} · 重新解析 ${reparsed}）→ 收录 ${records.length} 局`)
-console.log(`  跳过: 无效 ${invalid}${stopScan ? ' · 达到上限停止扫描' : ''}`)
+console.log(`  跳过: 无效 ${invalid} · 重复棋谱 ${dupGames}${stopScan ? ' · 达到上限停止扫描' : ''}`)
 console.log(`输出: ${OUT_DIR}/manifest.json + ${shards.length} 个分片`)
 console.log(`耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
