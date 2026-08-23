@@ -97,6 +97,21 @@ export function getRatingState(): RatingState {
   return loadState()
 }
 
+/** 从备份恢复棋力分（覆盖当前，仅合法数据生效） */
+export function importRatingState(state: unknown): boolean {
+  try {
+    const parsed = state as { rating?: number; history?: RatingRecord[] }
+    if (typeof parsed?.rating !== 'number') return false
+    persist({
+      rating: parsed.rating,
+      history: Array.isArray(parsed.history) ? parsed.history : [],
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function resetRating(): void {
   localStorage.removeItem(RATING_KEY)
 }

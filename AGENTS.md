@@ -12,7 +12,7 @@ React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（98 项）
+npm test                # vitest 单测（112 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
 npm run e2e             # 需先 build；e2e 冒烟（77+35 项），E2E_SUITES=master 可过滤套件
@@ -25,7 +25,8 @@ npm run book            # 语料 → public/opening-book.json 大数据开局书
 ## 架构要点
 
 - `src/game/dhtmlxq.ts` DhtmlXQ 解析；**分片数据 mv 统一为 UCI 连写**（历史 bug：曾混用 dpxq 坐标导致分类失效，勿回退）
-- `src/game/storage.ts` IndexedDB 存储（同步 API + 内存镜像，initGameStorage 在 store.init 调用）；设置/拆解错题仍在 localStorage
+- `src/game/storage.ts` IndexedDB 存储（同步 API + 内存镜像，initGameStorage 在 store.init 调用）；设置/拆解错题仍在 localStorage；DB v2 另有 `master_analysis` store（异步按需读写，不进内存镜像）
+- `src/game/masterPreanalysis.ts` 大师局批量预分析：关键点（吃子/将军手 k 与 k+1）深度 12 缓存到 IDB；拆解殊途同归判定缓存优先（即时）+ 实时结果写透；关键手优先选"大师与引擎分歧最大"处；批量入口在大师库页头，引擎忙时让路可停止
 - `src/game/masterLibrary.ts` 棋谱库分类（开局体系/黑方应法/胜率统计）；分片懒加载 manifest+shard
 - `src/game/book.ts` 开局书：大数据 JSON + 内置定式兜底，按行棋方视角过滤（注意浮点容差 1e-9）
 - 状态: zustand `src/store/useStore.ts`（单文件大 store，含 variation 推演/masterQuiz 拆解等）
@@ -37,10 +38,18 @@ npm run book            # 语料 → public/opening-book.json 大数据开局书
 开局胜率统计、分支推演、名局拆解（关键手模式+引擎殊途同归判定）、残局定式库11种、
 IndexedDB、CI 自动发布（ci-sign.mjs 支持 secrets 正式签名）、分片棋谱库、流式多轮 AI 教练、
 PWA（已有基础）、列表分页、语料去重、e2e 大师库套件。
+v1.7.0 后（未发版）：大师局批量预分析缓存 IDB（拆解判定即时化/关键手更精准，单测 112 项）；
+全量备份/恢复（棋谱+设置+拆解战绩/错题/掌握度+棋力分，合并语义，兼容旧 v1 备份，单测 117 项）。
+
+## 已评估搁置
+
+- 多线程 WASM 引擎：现无维护中的新版 MT 构建；唯一现成的是 ousc/Pikafish-wasm 2023-03 版（引擎比当前
+  single 的 dev-20240226 旧约一年，多线程收益大概率抵不过引擎/NNUE 代差），且需 COOP/COEP 跨源隔离基建。
+  待条件成熟（本地 emsdk 构建新 MT 版）再启动。基准工具留存 /tmp/opencode/mtbench/。
 
 ## 待办候选
 
 - CI 配置签名 Secrets 后验证正式签名包（本地 keystore 见 android/key.properties，gitignored）
-- 大师对局批量预分析缓存到 IDB（拆解关键点更精准）
+- 远端同步（全量备份已就绪，差传输通道：WebDAV/Gist 等需选型）
 - 云同步/备份到远端
-- 多线程 WASM 引擎提升棋力
+- 多线程 WASM 引擎提升棋力（见"已评估搁置"）

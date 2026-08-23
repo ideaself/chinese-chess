@@ -16,7 +16,7 @@ import { parsePGN, splitPGNGames } from '../../game/pgn'
 import { isDhtmlXQText, splitDhtmlXQGames, parseDhtmlXQBlock, parseDhtmlXQText } from '../../game/dhtmlxq'
 import {
   saveGame as storageSaveGame, toggleStar as storageToggleStar,
-  exportAllGames, importAllGames, getStorageUsage,
+  exportFullBackup, importFullBackup, getStorageUsage,
 } from '../../game/storage'
 
 export const GameList: React.FC = () => {
@@ -43,9 +43,9 @@ export const GameList: React.FC = () => {
   const usagePct = Math.round((usage.bytes / usage.limitBytes) * 100)
   const usageKB = Math.max(1, Math.round(usage.bytes / 1024))
 
-  /** 导出全部备份 */
+  /** 导出全量备份（棋谱 + 设置 + 拆解数据 + 棋力分） */
   const handleBackup = () => {
-    const json = exportAllGames()
+    const json = exportFullBackup()
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -53,16 +53,27 @@ export const GameList: React.FC = () => {
     a.download = `xiangqi_backup_${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
-    showToast('已导出全部棋谱备份')
+    showToast('已导出全量备份（含设置/战绩/错题本）')
   }
 
-  /** 从 JSON 备份恢复 */
+  /** 从 JSON 备份恢复（合并语义，不覆盖现有数据） */
   const handleRestoreFile = async (file: File) => {
     try {
       const text = await file.text()
-      const added = importAllGames(text)
+      const s = importFullBackup(text)
       refreshSavedGames()
-      showToast(added > 0 ? `恢复完成，新增 ${added} 局` : '备份中的棋谱均已存在')
+      if (s.games === 0 && !s.settingsMerged && s.mistakes === 0 && !s.ratingRestored) {
+        showToast('备份内容均已存在或为空')
+        return
+      }
+      const parts = [
+        s.games > 0 ? `新增 ${s.games} 局` : null,
+        s.settingsMerged ? '设置已合并' : null,
+        s.mistakes > 0 ? `错题 +${s.mistakes}` : null,
+        s.mastered > 0 ? `掌握 +${s.mastered}` : null,
+        s.ratingRestored ? '棋力分已恢复' : null,
+      ].filter(Boolean)
+      showToast(`恢复完成：${parts.join(' · ')}`)
     } catch {
       showToast('⚠ 备份文件无法读取')
     }
@@ -244,8 +255,8 @@ export const GameList: React.FC = () => {
       <div className="panel-header">
         <h3>棋谱</h3>
         <div className="storage-actions">
-          <button className="btn btn-sm" title="导出全部棋谱为 JSON 备份" onClick={handleBackup}>💾 备份</button>
-          <button className="btn btn-sm" title="从 JSON 备份恢复" onClick={() => backupInputRef.current?.click()}>📥 恢复</button>
+          <button className="btn btn-sm" title="导出全量备份：棋谱 + 设置 + 拆解战绩/错题本 + 棋力分" onClick={handleBackup}>💾 备份</button>
+          <button className="btn btn-sm" title="从备份恢复（合并，不覆盖现有数据）；兼容旧版仅棋谱的备份文件" onClick={() => backupInputRef.current?.click()}>📥 恢复</button>
         </div>
       </div>
 

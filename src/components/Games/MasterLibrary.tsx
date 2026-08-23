@@ -15,6 +15,11 @@ import {
 } from '../../game/masterLibrary'
 import type { LibraryGame } from '../../game/masterLibrary'
 import type { OpeningFamily } from '../../game/masterLibrary'
+import {
+  startPreanalysis, cancelPreanalysis, isPreanalysisRunning,
+} from '../../game/masterPreanalysis'
+import type { PreanalysisProgress } from '../../game/masterPreanalysis'
+import { getAllMasterAnalysisIds } from '../../game/storage'
 
 const PAGE_SIZE = 80
 
@@ -33,14 +38,46 @@ export const MasterLibrary: React.FC = () => {
   const [visible, setVisible] = useState(PAGE_SIZE)
   const [info, setInfo] = useState<{ total: number; loaded: number; source: string } | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  // 批量预分析状态
+  const [preRunning, setPreRunning] = useState(isPreanalysisRunning())
+  const [preProgress, setPreProgress] = useState<PreanalysisProgress | null>(null)
+  const [cachedCount, setCachedCount] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
     loadLibrary()
       .then(() => { if (alive) { setGames(getCachedLibrary() ?? []); setInfo(getLibraryInfo()) } })
       .catch(e => { if (alive) setError(`棋谱库加载失败: ${e.message}`) })
+    getAllMasterAnalysisIds().then(ids => { if (alive) setCachedCount(ids.size) })
     return () => { alive = false }
   }, [])
+
+  /** 启动/停止批量预分析 */
+  const togglePreanalysis = () => {
+    if (preRunning) {
+      cancelPreanalysis()
+      return
+    }
+    const handle = startPreanalysis({
+      deps: {
+        getEngine: () => useStore.getState().engine,
+        isEngineBusy: () => useStore.getState().isThinking,
+      },
+      onProgress: setPreProgress,
+      onDone: s => {
+        setPreRunning(false)
+        setPreProgress(null)
+        getAllMasterAnalysisIds().then(ids => setCachedCount(ids.size))
+        showToast(s.cancelled
+          ? `预分析已停止（完成 ${s.analysed} 局）`
+          : `预分析完成：${s.analysed} 局入缓存${s.failed ? ` · ${s.failed} 失败` : ''}`)
+      },
+    })
+    if (handle) {
+      setPreRunning(true)
+      setPreProgress(null)
+    }
+  }
 
   /** 加载下一分片 */
   const handleLoadMore = async () => {
@@ -124,13 +161,29 @@ export const MasterLibrary: React.FC = () => {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#888' }}>
             {info ? `已加载 ${info.loaded}/${info.total} 局` : `共 ${games.length} 局`}
+            {cachedCount ? ` · 已预分析 ${cachedCount}` : ''}
           </span>
+          <button className={`btn btn-sm ${preRunning ? 'btn-active' : ''}`}
+            title={preRunning
+              ? '停止批量预分析'
+              : '用引擎批量分析各局关键点（吃子/将军）并缓存，拆解判定更准更快'}
+            onClick={togglePreanalysis}>
+            {preRunning ? '⏹ 停止' : '🧠 预分析'}
+          </button>
           <button className="btn btn-sm btn-active" title="随机选一局，猜大师的每一步"
             onClick={() => useStore.getState().startMasterQuiz()}>
             🎯 名局拆解
           </button>
         </div>
       </div>
+
+      {/* 预分析进度 */}
+      {preRunning && preProgress && (
+        <div className="controls-row" style={{ marginBottom: 6, fontSize: 12, color: '#9a9aa8' }}>
+          🧠 {preProgress.gamesDone}/{preProgress.gamesTotal} 局 ·
+          第 {preProgress.positionsDone}/{preProgress.positionsTotal} 点：{preProgress.currentTitle}
+        </div>
+      )}
 
       {/* 大类 */}
       <div className="controls-row" style={{ marginBottom: 6 }}>

@@ -32,9 +32,12 @@ import {
   saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
   deleteGame as storageDeleteGame, initGameStorage,
   getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
+  getMasterAnalysis, putMasterAnalysis,
+  MASTER_ANALYSIS_FMT, type MasterAnalysisRecord,
 } from '../game/storage'
 import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
+import { pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH } from '../game/masterPreanalysis'
 import { getBookMove, loadOpeningBook } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
 import { getCachedLibrary, recordToGame } from '../game/masterLibrary'
@@ -358,12 +361,14 @@ function buildQuizOptions(game: Game, ply: number): { options: string[]; correct
   return { options, correct }
 }
 
-/** 下一个"关键手"ply：吃子或将军（无则返回 -1） */
-function nextKeyPlyFrom(game: Game, fromPly: number): number {
-  for (let k = Math.max(fromPly, 0); k < game.plies.length; k++) {
-    if (game.plies[k].isCapture || game.plies[k].inCheck) return k
-  }
-  return -1
+/**
+ * 当前拆解对局的预分析缓存（IDB 异步加载）。
+ * 用于挑选"大师与引擎分歧最大"的关键手；id 校验防止换局后串用。
+ */
+let quizAnalysisRec: { id: string; rec: MasterAnalysisRecord | null } = { id: '', rec: null }
+
+function quizCachedAnalysis(gameId: string): MasterAnalysisRecord | null {
+  return quizAnalysisRec.id === gameId ? quizAnalysisRec.rec : null
 }
 
 function makeMasterQuizQuestion(
@@ -390,44 +395,67 @@ function makeMasterQuizQuestion(
 
 /**
  * 引擎判定拆解答案：玩家着法与大师不同但引擎同样推荐 → 改判正确（殊途同归）。
- * 静默失败；仅在问题未变化时生效。
+ * 优先查预分析缓存（即时且深度更高）；无缓存回退实时 depth 10，
+ * 并把结果写透缓存供下次复用。仅在问题未变化时生效。
  */
 async function judgeQuizAlternative(uci: string): Promise<void> {
   const s = useStore.getState()
   const quiz = s.masterQuiz
-  if (!quiz || !s.engine || !s.engineReady || s.isThinking) return
+  if (!quiz) return
+  const game = s.game
 
+  // ── 快速路径：预分析缓存命中 → 即时判定，不再占用引擎 ──
+  const rec = await getMasterAnalysis(game.id)
+  const ev = rec && rec.fmt === MASTER_ANALYSIS_FMT ? rec.evals[quiz.ply] : undefined
+  if (ev && ev.depth >= JUDGE_MIN_DEPTH) {
+    if (ev.bestMove === uci) await applyQuizAiAgree(quiz)
+    return
+  }
+
+  // ── 回退：实时引擎判定（原有路径）──
+  if (!s.engine || !s.engineReady || s.isThinking) return
   useStore.setState({ masterQuiz: { ...quiz, checking: true } })
   try {
-    const game = s.game
     const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
-    const best = await s.engine.go(fen, [], 10)
-    if (best && best === uci) {
-      const q = useStore.getState().masterQuiz
-      // 问题已切走则不追认
-      if (q && q.ply === quiz.ply && q.status === 'wrong' && q.answered === uci) {
-        useStore.setState({
-          masterQuiz: {
-            ...q,
-            status: 'correct',
-            aiAgree: true,
-            right: q.right + 1,
-            streak: q.streak + 1,
-            bestStreak: Math.max(q.bestStreak, q.streak + 1),
-          },
+    const evLive = await engineEvalOnce(s.engine, fen, 10)
+    if (evLive && evLive.bestMove === uci) {
+      await applyQuizAiAgree(quiz)
+      // 写透缓存：下次同局面即时判定（仅大师局）
+      if (game.id.startsWith('dpxq_')) {
+        void putMasterAnalysis({
+          gameId: game.id,
+          fmt: MASTER_ANALYSIS_FMT,
+          depth: evLive.depth,
+          createdAt: Date.now(),
+          evals: { ...rec?.evals, [quiz.ply]: evLive },
         })
-        // 战绩回滚更新 + 移除刚记的错题
-        const q2 = useStore.getState().masterQuiz!
-        saveQuizStats({ asked: q2.asked, right: q2.right, bestStreak: q2.bestStreak })
-        const game = useStore.getState().game
-        const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
-        removeQuizMistake(fen, quiz.correct)
       }
     }
   } catch { /* 引擎不可用时静默跳过 */ } finally {
     const q = useStore.getState().masterQuiz
     if (q?.checking) useStore.setState({ masterQuiz: { ...q, checking: false } })
   }
+}
+
+/** 追认玩家答案为正确（殊途同归）：战绩回滚 + 移除错题；问题已切走则忽略 */
+async function applyQuizAiAgree(snapshot: NonNullable<AppState['masterQuiz']>): Promise<void> {
+  const q = useStore.getState().masterQuiz
+  // 问题已切走则不追认
+  if (!q || q.ply !== snapshot.ply || q.status !== 'wrong' || q.answered !== snapshot.answered) return
+  useStore.setState({
+    masterQuiz: {
+      ...q,
+      status: 'correct',
+      aiAgree: true,
+      right: q.right + 1,
+      streak: q.streak + 1,
+      bestStreak: Math.max(q.bestStreak, q.streak + 1),
+    },
+  })
+  saveQuizStats({ asked: q.asked, right: q.right + 1, bestStreak: Math.max(q.bestStreak, q.streak + 1) })
+  const game = useStore.getState().game
+  const fen = snapshot.ply === 0 ? game.startFen : game.plies[snapshot.ply].fenBefore
+  removeQuizMistake(fen, snapshot.correct)
 }
 
 /** toast 自动消失定时器 */
@@ -1588,7 +1616,7 @@ export const useStore = create<AppState>((set, get) => ({
   // 名局拆解训练：猜大师的着法
   // ══════════════════════════════════════════════════════════════════
 
-  startMasterQuiz: () => {
+  startMasterQuiz: async () => {
     const games = getCachedLibrary()
     if (!games || games.length === 0) {
       get().showToast('大师库尚未加载，请先打开「大师库」页签')
@@ -1604,8 +1632,10 @@ export const useStore = create<AppState>((set, get) => ({
       const game = recordToGame(rec)
       if (!game || game.plies.length < 40) continue
       get().loadGameObject(game)
-      // 关键手模式从第一个关键点开始；全程模式从第 0 手开始
-      const startPly = nextKeyPlyFrom(game, 0)
+      // 预取该局预分析缓存，关键手优先问"大师与引擎分歧最大"处
+      quizAnalysisRec = { id: game.id, rec: await getMasterAnalysis(game.id) }
+      // 关键手模式从第一个高价值关键点开始；全程模式从第 0 手开始
+      const startPly = pickBestKeyPly(game, 0, quizAnalysisRec.rec)
       const quizPly = startPly >= 0 ? startPly : 0
       get().goToPly(quizPly)
       set({ masterQuiz: makeMasterQuizQuestion(game, quizPly) })
@@ -1655,9 +1685,9 @@ export const useStore = create<AppState>((set, get) => ({
     const { masterQuiz, game } = get()
     if (!masterQuiz) return
     let nextPly = masterQuiz.ply + 1
-    // 关键手模式跳到下一个吃子/将军点
+    // 关键手模式跳到下一个吃子/将军点（有缓存时优先分歧最大处）
     if (masterQuiz.keyOnly && nextPly < game.plies.length) {
-      const keyPly = nextKeyPlyFrom(game, nextPly)
+      const keyPly = pickBestKeyPly(game, nextPly, quizCachedAnalysis(game.id))
       if (keyPly >= 0) nextPly = keyPly
     }
     if (nextPly >= game.plies.length) {

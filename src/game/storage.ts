@@ -9,6 +9,7 @@
  */
 
 import type { Game } from '../game/model'
+import { importRatingState } from './rating'
 
 const STORAGE_KEY = 'xiangqi_games'
 const SETTINGS_KEY = 'xiangqi_settings'
@@ -16,8 +17,9 @@ const SETTINGS_KEY = 'xiangqi_settings'
 // ── IndexedDB 基础 ────────────────────────────────────────────────
 
 const DB_NAME = 'xiangqi'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const GAMES_STORE = 'games'
+const MASTER_ANALYSIS_STORE = 'master_analysis'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 /** 内存镜像；initGameStorage 后可用 */
@@ -35,6 +37,9 @@ function openDB(): Promise<IDBDatabase> {
         const db = req.result
         if (!db.objectStoreNames.contains(GAMES_STORE)) {
           db.createObjectStore(GAMES_STORE, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(MASTER_ANALYSIS_STORE)) {
+          db.createObjectStore(MASTER_ANALYSIS_STORE, { keyPath: 'gameId' })
         }
       }
       req.onsuccess = () => resolve(req.result)
@@ -162,14 +167,143 @@ export function saveGame(game: Game): boolean {
 // ── 备份 / 恢复 / 容量 ────────────────────────────────────────────
 
 const BACKUP_VERSION = 1
+const FULL_BACKUP_VERSION = 2
 
-/** 导出全部棋谱为 JSON 字符串 */
+/** 导出全部棋谱为 JSON 字符串（旧格式，仅棋谱；兼容保留） */
 export function exportAllGames(): string {
   return JSON.stringify({
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     games: getAllGames(),
   })
+}
+
+// ── 全量备份（棋谱 + 设置 + 拆解战绩/错题/掌握度 + 棋力分） ────────
+
+export interface FullBackupSummary {
+  games: number
+  settingsMerged: boolean
+  mistakes: number
+  mastered: number
+  ratingRestored: boolean
+}
+
+/** 两份战绩取各项最大值（累计值只增不减） */
+export function mergeQuizStats(a: QuizStats, b: QuizStats): QuizStats {
+  return {
+    asked: Math.max(a.asked, b.asked),
+    right: Math.max(a.right, b.right),
+    bestStreak: Math.max(a.bestStreak, b.bestStreak),
+  }
+}
+
+/** 合并错题：按 局面+大师着法 去重，新→旧，最多 50 条 */
+export function mergeQuizMistakes(current: QuizMistake[], incoming: QuizMistake[]): QuizMistake[] {
+  const valid = [...incoming, ...current].filter(m => m?.fen && m?.masterUci)
+  const seen = new Set<string>()
+  const merged: QuizMistake[] = []
+  for (const m of valid.sort((x, y) => y.date - x.date)) {
+    const key = `${m.fen}|${m.masterUci}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(m)
+  }
+  return merged.slice(0, 50)
+}
+
+/** 导出全量备份 JSON（含设置、拆解数据与棋力分） */
+export function exportFullBackup(): string {
+  let rating: unknown = null
+  try { rating = JSON.parse(localStorage.getItem('xiangqi_rating') || 'null') } catch { /* ignore */ }
+  return JSON.stringify({
+    version: FULL_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    games: getAllGames(),
+    settings: getSettings(),
+    quizStats: getQuizStats(),
+    quizMistakes: getQuizMistakes(),
+    masteredKeys: [...getMasteredKeys()],
+    rating,
+  })
+}
+
+/**
+ * 恢复全量备份（合并语义，不丢现有数据）：
+ *   棋谱按 id 跳过已存在；设置项覆盖默认但保留本机新增；
+ *   战绩取最大；错题/掌握度并集；棋力分取分高的一方。
+ * 兼容 v1 旧格式（仅 games）。
+ */
+export function importFullBackup(json: string): FullBackupSummary {
+  const summary: FullBackupSummary = {
+    games: 0, settingsMerged: false, mistakes: 0, mastered: 0, ratingRestored: false,
+  }
+  try {
+    const data = JSON.parse(json)
+    const incoming: Game[] = Array.isArray(data) ? data : data.games
+
+    // 棋谱（与 v1 逻辑一致）
+    if (Array.isArray(incoming)) {
+      if (!memoryGames) memoryGames = []
+      const ids = new Set(memoryGames.map(g => g.id))
+      for (const g of incoming) {
+        if (!g?.id || !Array.isArray(g.plies)) continue
+        if (ids.has(g.id)) continue
+        memoryGames.unshift(g)
+        ids.add(g.id)
+        summary.games++
+      }
+      if (summary.games > 0) {
+        for (const g of incoming) {
+          if (!g?.id || !Array.isArray(g.plies)) continue
+          idbPut(g).catch(() => {})
+        }
+      }
+    }
+
+    // v2 全量段
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      if (data.settings && typeof data.settings === 'object') {
+        saveSettings(data.settings)
+        summary.settingsMerged = true
+      }
+      if (data.quizStats && typeof data.quizStats.asked === 'number') {
+        saveQuizStats(mergeQuizStats(getQuizStats(), {
+          asked: data.quizStats.asked | 0,
+          right: data.quizStats.right | 0,
+          bestStreak: data.quizStats.bestStreak | 0,
+        }))
+      }
+      if (Array.isArray(data.quizMistakes)) {
+        const merged = mergeQuizMistakes(getQuizMistakes(), data.quizMistakes)
+        const added = merged.length - getQuizMistakes().length
+        saveQuizMistakes(merged)
+        summary.mistakes = Math.max(0, added)
+      }
+      if (Array.isArray(data.masteredKeys)) {
+        const keys = getMasteredKeys()
+        const before = keys.size
+        for (const k of data.masteredKeys) if (typeof k === 'string') keys.add(k)
+        localStorage.setItem(MASTERED_KEY, JSON.stringify([...keys]))
+        summary.mastered = keys.size - before
+      }
+      if (data.rating && typeof data.rating === 'object') {
+        try {
+          const cur = JSON.parse(localStorage.getItem('xiangqi_rating') || '{"rating":0}')
+          const pick = (data.rating.rating ?? 0) >= (cur.rating ?? 0) ? data.rating : cur
+          if ((pick.rating ?? 0) > 0) {
+            // rating.ts 仅类型依赖 store，无运行时循环
+            importRatingState(pick)
+            summary.ratingRestored = true
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (summary.games > 0 && idbBroken) fallbackPersist()
+  } catch (e) {
+    console.error('恢复全量备份失败:', e)
+  }
+  return summary
 }
 
 /**
@@ -269,6 +403,71 @@ export function searchGames(query: string): Game[] {
 /** 获取棋谱数量 */
 export function getGameCount(): number {
   return getAllGames().length
+}
+
+// ── 大师局预分析缓存（异步 API，按需读写，不进内存镜像） ─────────
+
+/** 数据格式版本（mv 格式变更时递增使旧缓存失效） */
+export const MASTER_ANALYSIS_FMT = 1
+
+/** 单个局面的引擎评估（走棋方视角） */
+export interface MasterPosEval {
+  score: number
+  depth: number
+  bestMove: string
+  pv: string[]
+}
+
+/**
+ * 一局大师棋谱的预分析结果。
+ * evals 键为"局面序号"：i 表示第 i 手之前的局面（0 = 初始局面），
+ * 同时存关键手 i 与 i+1，即可计算大师着法的 moveLoss。
+ */
+export interface MasterAnalysisRecord {
+  gameId: string
+  fmt: number
+  /** 分析深度 */
+  depth: number
+  createdAt: number
+  evals: Record<number, MasterPosEval>
+}
+
+async function maStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
+  if (idbBroken) throw new Error('IndexedDB 不可用')
+  const db = await openDB()
+  return db.transaction(MASTER_ANALYSIS_STORE, mode).objectStore(MASTER_ANALYSIS_STORE)
+}
+
+/** 读取一局的预分析缓存；无记录或存储不可用时返回 null */
+export async function getMasterAnalysis(gameId: string): Promise<MasterAnalysisRecord | null> {
+  try {
+    const store = await maStore('readonly')
+    return (await reqAsPromise(store.get(gameId))) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** 写入/合并预分析缓存；存储不可用返回 false（静默降级） */
+export async function putMasterAnalysis(rec: MasterAnalysisRecord): Promise<boolean> {
+  try {
+    const store = await maStore('readwrite')
+    await reqAsPromise(store.put(rec))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 已有预分析缓存的 gameId 集合（批量预分析跳过用）；不可用返回空集合 */
+export async function getAllMasterAnalysisIds(): Promise<Set<string>> {
+  try {
+    const store = await maStore('readonly')
+    const keys = await reqAsPromise<IDBValidKey[]>(store.getAllKeys())
+    return new Set(keys.map(String))
+  } catch {
+    return new Set()
+  }
 }
 
 // ── 名局拆解战绩与错题 ────────────────────────────────────────────
