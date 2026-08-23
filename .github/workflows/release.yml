@@ -38,14 +38,34 @@ jobs:
       - name: 生成 Android 工程
         run: npx cap add android --skip-app && npx cap sync android
 
-      - name: 构建 Debug APK（debug 签名可直接安装）
-        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+      # 配置了以下 Secrets 时构建正式签名 APK，否则回退 debug 签名：
+      #   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD
+      #   ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+      - name: 配置正式签名（可选）
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: node scripts/ci-sign.mjs
+
+      - name: 构建 APK
+        run: |
+          cd android && chmod +x gradlew
+          if [ -f key.properties ]; then
+            ./gradlew assembleRelease
+            mkdir -p ../apk-out
+            cp app/build/outputs/apk/release/app-release.apk ../apk-out/app.apk
+          else
+            ./gradlew assembleDebug
+            mkdir -p ../apk-out
+            cp app/build/outputs/apk/debug/app-debug.apk ../apk-out/app.apk
+          fi
 
       - name: 整理产物
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mkdir -p apk-out
-          cp android/app/build/outputs/apk/debug/app-debug.apk "apk-out/中国象棋-${VERSION}.apk"
+          mv apk-out/app.apk "apk-out/中国象棋-${VERSION}.apk"
 
       - name: 创建 GitHub Release 并上传 APK
         if: startsWith(github.ref, 'refs/tags/v')
