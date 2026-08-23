@@ -170,3 +170,38 @@ export function recordTitle(rec: LibraryGame): string {
   if (rec.t) return rec.t
   return `${rec.r || '红方'} vs ${rec.b || '黑方'}`
 }
+
+// ── 开局胜率统计 ──────────────────────────────────────────────────
+
+export interface OpeningStats {
+  total: number
+  redWin: number
+  blackWin: number
+  draw: number
+}
+
+export type StatsKey = string // family 或 family|defense
+
+/** 按开局体系（含中炮局黑方应法细分）聚合胜负率 */
+export function aggregateOpeningStats(games: LibraryGame[]): Map<StatsKey, OpeningStats> {
+  const map = new Map<StatsKey, OpeningStats>()
+  const bump = (key: StatsKey, res?: string) => {
+    let s = map.get(key)
+    if (!s) { s = { total: 0, redWin: 0, blackWin: 0, draw: 0 }; map.set(key, s) }
+    s.total++
+    if (res === '红胜') s.redWin++
+    else if (res === '黑胜') s.blackWin++
+    else if (res === '和棋' || res === '和局') s.draw++
+  }
+  for (const g of games) {
+    bump(g.cls.family, g.res)
+    if (g.cls.defense) bump(`${g.cls.family}|${g.cls.defense}`, g.res)
+  }
+  return map
+}
+
+/** 格式化为 "红42% 和31% 黑27%" */
+export function formatStats(s: OpeningStats): string {
+  const pct = (n: number) => Math.round((n / s.total) * 100)
+  return `红${pct(s.redWin)}% · 和${pct(s.draw)}% · 黑${pct(s.blackWin)}%`
+}

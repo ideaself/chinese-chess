@@ -10,6 +10,7 @@ import { useStore } from '../../store/useStore'
 import {
   loadLibrary, classifyLibrary, recordToGame, recordTitle,
   FAMILY_INFO, DEFENSE_INFO,
+  aggregateOpeningStats, formatStats,
 } from '../../game/masterLibrary'
 import type { LibraryGame } from '../../game/masterLibrary'
 import type { OpeningFamily } from '../../game/masterLibrary'
@@ -45,6 +46,12 @@ export const MasterLibrary: React.FC = () => {
     for (const g of games) counts.set(g.cls.family, (counts.get(g.cls.family) || 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [games])
+
+  // 开局胜率统计（开局页签展示）
+  const stats = useMemo(
+    () => (games && category === 'opening' ? aggregateOpeningStats(games) : null),
+    [games, category],
+  )
 
   const filtered = useMemo(() => {
     if (!games) return []
@@ -133,6 +140,51 @@ export const MasterLibrary: React.FC = () => {
       {category === 'endgame' && (
         <div style={{ fontSize: 12, color: '#9a9aa8', margin: '4px 0 8px' }}>
           收录残局阶段较长的大师实战对局，学习车马炮兵残局技巧与定式
+        </div>
+      )}
+
+      {/* 开局胜率统计 */}
+      {stats && familyCounts && (
+        <div className="lib-stats">
+          <div className="info-label" style={{ marginBottom: 6 }}>胜率统计（点击行筛选对局）</div>
+          {familyCounts.map(([f, n]) => {
+            const s = stats.get(f)
+            if (!s) return null
+            const defenses = f === 'zhongpao'
+              ? [...stats.entries()].filter(([k]) => k.startsWith('zhongpao|'))
+              : []
+            return (
+              <React.Fragment key={f}>
+                <button className={`lib-stats-row ${family === f ? 'lib-stats-active' : ''}`}
+                  onClick={() => { setCategory('opening'); setFamily(family === f ? 'all' : f); setVisible(PAGE_SIZE) }}>
+                  <span className="lib-stats-name">{FAMILY_INFO[f].name}</span>
+                  <span className="lib-stats-meta">{n}局 · {formatStats(s)}</span>
+                  <span className="lib-stats-bar">
+                    <i style={{ width: `${(s.redWin / s.total) * 100}%`, background: 'var(--red)' }} />
+                    <i style={{ width: `${(s.draw / s.total) * 100}%`, background: '#f39c12' }} />
+                    <i style={{ width: `${(s.blackWin / s.total) * 100}%`, background: '#5b8dd6' }} />
+                  </span>
+                </button>
+                {family === 'zhongpao' && defenses.map(([key, ds]) => {
+                  const def = key.split('|')[1] as keyof typeof DEFENSE_INFO
+                  return (
+                    <div key={key} style={{ paddingLeft: 18 }}>
+                      <div className="lib-stats-row lib-stats-sub">
+                        <span className="lib-stats-name">{DEFENSE_INFO[def]?.name || key}</span>
+                        <span className="lib-stats-meta">{ds.total}局 · {formatStats(ds)}</span>
+                        <span className="lib-stats-bar">
+                          <i style={{ width: `${(ds.redWin / ds.total) * 100}%`, background: 'var(--red)' }} />
+                          <i style={{ width: `${(ds.draw / ds.total) * 100}%`, background: '#f39c12' }} />
+                          <i style={{ width: `${(ds.blackWin / ds.total) * 100}%`, background: '#5b8dd6' }} />
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#777', padding: '0 8px 4px' }}>{DEFENSE_INFO[def]?.desc}</div>
+                    </div>
+                  )
+                })}
+              </React.Fragment>
+            )
+          })}
         </div>
       )}
 
