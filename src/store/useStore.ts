@@ -54,6 +54,10 @@ export type GameMode = 'play' | 'replay' | 'analysis' | 'puzzle' | 'setup'
 export type Difficulty = 'beginner' | 'easy' | 'medium' | 'hard' | 'master' | 'grandmaster'
 export type TabType = 'play' | 'games' | 'analysis' | 'settings'
 
+/** 对局角色：每方由谁控制（玩家 / AI） */
+export type Controller = 'human' | 'ai'
+export interface SideControl { w: Controller; b: Controller }
+
 /** 摆棋工具（计划第16节） */
 export type SetupTool =
   | { kind: 'piece'; piece: string }
@@ -103,6 +107,8 @@ interface AppState {
   board: BoardState
   difficulty: Difficulty
   playerSide: Turn
+  /** 对局角色：每方控制者。单人机时与 playerSide 一致；双人为双 human；AI 演示为双 ai */
+  sideControl: SideControl
   boardFlipped: boolean
   /** 最近一局人机对局结算的棋力分变化 */
   lastRatingChange: LastRatingChange | null
@@ -177,7 +183,7 @@ interface AppState {
 
   // ── 操作 ──
   init: () => Promise<void>
-  startNewGame: (difficulty: Difficulty, playerSide: Turn) => void
+  startNewGame: (difficulty: Difficulty, playerSide: Turn, control?: SideControl) => void
   selectPiece: (pos: Pos) => void
   tryMove: (from: Pos, to: Pos) => boolean
   undo: () => void
@@ -486,6 +492,7 @@ export const useStore = create<AppState>((set, get) => ({
   board: boardFromFen(START_FEN),
   difficulty: 'medium',
   playerSide: 'w',
+  sideControl: { w: 'human', b: 'ai' },
   boardFlipped: false,
   lastRatingChange: null,
 
@@ -575,13 +582,28 @@ export const useStore = create<AppState>((set, get) => ({
   // 对局控制
   // ══════════════════════════════════════════════════════════════════
 
-  startNewGame: (difficulty, playerSide) => {
+  startNewGame: (difficulty, playerSide, control) => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
 
+    // 对局角色：未指定时按 playerSide 推导（单人机）
+    const sideControl: SideControl = control ?? {
+      w: playerSide === 'w' ? 'human' : 'ai',
+      b: playerSide === 'b' ? 'human' : 'ai',
+    }
+    const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
+    const demo = sideControl.w === 'ai' && sideControl.b === 'ai'
+
     const game = createEmptyGame()
-    game.header.Red = playerSide === 'w' ? '玩家' : DIFFICULTY_LABELS[difficulty]
-    game.header.Black = playerSide === 'b' ? '玩家' : DIFFICULTY_LABELS[difficulty]
+    if (hotseat) {
+      game.header.Event = '双人对战'
+      game.header.Red = '玩家一'
+      game.header.Black = '玩家二'
+    } else {
+      game.header.Red = sideControl.w === 'human' ? '玩家' : DIFFICULTY_LABELS[difficulty]
+      game.header.Black = sideControl.b === 'human' ? '玩家' : DIFFICULTY_LABELS[difficulty]
+      if (demo) game.header.Event = 'AI 对弈演示'
+    }
     game.header.Difficulty = difficulty
 
     set({
@@ -590,6 +612,7 @@ export const useStore = create<AppState>((set, get) => ({
       board: boardFromFen(game.startFen),
       difficulty,
       playerSide,
+      sideControl,
       currentPlyIndex: 0,
       selected: null,
       legalTargets: [],
@@ -620,8 +643,8 @@ export const useStore = create<AppState>((set, get) => ({
     }, 100)
     set({ timerInterval: interval })
 
-    // AI 先手时自动走棋
-    if (playerSide === 'b') {
+    // AI 先手时自动走棋（红方先手）
+    if (sideControl.w === 'ai') {
       setTimeout(() => get().aiMove(), 500)
     }
   },
@@ -631,6 +654,12 @@ export const useStore = create<AppState>((set, get) => ({
     const { board, selected, mode } = state
     // 推演模式下允许在棋盘上试走变化
     if (mode !== 'play' && mode !== 'puzzle' && !(mode === 'replay' && state.variation)) return
+
+    // AI 回合禁止操作（防误替 AI 走棋）；开局训练不受限
+    if (mode === 'play' && !state.openingTraining && get().sideControl[board.turn] === 'ai') {
+      set({ selected: null, legalTargets: [] })
+      return
+    }
 
     const piece = board.board[pos.col][pos.row]
 
@@ -659,7 +688,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   tryMove: (from, to) => {
-    const { board, mode, game, engine, engineReady, playerSide } = get()
+    const { board, mode, game, engine, engineReady } = get()
 
     if (mode === 'puzzle') return get().puzzleTryMove(from, to)
     // 开局训练模式: 只校验理论着法，不落子到棋谱
@@ -725,11 +754,12 @@ export const useStore = create<AppState>((set, get) => ({
       return true
     }
 
-    // AI 模式：轮到 AI 走棋
-    if (mode === 'play' && engineReady && engine) {
-      const aiSide = playerSide === 'w' ? 'b' : 'w'
-      if (newState.turn === aiSide) {
+    // 轮到 AI：自动走棋；轮到人类（含双人）：刷新评估条
+    if (mode === 'play' && engineReady && engine && !get().openingTraining) {
+      if (get().sideControl[newState.turn] === 'ai') {
         setTimeout(() => get().aiMove(), 200)
+      } else {
+        setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 150)
       }
     }
 
@@ -737,11 +767,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   undo: () => {
-    const { game, mode, currentPlyIndex, playerSide } = get()
+    const { game, mode, currentPlyIndex, sideControl, playerSide } = get()
     if (mode !== 'play' || get().isThinking) return
     if (get().openingTraining) return // 开局训练中不可悔棋
     if (game.result !== '*') return
     if (currentPlyIndex <= 0) return
+
+    const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
 
     /** 第 k 个局面轮到谁走 */
     const turnAt = (k: number): Turn => {
@@ -749,9 +781,11 @@ export const useStore = create<AppState>((set, get) => ({
       return game.plies[k - 1].turn === 'w' ? 'b' : 'w'
     }
 
-    // 撤回到最近的"轮到玩家行棋"的局面（严格早于当前）
+    // 双人：回退一手；人机：撤回到最近的"轮到玩家行棋"的局面（严格早于当前）
     let target = currentPlyIndex - 1
-    while (target > 0 && turnAt(target) !== playerSide) target--
+    if (!hotseat) {
+      while (target > 0 && turnAt(target) !== playerSide) target--
+    }
 
     const updatedGame: Game = {
       ...game,
@@ -775,7 +809,7 @@ export const useStore = create<AppState>((set, get) => ({
     })
 
     // 撤完轮到 AI（如玩家执黑撤回开局）→ 让 AI 重走
-    if (turnAt(target) !== playerSide) {
+    if (sideControl[turnAt(target)] === 'ai') {
       setTimeout(() => get().aiMove(), 300)
     } else {
       setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 150)
@@ -783,8 +817,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   restart: () => {
-    const { difficulty, playerSide } = get()
-    get().startNewGame(difficulty, playerSide)
+    const { difficulty, playerSide, sideControl } = get()
+    get().startNewGame(difficulty, playerSide, sideControl)
   },
 
   flipBoard: () => set(s => ({ boardFlipped: !s.boardFlipped })),
@@ -804,13 +838,12 @@ export const useStore = create<AppState>((set, get) => ({
   // ══════════════════════════════════════════════════════════════════
 
   aiMove: async () => {
-    const { game, engine, engineDepth, mode, playerSide } = get()
+    const { game, engine, engineDepth, mode } = get()
     if (!engine || !engine.isReady || get().isThinking) return
     if (mode !== 'play') return
 
-    const aiSide = playerSide === 'w' ? 'b' : 'w'
     const currentBoard = boardFromGame(game, game.plies.length)
-    if (currentBoard.turn !== aiSide) return
+    if (get().sideControl[currentBoard.turn] !== 'ai') return
 
     set({ isThinking: true })
 
@@ -887,18 +920,25 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   resign: () => {
-    const { game, playerSide, mode, timerInterval } = get()
+    const { game, sideControl, mode, timerInterval } = get()
     if (mode !== 'play' || game.result !== '*') return
+    // 仅单人人机可认输；双人/AI 演示不支持
+    const humanSide: Turn | null =
+      sideControl.w === 'human' && sideControl.b === 'ai' ? 'w'
+        : sideControl.b === 'human' && sideControl.w === 'ai' ? 'b' : null
+    if (!humanSide) return
     if (timerInterval) clearInterval(timerInterval)
-    const result = playerSide === 'w' ? '0-1' : '1-0'
+    const result = humanSide === 'w' ? '0-1' : '1-0'
     const updatedGame = { ...game, result, updatedAt: Date.now() }
     set({ game: updatedGame, timerInterval: null })
     get().saveCurrentGame()
   },
 
   offerDraw: () => {
-    const { game, mode, timerInterval } = get()
+    const { game, sideControl, mode, timerInterval } = get()
     if (mode !== 'play' || game.result !== '*') return
+    // AI 演示不适用
+    if (sideControl.w === 'ai' && sideControl.b === 'ai') return
     if (timerInterval) clearInterval(timerInterval)
     const updatedGame = { ...game, result: '1/2-1/2', updatedAt: Date.now() }
     set({ game: updatedGame, timerInterval: null })
@@ -910,8 +950,10 @@ export const useStore = create<AppState>((set, get) => ({
   // ══════════════════════════════════════════════════════════════════
 
   saveCurrentGame: () => {
-    const { game } = get()
+    const { game, sideControl } = get()
     if (game.plies.length === 0) return
+    // AI 对弈演示不入棋谱库
+    if (sideControl.w === 'ai' && sideControl.b === 'ai') return
 
     // 棋力分结算（计划19节 V3: 仅人机对局终局，同局去重）
     if (game.result !== '*') {
@@ -1061,13 +1103,12 @@ export const useStore = create<AppState>((set, get) => ({
   // AI 分析
   // ══════════════════════════════════════════════════════════════════
 
-  /** 快速评估当前局面（轮到玩家时自动触发，供评估条显示） */
+  /** 快速评估当前局面（对局中自动触发，供评估条显示） */
   quickEval: async () => {
     const s = get()
     if (!s.engine?.isReady || s.isThinking) return
     if (s.mode !== 'play' || s.openingTraining || s.game.result !== '*') return
     const board = boardFromGame(s.game, s.game.plies.length)
-    if (board.turn !== s.playerSide) return // 只在玩家回合评估
 
     const fen = boardToFen(board)
     try {
@@ -1448,6 +1489,7 @@ export const useStore = create<AppState>((set, get) => ({
       game,
       board: boardFromFen(fen),
       playerSide: side,
+      sideControl: { w: side === 'w' ? 'human' : 'ai', b: side === 'b' ? 'human' : 'ai' },
       currentPlyIndex: 0,
       selected: null,
       legalTargets: [],
@@ -1730,6 +1772,7 @@ export const useStore = create<AppState>((set, get) => ({
       game: createEmptyGame(),
       board: boardFromFen(START_FEN),
       playerSide: 'w',
+      sideControl: { w: 'human', b: 'ai' },
       currentPlyIndex: 0,
       selected: null,
       legalTargets: [],

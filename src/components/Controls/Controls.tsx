@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useStore, DIFFICULTY_LABELS } from '../../store/useStore'
-import type { Difficulty } from '../../store/useStore'
+import type { Difficulty, SideControl } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportGameImage } from '../../game/imageExport'
 import { TriRight } from '../ui/icons'
@@ -21,8 +21,10 @@ export const Controls: React.FC = () => {
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const game = useStore(s => s.game)
   const hintInfo = useStore(s => s.hintInfo)
+  const sideControl = useStore(s => s.sideControl)
 
   const startNewGame = useStore(s => s.startNewGame)
+  const restart = useStore(s => s.restart)
   const undo = useStore(s => s.undo)
   const flipBoard = useStore(s => s.flipBoard)
   const setDifficulty = useStore(s => s.setDifficulty)
@@ -42,10 +44,26 @@ export const Controls: React.FC = () => {
   // 自动播放速度初始值来自设置（计划第20节）
   const [autoPlaySpeed, setAutoPlaySpeed] = useState(() => getSettings().autoPlaySpeed)
 
+  /** 对局角色 */
+  const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
+  const demo = sideControl.w === 'ai' && sideControl.b === 'ai'
+  const singleHuman = !hotseat && !demo
+
   /** 按默认执棋设置开新局 */
   const startWithDefaultSide = () => {
     const side = getSettings().defaultSide
     startNewGame(difficulty, side === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : side)
+    setShowNewGame(false)
+  }
+
+  /** 按对局角色开新局 */
+  const startRole = (role: 'red' | 'black' | 'random' | 'hotseat' | 'demo') => {
+    if (role === 'hotseat') startNewGame(difficulty, 'w', { w: 'human', b: 'human' })
+    else if (role === 'demo') startNewGame(difficulty, 'w', { w: 'ai', b: 'ai' })
+    else {
+      const side = role === 'red' ? 'w' : role === 'black' ? 'b' : (Math.random() < 0.5 ? 'w' : 'b')
+      startNewGame(difficulty, side)
+    }
     setShowNewGame(false)
   }
 
@@ -62,17 +80,27 @@ export const Controls: React.FC = () => {
     return (
       <div className="controls">
         <div className="ctrl-section">
-          <div className="ctrl-title">AI 难度</div>
+          <div className="ctrl-title">
+            {hotseat ? '双人对战 · 难度（AI 提示用）' : demo ? 'AI 对弈演示 · 难度' : 'AI 难度'}
+          </div>
           <select
             className="settings-select difficulty-select"
             value={difficulty}
             onChange={e => setDifficulty(e.target.value as Difficulty)}
+            disabled={demo}
           >
             {(Object.keys(DIFFICULTY_LABELS) as Difficulty[]).map(d => (
               <option key={d} value={d}>{DIFFICULTY_LABELS[d]}</option>
             ))}
           </select>
         </div>
+
+        {hotseat && (
+          <div className="hint-banner">👥 双人对战 — 同屏轮流行棋，红先</div>
+        )}
+        {demo && (
+          <div className="hint-banner">🤖 AI 对弈演示中 — 点「新对局」可退出</div>
+        )}
 
         {hintInfo && (
           <div className="hint-banner">
@@ -89,26 +117,32 @@ export const Controls: React.FC = () => {
           </button>
           <button className="btn"
             onClick={undo}
-            disabled={isThinking || currentPlyIndex < 1 || game.result !== '*'}
-            title={isThinking ? '对方思考中，暂不能悔棋' : '悔棋（撤回到你上一次行棋前）'}>
+            disabled={isThinking || currentPlyIndex < 1 || game.result !== '*' || demo}
+            title={demo ? '演示模式不可悔棋' : isThinking ? '对方思考中，暂不能悔棋' : '悔棋（撤回到你上一次行棋前）'}>
             ↺ 悔棋
           </button>
-          <button className="btn" onClick={() => aiHint()} disabled={!engineReady || isThinking}>
+          <button className="btn" onClick={() => aiHint()} disabled={!engineReady || isThinking || demo}>
             {isThinking ? '⏳ 思考中' : '💡 提示'}
           </button>
-          <button className="btn" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }} disabled={isThinking || game.result !== '*'} title="判为和棋并保存">🤝 求和</button>
-          <button className="btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }} disabled={game.result !== '*'}>🏳 认输</button>
+          <button className="btn" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }} disabled={isThinking || game.result !== '*' || demo} title="判为和棋并保存">🤝 求和</button>
+          <button className="btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }} disabled={game.result !== '*' || !singleHuman} title={singleHuman ? '判负并保存' : '仅人机对局可认输'}>🏳 认输</button>
           <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
         </div>
 
         {showNewGame && (
           <div className="newgame-panel">
-            <div className="ctrl-title">选择执棋</div>
+            <div className="ctrl-title">对局角色</div>
             <div className="action-grid cols-2">
-              <button className="btn" onClick={startWithDefaultSide}>⭐ 按默认</button>
-              <button className="btn" onClick={() => { startNewGame(difficulty, Math.random() < 0.5 ? 'w' : 'b'); setShowNewGame(false) }}>🎲 随机</button>
-              <button className="btn" onClick={() => { startNewGame(difficulty, 'w'); setShowNewGame(false) }}>🔴 执红先行</button>
-              <button className="btn" onClick={() => { startNewGame(difficulty, 'b'); setShowNewGame(false) }}>⚫ 执黑后行</button>
+              <button className="btn" onClick={() => startRole('red')}>🔴 人机·执红</button>
+              <button className="btn" onClick={() => startRole('black')}>⚫ 人机·执黑</button>
+              <button className="btn" onClick={() => startRole('random')}>🎲 随机执子</button>
+              <button className="btn" onClick={() => startRole('hotseat')}>👥 双人对战</button>
+              <button className="btn" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}>🤖 AI 对弈演示（红 vs 黑）</button>
+            </div>
+            <div className="ctrl-title" style={{ marginTop: 8 }}>快捷</div>
+            <div className="action-grid cols-2">
+              <button className="btn" onClick={startWithDefaultSide}>⭐ 按默认设置</button>
+              <button className="btn" onClick={() => { restart(); setShowNewGame(false) }}>🔄 重开本局</button>
             </div>
           </div>
         )}
