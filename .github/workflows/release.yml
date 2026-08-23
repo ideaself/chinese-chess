@@ -64,9 +64,10 @@ jobs:
           fi
 
       - name: 整理产物
+        # 注意: Release 资产名保持 ASCII（action-gh-release 会丢弃非 ASCII 文件名）
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mv apk-out/app.apk "apk-out/中国象棋-${VERSION}.apk"
+          mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
 
       - name: 创建 GitHub Release 并上传 APK
         if: startsWith(github.ref, 'refs/tags/v')
