@@ -51,17 +51,20 @@ const SYSTEM_PROMPT = `你是一位资深中国象棋高级教练，擅长指导
 - 回答简洁有条理，控制在 300 字以内，先总评再给建议
 - 若学生问的是刚走过的着法，点评其优劣并说明更好的选择`
 
-/** 调用 AI 教练；传入 onDelta 时使用流式输出（SSE，逐段回调累计文本）；失败抛出异常 */
+/** 调用 AI 教练；传入 onDelta 时使用流式输出（SSE，逐段回调累计文本）；失败抛出异常。
+ *  history 为多轮对话上下文（不含本轮提问），自动截取最近 6 条。 */
 export async function askCoach(
   ctx: CoachContext,
   question: string,
   onDelta?: (fullText: string) => void,
+  history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
 ): Promise<string> {
   const cfg = getCoachConfig()
   if (!cfg.apiKey) throw new Error('未配置 AI 教练 API Key')
 
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: SYSTEM_PROMPT },
+    ...history.slice(-6),
     { role: 'user', content: `${buildFacts(ctx)}\n\n学生的问题: ${question}` },
   ]
 

@@ -45,9 +45,16 @@ export const CoachPanel: React.FC = () => {
   const enterVariationFromLive = useStore(s => s.enterVariationFromLive)
 
   const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
+  /** 对话历史（含正在流式生成的最后一条 assistant 消息） */
+  const [chat, setChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [asking, setAsking] = useState(false)
   const [coachError, setCoachError] = useState('')
+  const chatEndRef = React.useRef<HTMLDivElement>(null)
+
+  // 新消息时滚动到底部
+  React.useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [chat])
 
   // ── 开局识别（复用棋谱库分类逻辑） ──────────────────────────
   const opening = useMemo(() => {
@@ -92,8 +99,13 @@ export const CoachPanel: React.FC = () => {
 
   const askAi = async () => {
     if (!question.trim() || asking) return
-    setAsking(true)
+    const q = question.trim()
+    setQuestion('')
     setCoachError('')
+    setAsking(true)
+    // 追加用户消息 + 空的助手消息（流式填充）
+    const history = chat.slice(-6)
+    setChat(c => [...c, { role: 'user', content: q }, { role: 'assistant', content: '' }])
     try {
       const ctx: CoachContext = {
         fen: currentPlyIndex === 0
@@ -108,11 +120,18 @@ export const CoachPanel: React.FC = () => {
         ctx.score = analysis.score
         ctx.bestMoveCn = analysis.bestMove ? chineseFromFen(analysis.fen, analysis.bestMove) : undefined
       }
-      // 流式输出：逐段刷新回答
-      const a = await askCoach(ctx, question.trim(), partial => setAnswer(partial))
-      setAnswer(a)
+      await askCoach(ctx, q, partial => {
+        // 流式更新最后一条 assistant 消息
+        setChat(c => {
+          const next = [...c]
+          next[next.length - 1] = { role: 'assistant', content: partial }
+          return next
+        })
+      }, history)
     } catch (e) {
       setCoachError(e instanceof Error ? e.message : String(e))
+      // 移除空的助手消息
+      setChat(c => (c[c.length - 1]?.content === '' ? c.slice(0, -1) : c))
     } finally {
       setAsking(false)
     }
@@ -206,19 +225,32 @@ export const CoachPanel: React.FC = () => {
       <div className="coach-section">
         {isCoachEnabled() ? (
           <>
+            {chat.length > 0 && (
+              <div className="coach-chat">
+                {chat.map((m, i) => (
+                  <div key={i} className={`coach-bubble ${m.role}`}>{m.content}</div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+            )}
             <textarea
               className="import-textarea"
               rows={2}
-              placeholder="向 AI 教练提问… 如「这个局面我该怎么计划？」「刚才那步有什么问题？」"
+              placeholder={asking ? '教练思考中…' : '向 AI 教练提问… 可连续追问（如「为什么？」「那如果黑方反击呢？」）'}
               value={question}
               onChange={e => { setQuestion(e.target.value); setCoachError('') }}
             />
-            <button className="btn btn-sm btn-primary" style={{ width: '100%', marginTop: 4 }}
-              onClick={askAi} disabled={asking || !question.trim()}>
-              {asking ? '💬 教练思考中…' : '💬 请教 AI 教练'}
-            </button>
+            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+              <button className="btn btn-sm btn-primary" style={{ flex: 1 }}
+                onClick={askAi} disabled={asking || !question.trim()}>
+                {asking ? '💬 教练思考中…' : '💬 请教 AI 教练'}
+              </button>
+              {chat.length > 0 && !asking && (
+                <button className="btn btn-sm" title="清空对话"
+                  onClick={() => setChat([])}>🗑</button>
+              )}
+            </div>
             {coachError && <div className="import-error">{coachError}</div>}
-            {answer && <div className="coach-answer">{answer}</div>}
           </>
         ) : (
           <div className="coach-desc">
