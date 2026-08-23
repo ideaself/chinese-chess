@@ -70,6 +70,35 @@ describe('askCoach', () => {
     await expect(askCoach({ fen: 'x', movesCn: '' }, '?'))
       .rejects.toThrow('401')
   })
+
+  it('流式输出：解析 SSE 并逐段回调', async () => {
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"先出车"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"，再跳马"}}]}\n\n',
+      ': heartbeat\n\n',
+      'data: [DONE]\n\n',
+    ]
+    const sse = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const enc = new TextEncoder()
+        for (const c of chunks) controller.enqueue(enc.encode(c))
+        controller.close()
+      },
+    })
+    let sentStream = false
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      sentStream = JSON.parse(init!.body as string).stream === true
+      return { ok: true, status: 200, body: sse, json: async () => ({}) }
+    }))
+    store['xiangqi_settings'] = JSON.stringify({ aiCoachApiKey: 'sk-test' })
+
+    const partials: string[] = []
+    const reply = await askCoach({ fen: 'x', movesCn: '' }, '?', p => partials.push(p))
+
+    expect(sentStream).toBe(true)
+    expect(reply).toBe('先出车，再跳马')
+    expect(partials).toEqual(['先出车', '先出车，再跳马'])
+  })
 })
 
 describe('fetchModels', () => {

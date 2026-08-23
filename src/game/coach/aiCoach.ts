@@ -51,19 +51,20 @@ const SYSTEM_PROMPT = `你是一位资深中国象棋高级教练，擅长指导
 - 回答简洁有条理，控制在 300 字以内，先总评再给建议
 - 若学生问的是刚走过的着法，点评其优劣并说明更好的选择`
 
-/** 调用 AI 教练；失败抛出异常（调用方负责提示） */
-export async function askCoach(ctx: CoachContext, question: string): Promise<string> {
+/** 调用 AI 教练；传入 onDelta 时使用流式输出（SSE，逐段回调累计文本）；失败抛出异常 */
+export async function askCoach(
+  ctx: CoachContext,
+  question: string,
+  onDelta?: (fullText: string) => void,
+): Promise<string> {
   const cfg = getCoachConfig()
   if (!cfg.apiKey) throw new Error('未配置 AI 教练 API Key')
-  return chatCompletion(cfg, [
+
+  const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: `${buildFacts(ctx)}\n\n学生的问题: ${question}` },
-  ])
-}
+  ]
 
-// ── OpenAI 兼容基础请求 ───────────────────────────────────────────
-
-async function chatCompletion(cfg: CoachConfig, messages: Array<{ role: string; content: string }>): Promise<string> {
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -75,7 +76,7 @@ async function chatCompletion(cfg: CoachConfig, messages: Array<{ role: string; 
       messages,
       temperature: 0.7,
       max_tokens: 800,
-      stream: false,
+      stream: typeof onDelta === 'function',
     }),
   })
 
@@ -84,12 +85,51 @@ async function chatCompletion(cfg: CoachConfig, messages: Array<{ role: string; 
     throw new Error(`AI 教练请求失败 (HTTP ${res.status}) ${text.slice(0, 120)}`)
   }
 
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('AI 教练返回内容为空')
+  // 非流式路径
+  if (!onDelta || !res.body) {
+    const data = await res.json()
+    const content = data?.choices?.[0]?.message?.content
+    if (typeof content !== 'string' || !content.trim()) {
+      throw new Error('AI 教练返回内容为空')
+    }
+    onDelta?.(content.trim())
+    return content.trim()
   }
-  return content.trim()
+
+  // 流式路径：解析 SSE data 行
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let full = ''
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('data:')) return
+    const payload = trimmed.slice(5).trim()
+    if (payload === '[DONE]') return
+    try {
+      const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content
+      if (typeof delta === 'string' && delta) {
+        full += delta
+        onDelta(full)
+      }
+    } catch { /* 忽略无法解析的心跳行 */ }
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let idx: number
+    while ((idx = buffer.indexOf('\n')) >= 0) {
+      handleLine(buffer.slice(0, idx))
+      buffer = buffer.slice(idx + 1)
+    }
+  }
+  if (buffer.trim()) handleLine(buffer)
+
+  if (!full.trim()) throw new Error('AI 教练返回内容为空')
+  return full.trim()
 }
 
 function buildFacts(ctx: CoachContext): string {

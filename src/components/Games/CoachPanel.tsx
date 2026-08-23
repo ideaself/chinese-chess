@@ -108,7 +108,8 @@ export const CoachPanel: React.FC = () => {
         ctx.score = analysis.score
         ctx.bestMoveCn = analysis.bestMove ? chineseFromFen(analysis.fen, analysis.bestMove) : undefined
       }
-      const a = await askCoach(ctx, question.trim())
+      // 流式输出：逐段刷新回答
+      const a = await askCoach(ctx, question.trim(), partial => setAnswer(partial))
       setAnswer(a)
     } catch (e) {
       setCoachError(e instanceof Error ? e.message : String(e))
