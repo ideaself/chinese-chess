@@ -1159,3 +1159,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   background: rgba(255,255,255,0.08); flex-shrink: 0;
 }
 .lib-stats-bar i { height: 100%; display: block; }
+
+/* ── 名局拆解 ───────────────────────────────────────────────── */
+
+.quiz-options { display: flex; flex-direction: column; gap: 6px; }
+.quiz-option { width: 100%; font-size: 14px; padding: 9px; }
+.quiz-verdict { font-size: 14px; font-weight: bold; }
+.quiz-verdict.correct { color: var(--green); }
+.quiz-verdict.wrong { color: var(--red); }

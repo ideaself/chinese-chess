@@ -36,6 +36,7 @@ import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
 import { getBookMove } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
+import { getCachedLibrary, recordToGame } from '../game/masterLibrary'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio, playMoveHaptic, playCheckHaptic, playGameOverHaptic } from '../game/sound'
 import { applyGameResult } from '../game/rating'
 import type { RatingChange } from '../game/rating'
@@ -233,6 +234,24 @@ interface AppState {
   variationTryMove: (from: Pos, to: Pos) => boolean
   /** 内部：在起点局面上应用前 k 步 PV */
   _applyVariation: (basePly: number, moves: string[], k: number) => BoardState
+  // ── 名局拆解训练 ──
+  masterQuiz: {
+    /** 当前问题的 ply（0-based，问"这步怎么走"） */
+    ply: number
+    total: number
+    options: string[]
+    correct: string
+    status: 'asking' | 'correct' | 'wrong'
+    answered?: string
+    asked: number
+    right: number
+    streak: number
+    bestStreak: number
+  } | null
+  startMasterQuiz: () => void
+  answerMasterQuiz: (uci: string) => void
+  nextQuizPly: () => void
+  exitMasterQuiz: () => void
   /** 从错题本跨棋谱发起重走 */
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
@@ -307,6 +326,47 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+/** 名局拆解：为 ply 生成"猜着法"选项（1 正确 + 3 干扰项） */
+function buildQuizOptions(game: Game, ply: number): { options: string[]; correct: string } {
+  const fen = ply === 0 ? game.startFen : game.plies[ply - 1].fenAfter
+  const state = boardFromFen(fen)
+  const uciOf = (m: { from: Pos; to: Pos }) =>
+    `${String.fromCharCode(97 + m.from.col)}${m.from.row}${String.fromCharCode(97 + m.to.col)}${m.to.row}`
+  const correct = game.plies[ply].move
+  const pool = getAllLegalMoves(state).map(uciOf).filter(u => u !== correct)
+  // 洗牌取 3 个干扰项
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  const options = [correct, ...pool.slice(0, 3)]
+  // 选项顺序打乱
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[options[i], options[j]] = [options[j], options[i]]
+  }
+  return { options, correct }
+}
+
+function makeMasterQuizQuestion(
+  game: Game,
+  ply: number,
+  prev?: { asked: number; right: number; streak: number; bestStreak: number },
+): NonNullable<AppState['masterQuiz']> {
+  const { options, correct } = buildQuizOptions(game, ply)
+  return {
+    ply,
+    total: game.plies.length,
+    options,
+    correct,
+    status: 'asking',
+    asked: prev?.asked ?? 0,
+    right: prev?.right ?? 0,
+    streak: prev?.streak ?? 0,
+    bestStreak: prev?.bestStreak ?? 0,
+  }
+}
+
 /** toast 自动消失定时器 */
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -316,6 +376,9 @@ let analysisCancelFlag = false
 // ── Store ─────────────────────────────────────────────────────────
 
 export const useStore = create<AppState>((set, get) => ({
+  // ── 名局拆解 ──
+  masterQuiz: null,
+
   // ── 引擎 ──
   engine: null,
   engineReady: false,
@@ -1442,6 +1505,75 @@ export const useStore = create<AppState>((set, get) => ({
     if (captured) playCaptureSound(settings.soundCapture)
     else playMoveSound(settings.soundMove)
     return true
+  },
+
+  // ══════════════════════════════════════════════════════════════════
+  // 名局拆解训练：猜大师的着法
+  // ══════════════════════════════════════════════════════════════════
+
+  startMasterQuiz: () => {
+    const games = getCachedLibrary()
+    if (!games || games.length === 0) {
+      get().showToast('大师库尚未加载，请先打开「大师库」页签')
+      return
+    }
+    const pool = games.filter(g => g.mv.length / 4 >= 40)
+    if (pool.length === 0) {
+      get().showToast('⚠ 棋谱库为空')
+      return
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const rec = pool[Math.floor(Math.random() * pool.length)]
+      const game = recordToGame(rec)
+      if (!game || game.plies.length < 40) continue
+      get().loadGameObject(game)
+      get().goToPly(0)
+      set({ masterQuiz: makeMasterQuizQuestion(game, 0) })
+      return
+    }
+    get().showToast('⚠ 未能生成拆解对局，请重试')
+  },
+
+  answerMasterQuiz: (uci) => {
+    const quiz = get().masterQuiz
+    if (!quiz || quiz.status !== 'asking') return
+    const correct = uci === quiz.correct
+    set({
+      masterQuiz: {
+        ...quiz,
+        status: correct ? 'correct' : 'wrong',
+        answered: uci,
+        asked: quiz.asked + 1,
+        right: quiz.right + (correct ? 1 : 0),
+        streak: correct ? quiz.streak + 1 : 0,
+        bestStreak: Math.max(quiz.bestStreak, correct ? quiz.streak + 1 : 0),
+      },
+    })
+    // 展示大师的实际着法
+    get().goToPly(quiz.ply + 1)
+  },
+
+  nextQuizPly: () => {
+    const { masterQuiz, game } = get()
+    if (!masterQuiz) return
+    const nextPly = masterQuiz.ply + 1
+    if (nextPly >= game.plies.length) {
+      set({ masterQuiz: { ...masterQuiz, ply: nextPly, options: [], correct: '' } })
+      return
+    }
+    set({
+      masterQuiz: makeMasterQuizQuestion(game, nextPly, {
+        asked: masterQuiz.asked,
+        right: masterQuiz.right,
+        streak: masterQuiz.streak,
+        bestStreak: masterQuiz.bestStreak,
+      }),
+    })
+    get().goToPly(nextPly)
+  },
+
+  exitMasterQuiz: () => {
+    set({ masterQuiz: null })
   },
 
   // ══════════════════════════════════════════════════════════════════

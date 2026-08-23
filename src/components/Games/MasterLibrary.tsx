@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
-  loadLibrary, classifyLibrary, recordToGame, recordTitle,
+  loadLibrary, getCachedLibrary, recordToGame, recordTitle,
   FAMILY_INFO, DEFENSE_INFO,
   aggregateOpeningStats, formatStats,
 } from '../../game/masterLibrary'
@@ -34,7 +34,7 @@ export const MasterLibrary: React.FC = () => {
   useEffect(() => {
     let alive = true
     loadLibrary()
-      .then(payload => { if (alive) setGames(classifyLibrary(payload.games)) })
+      .then(() => { if (alive) setGames(getCachedLibrary() ?? []) })
       .catch(e => { if (alive) setError(`棋谱库加载失败: ${e.message}`) })
     return () => { alive = false }
   }, [])
@@ -103,7 +103,13 @@ export const MasterLibrary: React.FC = () => {
     <div className="master-library">
       <div className="panel-header">
         <h3>大师棋谱库</h3>
-        <span style={{ fontSize: 12, color: '#888' }}>共 {games.length} 局 · 东萍象棋网</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#888' }}>共 {games.length} 局</span>
+          <button className="btn btn-sm btn-active" title="随机选一局，猜大师的每一步"
+            onClick={() => useStore.getState().startMasterQuiz()}>
+            🎯 名局拆解
+          </button>
+        </div>
       </div>
 
       {/* 大类 */}

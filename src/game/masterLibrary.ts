@@ -23,6 +23,7 @@ export interface LibraryPayload {
 }
 
 let cachePromise: Promise<LibraryPayload> | null = null
+let cacheGames: LibraryGame[] | null = null
 
 /** 懒加载棋谱库（模块级缓存，只请求一次） */
 export function loadLibrary(): Promise<LibraryPayload> {
@@ -30,9 +31,17 @@ export function loadLibrary(): Promise<LibraryPayload> {
     cachePromise = fetch('master-games.json').then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res.json() as Promise<LibraryPayload>
+    }).then(payload => {
+      cacheGames = classifyLibrary(payload.games)
+      return payload
     })
   }
   return cachePromise
+}
+
+/** 同步获取已分类的棋谱（尚未加载时返回 null） */
+export function getCachedLibrary(): LibraryGame[] | null {
+  return cacheGames
 }
 
 // ── 开局分类 ──────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import { SetupPanel } from './components/Analysis/SetupPanel'
 import { PuzzlePanel } from './components/Analysis/PuzzlePanel'
 import { VariationPanel } from './components/Analysis/VariationPanel'
 import { OpeningTrainingPanel } from './components/Games/OpeningTrainingPanel'
+import { MasterQuizPanel } from './components/Games/MasterQuizPanel'
 import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
@@ -44,6 +45,7 @@ export const App: React.FC = () => {
   const toast = useStore(s => s.toast)
   const variation = useStore(s => s.variation)
   const openingTraining = useStore(s => s.openingTraining)
+  const masterQuiz = useStore(s => s.masterQuiz)
   const theme = useStore(s => s.settings.theme)
 
   useEffect(() => {
@@ -158,6 +160,8 @@ export const App: React.FC = () => {
             <VariationPanel />
           ) : activeTab === 'play' && openingTraining ? (
             <OpeningTrainingPanel />
+          ) : activeTab === 'play' && masterQuiz ? (
+            <MasterQuizPanel />
           ) : (
             <>
               {activeTab === 'play' && <Controls />}
