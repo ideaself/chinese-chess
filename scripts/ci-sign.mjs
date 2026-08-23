@@ -2,7 +2,8 @@
 /**
  * CI 签名配置注入
  *
- * 在 CI 生成的全新 Capacitor android 工程上配置正式签名：
+ * 在 CI 生成的全新 Capacitor android 工程上：
+ *   0. 从 package.json 注入 versionCode / versionName（模板默认 1.0/1 必须改写）
  *   1. 从 Secrets 解码 keystore 文件
  *   2. 写入 android/key.properties
  *   3. 改写 android/app/build.gradle 的 release 构建直接使用签名属性
@@ -13,19 +14,39 @@
  *   ANDROID_KEY_ALIAS          别名
  *   ANDROID_KEY_PASSWORD       别名密码（可选，默认同 keystore 密码）
  *
- * 未配置 Secrets 时静默跳过（退出码 0），由工作流回退 debug 构建。
+ * 未配置 Secrets 时仅注入版本号并跳过正式签名（退出码 0），由工作流回退 debug 构建。
  */
 
 import { writeFileSync, readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
+// ── 0. 版本号注入（与签名无关，总是执行） ──────────────────────────
+const pkg = JSON.parse(readFileSync('package.json', 'utf-8'))
+const [maj = 0, min = 0, patch = 0] = String(pkg.version || '').split('.').map(n => parseInt(n) || 0)
+const versionCode = maj * 10000 + min * 100 + patch
+const versionName = `${maj}.${min}`
+
+const androidDir0 = join(process.cwd(), 'android')
+if (!existsSync(androidDir0)) {
+  console.error('[ci-sign] android 目录不存在，请先执行 cap add android')
+  process.exit(1)
+}
+
+const gradlePath0 = join(androidDir0, 'app', 'build.gradle')
+let gradle0 = readFileSync(gradlePath0, 'utf-8')
+gradle0 = gradle0.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
+gradle0 = gradle0.replace(/versionName\s+"[^"]*"/, `versionName "${versionName}"`)
+writeFileSync(gradlePath0, gradle0)
+console.log('[ci-sign] 已注入版本 versionCode=%d versionName=%s', versionCode, versionName)
+
+// ── 正式签名（可选） ───────────────────────────────────────────────
 const b64 = process.env.ANDROID_KEYSTORE_BASE64
 const storePass = process.env.ANDROID_KEYSTORE_PASSWORD
 const alias = process.env.ANDROID_KEY_ALIAS
 const keyPass = process.env.ANDROID_KEY_PASSWORD || process.env.ANDROID_KEYSTORE_PASSWORD
 
 if (!b64 || !storePass || !alias) {
-  console.log('[ci-sign] 未配置签名 Secrets（ANDROID_KEYSTORE_BASE64 / PASSWORD / ALIAS），跳过正式签名')
+  console.log('[ci-sign] 未配置签名 Secrets（ANDROID_KEYSTORE_BASE64 / PASSWORD / ALIAS），回退 debug 签名')
   process.exit(0)
 }
 
