@@ -33,6 +33,8 @@ export const GameList: React.FC = () => {
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  /** 分页渲染：IDB 后可存数千局，避免一次性渲染全量 DOM */
+  const [renderLimit, setRenderLimit] = useState(50)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const backupInputRef = useRef<HTMLInputElement>(null)
@@ -82,6 +84,11 @@ export const GameList: React.FC = () => {
       (g.header.Date || '').includes(q)
     )
   })
+  const shownGames = filtered.slice(0, renderLimit)
+
+  /** 筛选/搜索变化时重置分页 */
+  const changeFilter = (f: typeof filter) => { setFilter(f); setRenderLimit(50) }
+  const changeQuery = (q: string) => { setQuery(q); setRenderLimit(50) }
 
   /** 收藏/取消收藏（计划第7.2节） */
   const handleToggleStar = (id: string) => {
@@ -295,14 +302,14 @@ export const GameList: React.FC = () => {
         className="search-input"
         placeholder="搜索对手 / 赛事 / 日期…"
         value={query}
-        onChange={e => setQuery(e.target.value)}
+        onChange={e => changeQuery(e.target.value)}
       />
 
       {/* 筛选按钮 */}
       <div className="controls-row" style={{ marginBottom: 8 }}>
         {(['all', 'starred', 'wins', 'losses', 'draws'] as const).map(f => (
           <button key={f} className={`btn btn-sm ${filter === f ? 'btn-active' : ''}`}
-            onClick={() => setFilter(f)}>
+            onClick={() => changeFilter(f)}>
             {f === 'all' ? '全部' : f === 'starred' ? '★ 收藏' : f === 'wins' ? '胜' : f === 'losses' ? '负' : '和'}
           </button>
         ))}
@@ -317,7 +324,7 @@ export const GameList: React.FC = () => {
               : '无匹配棋谱'}
           </div>
         ) : (
-          filtered.map(game => (
+          shownGames.map(game => (
             <div key={game.id} className="game-item" onClick={() => loadGame(game.id)}>
               <div className="game-item-left">
                 <span className={`game-result ${getResultClass(game.result)}`}>
@@ -350,8 +357,15 @@ export const GameList: React.FC = () => {
         )}
       </div>
 
+      {filtered.length > renderLimit && (
+        <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
+          onClick={() => setRenderLimit(l => l + 100)}>
+          显示更多（剩余 {filtered.length - renderLimit} 局）
+        </button>
+      )}
+
       <div style={{ padding: '8px 0', fontSize: 12, color: '#888' }}>
-        共 {savedGames.length} 局棋谱
+        共 {savedGames.length} 局棋谱{filtered.length !== savedGames.length ? ` · 匹配 ${filtered.length} 局` : ''}
       </div>
     </div>
   )

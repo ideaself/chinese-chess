@@ -217,7 +217,9 @@ export const MasterLibrary: React.FC = () => {
       {/* 搜索 */}
       <input
         className="search-input"
-        placeholder="搜索棋手 / 赛事 / 日期…"
+        placeholder={info && info.loaded < info.total
+          ? `搜索棋手 / 赛事 / 日期（已加载 ${info.loaded} 局，可点底部加载更多）…`
+          : '搜索棋手 / 赛事 / 日期…'}
         value={query}
         onChange={e => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
       />
