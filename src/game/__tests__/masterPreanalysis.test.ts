@@ -1,9 +1,11 @@
 /**
- * 大师局预分析测试：关键点选取、缓存损失计算、高价值关键手挑选
+ * 大师局预分析测试：关键点选取、缓存损失计算、高价值关键手挑选、
+ * 缓存物化（applyCachedAnalysis）与预热缺口计算
  */
 import { describe, it, expect } from 'vitest'
 import {
   fenAtPosition, keyPositionIndices, moveLossFromEvals, pickBestKeyPly,
+  classifyMove, applyCachedAnalysis, missingKeyPositions,
 } from '../masterPreanalysis'
 import { MASTER_ANALYSIS_FMT, type MasterAnalysisRecord } from '../storage'
 import { buildGameFromRecord } from '../dhtmlxq'
@@ -132,5 +134,78 @@ describe('fenAtPosition', () => {
     expect(fenAtPosition(game, 0)).toBe(game.startFen)
     expect(fenAtPosition(game, 1)).toBe(game.plies[0].fenAfter)
     expect(fenAtPosition(game, 3)).toBe(game.plies[2].fenAfter)
+  })
+})
+
+describe('classifyMove（与整盘分析一致）', () => {
+  it('阈值分档', () => {
+    expect(classifyMove(0)).toBe('best')
+    expect(classifyMove(9)).toBe('excellent')
+    expect(classifyMove(29)).toBe('good')
+    expect(classifyMove(79)).toBe('inaccuracy')
+    expect(classifyMove(149)).toBe('mistake')
+    expect(classifyMove(299)).toBe('blunder')
+    expect(classifyMove(300)).toBe('blunder2')
+  })
+})
+
+describe('missingKeyPositions', () => {
+  it('只补缺失/深度不足的局面', () => {
+    const game = makeGame()
+    flagKeys(game, [2, 6])
+    const rec = makeRec({ 2: { score: 10, depth: 12 }, 3: { score: 0, depth: 8 } })
+    const miss = missingKeyPositions(game, rec)
+    expect(miss).toContain(3) // 深度不足
+    expect(miss).not.toContain(2) // 已缓存够深
+    expect(miss).toEqual(keyPositionIndices(game).filter(i => i !== 2))
+  })
+
+  it('无缓存时返回全部关键局面', () => {
+    const game = makeGame()
+    expect(missingKeyPositions(game, null)).toEqual(keyPositionIndices(game))
+  })
+})
+
+describe('applyCachedAnalysis', () => {
+  it('有完整前后手缓存的 ply 被物化，损失与分类正确', () => {
+    const game = makeGame()
+    flagKeys(game, [2])
+    const rec = makeRec({}) as MasterAnalysisRecord
+    // loss = max(0, before + after) = max(0, 100-100)... 构造明显失误:
+    rec.evals[2] = { score: 100, depth: 12, bestMove: game.plies[2].move, pv: [] }
+    rec.evals[3] = { score: 100, depth: 12, bestMove: 'a0a1', pv: [] }
+    // before=100, after=-100（对方视角 -1 兵）→ loss = 0？注意 after 为对方视角:
+    // 对方 -100 表示我方优 100，无损失。改用 after=+100（对方反优）→ loss=200
+    rec.evals[3].score = 100
+
+    const out = applyCachedAnalysis(game.plies, rec)
+    expect(out).not.toBe(game.plies)
+    expect(out[2].analysis).toBeTruthy()
+    expect(out[2].analysis!.bestMove).toBe(game.plies[2].move)
+    expect(out[2].analysis!.moveLoss).toBe(200)
+    expect(out[2].analysis!.classification).toBe('blunder')
+    // 非关键手未物化
+    expect(out[5].analysis ?? null).toBeFalsy()
+  })
+
+  it('缺后手的 ply 不物化', () => {
+    const game = makeGame()
+    flagKeys(game, [2, 6])
+    const rec = makeRec({ 2: { score: 50 } }) // 缺 k+1
+    const out = applyCachedAnalysis(game.plies, rec)
+    expect(out[2].analysis ?? null).toBeFalsy()
+    expect(out).toBe(game.plies)
+  })
+
+  it('fmt 不符返回原数组引用', () => {
+    const game = makeGame()
+    const rec = { ...makeRec({}), fmt: 999 }
+    expect(applyCachedAnalysis(game.plies, rec as never)).toBe(game.plies)
+  })
+
+  it('无可新增数据时返回原数组引用', () => {
+    const game = makeGame()
+    const rec = makeRec({}) // 空缓存
+    expect(applyCachedAnalysis(game.plies, rec)).toBe(game.plies)
   })
 })

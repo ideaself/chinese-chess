@@ -8,6 +8,17 @@ const path = require('path')
 const os = require('os')
 
 const RES = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res')
+// 图标产物同步分发目录（CI 回填源，见 scripts/ci-sign.mjs）
+const ICONS_OUT = path.join(__dirname, '..', 'resources', 'icons')
+
+/** 双写：android res（本地构建用）+ resources/icons（入库，CI 回填用） */
+function writeIcon(relPath, data) {
+  for (const base of [RES, ICONS_OUT]) {
+    const p = path.join(base, relPath)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, data)
+  }
+}
 const LEGACY = { 'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192 }
 const FORE = { 'mipmap-mdpi': 108, 'mipmap-hdpi': 162, 'mipmap-xhdpi': 216, 'mipmap-xxhdpi': 324, 'mipmap-xxxhdpi': 432 }
 
@@ -80,19 +91,19 @@ async function main() {
     for (const [dir, size] of Object.entries(LEGACY)) {
       for (const [suffix, mode] of [['ic_launcher.png', 'square'], ['ic_launcher_round.png', 'round']]) {
         const b64 = await getB64(size, mode)
-        fs.writeFileSync(path.join(RES, dir, suffix), Buffer.from(b64, 'base64'))
+        writeIcon(path.join(dir, suffix), Buffer.from(b64, 'base64'))
         count++
       }
     }
     for (const [dir, size] of Object.entries(FORE)) {
       const b64 = await getB64(size, 'fg')
-      fs.writeFileSync(path.join(RES, dir, 'ic_launcher_foreground.png'), Buffer.from(b64, 'base64'))
+      writeIcon(path.join(dir, 'ic_launcher_foreground.png'), Buffer.from(b64, 'base64'))
       count++
     }
 
     // 自适应图标底色改为琥珀黄
-    const bgXml = path.join(RES, 'values', 'ic_launcher_background.xml')
-    fs.writeFileSync(bgXml, `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#F6C445</color>\n</resources>\n`)
+    writeIcon(path.join('values', 'ic_launcher_background.xml'),
+      `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#F6C445</color>\n</resources>\n`)
 
     console.log(`[icons] 已生成 ${count} 个 PNG + 背景色`)
   } finally {

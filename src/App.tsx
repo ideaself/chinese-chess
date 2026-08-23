@@ -95,8 +95,23 @@ export const App: React.FC = () => {
 
   const inCheck = isInCheck(board)
 
+  // PWA 新版本提示：Service Worker 接管页面时收到事件（见 main.tsx）
+  const [updateReady, setUpdateReady] = useState(false)
+  useEffect(() => {
+    const onUpdate = () => setUpdateReady(true)
+    window.addEventListener('xiangqi-update-ready', onUpdate)
+    return () => window.removeEventListener('xiangqi-update-ready', onUpdate)
+  }, [])
+
   return (
     <div className="app">
+      {updateReady && (
+        <div className="update-banner">
+          <span>🎉 新版本已就绪，刷新后生效</span>
+          <button className="btn btn-sm btn-primary" onClick={() => location.reload()}>立即刷新</button>
+          <button className="btn btn-sm" onClick={() => setUpdateReady(false)}>✕</button>
+        </div>
+      )}
       {/* 顶部导航 */}
       <header className="app-header">
         <h1 className="app-title">♟ 中国象棋</h1>

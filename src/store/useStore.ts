@@ -37,7 +37,12 @@ import {
 } from '../game/storage'
 import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
-import { pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH } from '../game/masterPreanalysis'
+import {
+  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH,
+  classifyMove, applyCachedAnalysis,
+  warmupGame, cancelWarmup,
+  acquireEngineSlot, releaseEngineSlot,
+} from '../game/masterPreanalysis'
 import { getBookMove, loadOpeningBook } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
 import { getCachedLibrary, recordToGame } from '../game/masterLibrary'
@@ -423,7 +428,14 @@ async function judgeQuizAlternative(uci: string): Promise<void> {
   useStore.setState({ masterQuiz: { ...quiz, checking: true } })
   try {
     const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
-    const evLive = await engineEvalOnce(s.engine, fen, 10)
+    // 引擎槽：与预热/批量预分析互斥（对战/整盘分析走 isThinking 已被其内部等待）
+    await acquireEngineSlot(() => useStore.getState().isThinking)
+    let evLive = null
+    try {
+      evLive = await engineEvalOnce(s.engine, fen, 10)
+    } finally {
+      releaseEngineSlot()
+    }
     if (evLive && evLive.bestMove === uci) {
       await applyQuizAiAgree(quiz)
       // 写透缓存：下次同局面即时判定（仅大师局）
@@ -462,6 +474,23 @@ async function applyQuizAiAgree(snapshot: NonNullable<AppState['masterQuiz']>): 
   const game = useStore.getState().game
   const fen = snapshot.ply === 0 ? game.startFen : game.plies[snapshot.ply].fenBefore
   removeQuizMistake(fen, snapshot.correct)
+}
+
+/**
+ * 大师局预分析缓存物化：把缓存评估写到当前对局的 ply.analysis 上，
+ * 点亮 KeyMoments / 评估曲线 / 失误标记（仅复盘查看用，不改动浏览位置）。
+ */
+async function enrichMasterGame(gameId: string): Promise<void> {
+  try {
+    const rec = await getMasterAnalysis(gameId)
+    if (!rec) return
+    const s = useStore.getState()
+    if (s.game.id !== gameId) return
+    const plies = applyCachedAnalysis(s.game.plies, rec)
+    if (plies !== s.game.plies) {
+      useStore.setState({ game: { ...useStore.getState().game, plies } })
+    }
+  } catch { /* 缓存不可用时静默跳过 */ }
 }
 
 /** toast 自动消失定时器 */
@@ -993,6 +1022,17 @@ export const useStore = create<AppState>((set, get) => ({
       // 跳到对战页签，重放控件在该页签
       activeTab: 'play',
     })
+
+    // 大师局：预分析缓存点亮复盘视图 + 后台预热缺失关键点（随分析进度逐步显现）
+    if (game.id.startsWith('dpxq_')) {
+      void enrichMasterGame(game.id)
+      warmupGame(game, {
+        getEngine: () => useStore.getState().engine,
+        isEngineBusy: () => useStore.getState().isThinking,
+      }, () => { void enrichMasterGame(game.id) })
+    } else {
+      cancelWarmup() // 切到非大师局时停止预热
+    }
   },
 
   loadFromPGN: (pgn: string) => {
@@ -1853,17 +1893,6 @@ function parseMoveFromUci(uci: string, turn: Turn): Move {
     to: { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) },
     turn,
   }
-}
-
-/** 根据走法损失（厘兵）分类走法质量 */
-function classifyMove(moveLoss: number): PlyAnalysis['classification'] {
-  if (moveLoss === 0) return 'best'
-  if (moveLoss < 10) return 'excellent'  // < 0.1兵
-  if (moveLoss < 30) return 'good'       // < 0.3兵
-  if (moveLoss < 80) return 'inaccuracy' // < 0.8兵
-  if (moveLoss < 150) return 'mistake'   // < 1.5兵
-  if (moveLoss < 300) return 'blunder'   // < 3兵
-  return 'blunder2'                       // >= 3兵
 }
 
 
