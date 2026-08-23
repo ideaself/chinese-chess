@@ -29,7 +29,8 @@ npm run book            # 语料 → public/opening-book.json 大数据开局书
 - `src/game/masterPreanalysis.ts` 大师局批量预分析：关键点（吃子/将军手 k 与 k+1）深度 12 缓存到 IDB；拆解殊途同归判定缓存优先（即时）+ 实时结果写透；关键手优先选"大师与引擎分歧最大"处；批量入口在大师库页头，引擎忙时让路可停止
 - `src/game/masterLibrary.ts` 棋谱库分类（开局体系/黑方应法/胜率统计）；分片懒加载 manifest+shard
 - `src/game/book.ts` 开局书：大数据 JSON + 内置定式兜底，按行棋方视角过滤（注意浮点容差 1e-9）
-- 状态: zustand `src/store/useStore.ts`（单文件大 store，含 variation 推演/masterQuiz 拆解等）
+- 状态: zustand `src/store/useStore.ts`（组合入口，34 行）+ `slices/` 8 个领域切片（game/engine/masterQuiz/puzzle/variation/setup/opening/ui）+ `types.ts`（AppState）+ `constants.ts`（难度表）+ `helpers.ts`（纯函数）。跨 slice 调用一律经 get()；模块级可变量在各 slice 文件内
+- 对局角色 sideControl {w,b}: 玩家|AI 每方独立，支持双人/AI演示；演示局不入棋谱库、不计 Elo
 - AI 教练: `src/game/coach/aiCoach.ts`（流式 SSE + 多轮对话；开发走 vite proxy `/ai-proxy` → api.deepseek.com）
 - opencode.json 已开 YOLO 权限模式
 
@@ -39,7 +40,9 @@ npm run book            # 语料 → public/opening-book.json 大数据开局书
 IndexedDB、CI 自动发布（ci-sign.mjs 支持 secrets 正式签名）、分片棋谱库、流式多轮 AI 教练、
 PWA（已有基础）、列表分页、语料去重、e2e 大师库套件。
 v1.7.0 后（未发版）：大师局批量预分析缓存 IDB（拆解判定即时化/关键手更精准，单测 112 项）；
-全量备份/恢复（棋谱+设置+拆解战绩/错题/掌握度+棋力分，合并语义，兼容旧 v1 备份，单测 117 项）。
+全量备份/恢复（棋谱+设置+拆解战绩/错题/掌握度+棋力分，合并语义，兼容旧 v1 备份，单测 117 项）；
+对局角色（双人/AI演示/随机执子）；拆解局自动预热+缓存物化点亮复盘；PWA 更新提示；
+useStore 拆分 slices 架构（行为零改动，tsc/124 单测/e2e 全绿）。
 
 ## 已评估搁置
 

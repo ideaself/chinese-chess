@@ -1,0 +1,326 @@
+/**
+ * 引擎/AI 走棋/AI 分析 slice
+ */
+import type { AppState, StoreSet, StoreGet } from '../types'
+import type { BoardState, Move, Pos, Turn, GameMode } from '../types'
+import type { Game } from '../../game/model'
+import { makeMove, boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
+import { getLegalMoves, getAllLegalMoves, getGameStatus, chineseFromFen, pvToChinese } from '../../game/rules'
+import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
+import { parsePGN, exportPGN } from '../../game/pgn'
+import {
+  saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
+  deleteGame as storageDeleteGame, initGameStorage,
+  getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
+  getMasterAnalysis, putMasterAnalysis, MASTER_ANALYSIS_FMT,
+} from '../../game/storage'
+import type { MasterAnalysisRecord } from '../../game/storage'
+import { PikafishEngine } from '../../engine/pikafish'
+import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
+import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
+import {
+  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
+  applyCachedAnalysis, warmupGame, cancelWarmup,
+  acquireEngineSlot, releaseEngineSlot,
+} from '../../game/masterPreanalysis'
+import { getBookMove, loadOpeningBook } from '../../game/book'
+import { OPENING_LINES } from '../../game/openings'
+import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
+import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+
+
+/** 整盘分析取消标记 */
+let analysisCancelFlag = false
+
+
+export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
+    'engine' | 'engineReady' | 'isThinking' | 'engineDepth' | 'analysis' | 'hintInfo' | 'analysisProgress' | 'evalBar' | 'setDifficulty' | 'init' | 'aiMove' | 'aiHint' | 'quickEval' | 'analyzePosition' | 'analyzeCurrentGame' | 'cancelAnalysis'> {
+  return {
+    engine: null,
+
+    engineReady: false,
+
+    isThinking: false,
+
+    engineDepth: 10,
+
+    analysis: null,
+
+    hintInfo: null,
+
+    analysisProgress: null,
+
+    evalBar: null,
+
+  // ── 对局状态 ──
+
+    setDifficulty: (d) => {
+    set({ difficulty: d })
+    const { engine } = get()
+    if (engine && engine.isReady) {
+      engine.setDepth(DIFFICULTY_DEPTH[d])
+    }
+  },
+
+    init: async () => {
+    resumeAudio()
+    // 先载入棋谱存储（IndexedDB → 内存镜像）
+    try {
+      await initGameStorage()
+    } catch (e) {
+      console.error('棋谱存储初始化失败:', e)
+    }
+    set({ savedGames: getAllGames() })
+    // 大数据开局书后台加载（未就绪时 AI 用内置定式兜底）
+    loadOpeningBook()
+    const engine = new PikafishEngine({ depth: DIFFICULTY_DEPTH.medium })
+    try {
+      await engine.init()
+      set({ engine, engineReady: true })
+    } catch (e) {
+      console.error('引擎初始化失败:', e)
+    }
+  },
+
+    aiMove: async () => {
+    const { game, engine, engineDepth, mode } = get()
+    if (!engine || !engine.isReady || get().isThinking) return
+    if (mode !== 'play') return
+
+    const currentBoard = boardFromGame(game, game.plies.length)
+    if (get().sideControl[currentBoard.turn] !== 'ai') return
+
+    set({ isThinking: true })
+
+    try {
+      const fen = boardToFen(currentBoard)
+      const moveList = game.plies.map(p => p.move)
+
+      // 开局库优先（计划外增强: 提升开局质量与多样性）
+      let bestUci: string | null = null
+      const bookMove = getBookMove(moveList)
+      if (bookMove) {
+        const legal = getAllLegalMoves(currentBoard)
+        const bf = { col: bookMove.charCodeAt(0) - 97, row: parseInt(bookMove[1]) }
+        const bt = { col: bookMove.charCodeAt(2) - 97, row: parseInt(bookMove[3]) }
+        if (legal.some(m => m.from.col === bf.col && m.from.row === bf.row && m.to.col === bt.col && m.to.row === bt.row)) {
+          bestUci = bookMove
+        }
+      }
+
+      if (!bestUci) {
+        bestUci = await engine.go(fen, moveList, engineDepth)
+      }
+
+      if (bestUci && bestUci !== '(none)' && bestUci.length >= 4) {
+        const from = { col: bestUci.charCodeAt(0) - 97, row: parseInt(bestUci[1]) }
+        const to = { col: bestUci.charCodeAt(2) - 97, row: parseInt(bestUci[3]) }
+        get().tryMove(from, to)
+      }
+    } catch (e) {
+      console.error('AI 走棋失败:', e)
+    } finally {
+      set({ isThinking: false })
+      // AI 走完轮到玩家，自动评估局面供评估条显示
+      setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 120)
+    }
+  },
+
+    aiHint: async () => {
+    const { game, engine, engineDepth } = get()
+    if (!engine || !engine.isReady) return
+
+    const currentBoard = boardFromGame(game, game.plies.length)
+    const fen = boardToFen(currentBoard)
+    const moveList = game.plies.map(p => p.move)
+
+    set({ isThinking: true })
+    try {
+      await engine.analyze(fen, moveList, Math.min(engineDepth, 14), (info) => {
+        set({
+          analysis: {
+            depth: info.depth,
+            score: info.score,
+            bestMove: info.move,
+            pv: info.pv,
+            fen,
+          },
+        })
+      })
+      // 完成后生成中文提示（计划第6.4节：最佳着法 + 局面评价）
+      const cur = get().analysis
+      if (cur && cur.fen === fen && cur.bestMove.length >= 4) {
+        set({
+          hintInfo: {
+            moveCn: chineseFromFen(fen, cur.bestMove),
+            score: cur.score,
+          },
+        })
+      }
+    } catch (e) {
+      console.error('AI 提示失败:', e)
+    } finally {
+      set({ isThinking: false })
+    }
+  },
+
+    quickEval: async () => {
+    const s = get()
+    if (!s.engine?.isReady || s.isThinking) return
+    if (s.mode !== 'play' || s.openingTraining || s.game.result !== '*') return
+    const board = boardFromGame(s.game, s.game.plies.length)
+
+    const fen = boardToFen(board)
+    try {
+      await s.engine.analyze(fen, s.game.plies.map(p => p.move), Math.min(getSettings().analysisDepth, 12), (info) => {
+        set({
+          analysis: {
+            depth: info.depth,
+            score: info.score,
+            bestMove: info.move,
+            pv: info.pv,
+            fen,
+          },
+          evalBar: { score: info.score, fen },
+        })
+      })
+    } catch {}
+  },
+
+    analyzePosition: async () => {
+    const { game, engine, currentPlyIndex } = get()
+    if (!engine || !engine.isReady) return
+
+    const currentBoard = boardFromGame(game, currentPlyIndex)
+    const fen = boardToFen(currentBoard)
+
+    set({ isThinking: true })
+    try {
+      // 单局面分析用设置的分析深度（比整盘更深，只搜一个局面）
+      await engine.analyze(fen, game.plies.slice(0, currentPlyIndex).map(p => p.move), getSettings().analysisDepth + 4, (info) => {
+        set({
+          analysis: {
+            depth: info.depth,
+            score: info.score,
+            bestMove: info.move,
+            pv: info.pv,
+            fen,
+          },
+          evalBar: { score: info.score, fen },
+        })
+      })
+    } catch (e) {
+      console.error('分析失败:', e)
+    } finally {
+      set({ isThinking: false })
+    }
+  },
+
+    analyzeCurrentGame: async () => {
+    const { game, engine } = get()
+    if (!engine || !engine.isReady || game.plies.length === 0) return
+
+    // 整盘分析深度取设置档位（计划9.1: 快速/标准/深度）
+    const depth = Math.min(getSettings().analysisDepth, 16)
+    const total = game.plies.length + 1
+    analysisCancelFlag = false
+    set({ isThinking: true, analysisProgress: { current: 0, total } })
+
+    try {
+      // ── 第一遍：分析全部 N+1 个局面（每步之前 + 终局）──
+      // evals[i] = 第 i 步之前局面的评估（走棋方视角）
+      interface PosEval { score: number; depth: number; bestMove: string; pv: string[] }
+      const evals: PosEval[] = []
+      let cancelled = false
+
+      for (let i = 0; i <= game.plies.length; i++) {
+        // 用户中途开新局/换棋谱时中止
+        if (get().game.id !== game.id) { engine.stop(); return }
+        if (analysisCancelFlag) { cancelled = true; break }
+
+        set({ analysisProgress: { current: i + 1, total } })
+
+        const board = boardFromGame(game, i)
+        const fen = boardToFen(board)
+        const moveList = game.plies.slice(0, i).map(p => p.move)
+
+        await engine.analyze(fen, moveList, depth, (info) => {
+          set({
+            analysis: {
+              depth: info.depth,
+              score: info.score,
+              bestMove: info.move,
+              pv: info.pv,
+              fen,
+            },
+          })
+        })
+
+        // 读取最终 info（fen 校验防止读到别的局面的残留回调）
+        const cur = get().analysis
+        if (cur && cur.fen === fen) {
+          evals.push({ score: cur.score, depth: cur.depth, bestMove: cur.bestMove, pv: cur.pv })
+        } else {
+          evals.push({ score: 0, depth: 0, bestMove: '', pv: [] })
+        }
+      }
+
+      // ── 第二遍：计算已完成部分的每步损失并分类 ──
+      // before.score 为走棋方视角；after.score 为对方视角 → 取负回到走棋方视角
+      const clamp = (v: number) => Math.max(-1500, Math.min(1500, v))
+      // ply i 需要 evals[i] 与 evals[i+1]
+      const computable = Math.max(0, evals.length - 1)
+
+      const updatedPlies = game.plies.map((ply, i) => {
+        if (i >= computable) return ply // 未分析部分保留原样（含旧分析）
+        const before = evals[i]
+        const after = evals[i + 1]
+        const moveLoss = Math.max(0, clamp(before.score) + clamp(after.score))
+        const classification = classifyMove(moveLoss)
+
+        return {
+          ...ply,
+          analysis: {
+            score: before.score,
+            depth: before.depth,
+            bestMove: before.bestMove,
+            bestMoveCn: before.bestMove.length >= 4
+              ? chineseFromFen(ply.fenBefore, before.bestMove)
+              : '',
+            pv: before.pv,
+            moveLoss,
+            classification,
+            analyzedAt: Date.now(),
+          },
+        }
+      })
+
+      const finished = !cancelled && computable === game.plies.length
+      const analyzedGame: Game = {
+        ...get().game,
+        plies: updatedPlies,
+        analysisStatus: finished ? 'complete' : (computable > 0 ? 'partial' : 'none'),
+      }
+      set({ game: analyzedGame, analysisProgress: null })
+
+      if (finished) {
+        // 完整分析缓存到本地（不重复计战绩）
+        storageSaveGame(analyzedGame)
+        set({ savedGames: getAllGames() })
+      } else if (cancelled) {
+        get().showToast(`分析已取消（完成 ${computable}/${game.plies.length} 步）`)
+      }
+      analysisCancelFlag = false
+    } catch (e) {
+      console.error('整盘分析失败:', e)
+    } finally {
+      set({ isThinking: false, analysisProgress: null })
+    }
+  },
+
+    cancelAnalysis: () => {
+    analysisCancelFlag = true
+    get().engine?.stop() // 尽快结束当前局面搜索
+  },
+  }
+}
