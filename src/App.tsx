@@ -24,6 +24,7 @@ import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
 import { resumeAudio } from './game/sound'
 import { fetchModels } from './game/coach/aiCoach'
+import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import './App.css'
 
@@ -448,7 +449,7 @@ const SettingsPanel: React.FC = () => {
           <h4>关于</h4>
           <div className="settings-row">
             <span>版本</span>
-            <span style={{ color: '#888' }}>v0.1.0</span>
+            <span style={{ color: '#888' }}>v{APP_VERSION}</span>
           </div>
           <div className="settings-row">
             <span>AI 引擎</span>
