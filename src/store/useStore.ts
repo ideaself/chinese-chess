@@ -247,11 +247,18 @@ interface AppState {
     right: number
     streak: number
     bestStreak: number
+    /** 关键手模式：只在吃子/将军等着法上提问 */
+    keyOnly: boolean
+    /** 引擎正在判定玩家着法是否殊途同归 */
+    checking?: boolean
+    /** 引擎认可玩家的选择（与大师着法不同但同样好） */
+    aiAgree?: boolean
   } | null
   startMasterQuiz: () => void
   answerMasterQuiz: (uci: string) => void
   nextQuizPly: () => void
   exitMasterQuiz: () => void
+  toggleQuizKeyMode: () => void
   /** 从错题本跨棋谱发起重走 */
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
@@ -348,10 +355,18 @@ function buildQuizOptions(game: Game, ply: number): { options: string[]; correct
   return { options, correct }
 }
 
+/** 下一个"关键手"ply：吃子或将军（无则返回 -1） */
+function nextKeyPlyFrom(game: Game, fromPly: number): number {
+  for (let k = Math.max(fromPly, 0); k < game.plies.length; k++) {
+    if (game.plies[k].isCapture || game.plies[k].inCheck) return k
+  }
+  return -1
+}
+
 function makeMasterQuizQuestion(
   game: Game,
   ply: number,
-  prev?: { asked: number; right: number; streak: number; bestStreak: number },
+  prev?: { asked: number; right: number; streak: number; bestStreak: number; keyOnly: boolean },
 ): NonNullable<AppState['masterQuiz']> {
   const { options, correct } = buildQuizOptions(game, ply)
   return {
@@ -364,6 +379,43 @@ function makeMasterQuizQuestion(
     right: prev?.right ?? 0,
     streak: prev?.streak ?? 0,
     bestStreak: prev?.bestStreak ?? 0,
+    keyOnly: prev?.keyOnly ?? true,
+  }
+}
+
+/**
+ * 引擎判定拆解答案：玩家着法与大师不同但引擎同样推荐 → 改判正确（殊途同归）。
+ * 静默失败；仅在问题未变化时生效。
+ */
+async function judgeQuizAlternative(uci: string): Promise<void> {
+  const s = useStore.getState()
+  const quiz = s.masterQuiz
+  if (!quiz || !s.engine || !s.engineReady || s.isThinking) return
+
+  useStore.setState({ masterQuiz: { ...quiz, checking: true } })
+  try {
+    const game = s.game
+    const fen = quiz.ply === 0 ? game.startFen : game.plies[quiz.ply].fenBefore
+    const best = await s.engine.go(fen, [], 10)
+    if (best && best === uci) {
+      const q = useStore.getState().masterQuiz
+      // 问题已切走则不追认
+      if (q && q.ply === quiz.ply && q.status === 'wrong' && q.answered === uci) {
+        useStore.setState({
+          masterQuiz: {
+            ...q,
+            status: 'correct',
+            aiAgree: true,
+            right: q.right + 1,
+            streak: q.streak + 1,
+            bestStreak: Math.max(q.bestStreak, q.streak + 1),
+          },
+        })
+      }
+    }
+  } catch { /* 引擎不可用时静默跳过 */ } finally {
+    const q = useStore.getState().masterQuiz
+    if (q?.checking) useStore.setState({ masterQuiz: { ...q, checking: false } })
   }
 }
 
@@ -1535,8 +1587,11 @@ export const useStore = create<AppState>((set, get) => ({
       const game = recordToGame(rec)
       if (!game || game.plies.length < 40) continue
       get().loadGameObject(game)
-      get().goToPly(0)
-      set({ masterQuiz: makeMasterQuizQuestion(game, 0) })
+      // 关键手模式从第一个关键点开始；全程模式从第 0 手开始
+      const startPly = nextKeyPlyFrom(game, 0)
+      const quizPly = startPly >= 0 ? startPly : 0
+      get().goToPly(quizPly)
+      set({ masterQuiz: makeMasterQuizQuestion(game, quizPly) })
       return
     }
     get().showToast('⚠ 未能生成拆解对局，请重试')
@@ -1551,6 +1606,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...quiz,
         status: correct ? 'correct' : 'wrong',
         answered: uci,
+        aiAgree: undefined,
         asked: quiz.asked + 1,
         right: quiz.right + (correct ? 1 : 0),
         streak: correct ? quiz.streak + 1 : 0,
@@ -1559,12 +1615,19 @@ export const useStore = create<AppState>((set, get) => ({
     })
     // 展示大师的实际着法
     get().goToPly(quiz.ply + 1)
+    // 答错时异步请求引擎判定是否殊途同归
+    if (!correct) void judgeQuizAlternative(uci)
   },
 
   nextQuizPly: () => {
     const { masterQuiz, game } = get()
     if (!masterQuiz) return
-    const nextPly = masterQuiz.ply + 1
+    let nextPly = masterQuiz.ply + 1
+    // 关键手模式跳到下一个吃子/将军点
+    if (masterQuiz.keyOnly && nextPly < game.plies.length) {
+      const keyPly = nextKeyPlyFrom(game, nextPly)
+      if (keyPly >= 0) nextPly = keyPly
+    }
     if (nextPly >= game.plies.length) {
       set({ masterQuiz: { ...masterQuiz, ply: nextPly, options: [], correct: '' } })
       return
@@ -1575,6 +1638,7 @@ export const useStore = create<AppState>((set, get) => ({
         right: masterQuiz.right,
         streak: masterQuiz.streak,
         bestStreak: masterQuiz.bestStreak,
+        keyOnly: masterQuiz.keyOnly,
       }),
     })
     get().goToPly(nextPly)
@@ -1582,6 +1646,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   exitMasterQuiz: () => {
     set({ masterQuiz: null })
+  },
+
+  toggleQuizKeyMode: () => {
+    const { masterQuiz } = get()
+    if (!masterQuiz) return
+    set({ masterQuiz: { ...masterQuiz, keyOnly: !masterQuiz.keyOnly } })
   },
 
   // ══════════════════════════════════════════════════════════════════

@@ -21,6 +21,7 @@ export const MasterQuizPanel: React.FC = () => {
   const nextQuizPly = useStore(s => s.nextQuizPly)
   const exitMasterQuiz = useStore(s => s.exitMasterQuiz)
   const startMasterQuiz = useStore(s => s.startMasterQuiz)
+  const toggleQuizKeyMode = useStore(s => s.toggleQuizKeyMode)
 
   if (!quiz) return null
 
@@ -33,7 +34,14 @@ export const MasterQuizPanel: React.FC = () => {
     <div className="coach-panel">
       <div className="panel-header">
         <h3>🎯 名局拆解</h3>
-        <button className="btn btn-sm" onClick={exitMasterQuiz}>✕ 退出</button>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button className={`btn btn-sm ${quiz.keyOnly ? 'btn-active' : ''}`}
+            title="只考吃子、将军等关键着法；关闭则逐手练习"
+            onClick={toggleQuizKeyMode}>
+            {quiz.keyOnly ? '⚡ 关键手' : '📄 全程'}
+          </button>
+          <button className="btn btn-sm" onClick={exitMasterQuiz}>✕</button>
+        </div>
       </div>
 
       {/* 对局信息 */}
@@ -86,17 +94,25 @@ export const MasterQuizPanel: React.FC = () => {
           {/* 反馈 */}
           {quiz.status !== 'asking' && (
             <div className="coach-section">
-              <div className={`quiz-verdict ${quiz.status}`}>
-                {quiz.status === 'correct' ? '✓ 正确！大师也是这么走的' : '✗ 不是这手'}
-              </div>
-              {quiz.status === 'wrong' && quiz.answered && (
+              {quiz.aiAgree ? (
+                <div className="quiz-verdict correct">✓ 殊途同归！AI 也推荐这手棋</div>
+              ) : quiz.status === 'correct' ? (
+                <div className="quiz-verdict correct">✓ 正确！大师也是这么走的</div>
+              ) : quiz.checking ? (
+                <div className="quiz-verdict wrong">⏳ AI 判定中…</div>
+              ) : (
+                <div className="quiz-verdict wrong">✗ 不是这手</div>
+              )}
+              {quiz.status === 'wrong' && !quiz.aiAgree && quiz.answered && (
                 <div className="coach-desc">
                   你的选择: {chineseFromFen(fen, quiz.answered)}
                 </div>
               )}
-              <div className="coach-desc" style={{ marginTop: 4 }}>
-                大师实战: <b>{chineseFromFen(fen, quiz.correct)}</b>（已在棋盘上演示）
-              </div>
+              {quiz.status === 'wrong' && !quiz.checking && (
+                <div className="coach-desc" style={{ marginTop: 4 }}>
+                  大师实战: <b>{chineseFromFen(fen, quiz.correct)}</b>（已在棋盘上演示）
+                </div>
+              )}
               <button className="btn btn-primary" style={{ width: '100%', marginTop: 6 }}
                 onClick={nextQuizPly}>
                 下一手 →

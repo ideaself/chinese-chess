@@ -59,8 +59,14 @@ describe('大数据开局书', () => {
   })
 
   it('全部低于阈值时兜底返回第一条', () => {
-    _setBookDataForTest(book)
-    expect(getBookMove(['y1y2'])).toBe('bad1')
+    _setBookDataForTest({
+      maxPly: 10,
+      // key 长度 2 → 红方行棋；两条着法红方得分率都过低 → 过滤后兜底取第一条
+      positions: {
+        'e0e1 f0f1': [{ m: 'bad1', n: 20, wr: 0.3 }, { m: 'bad2', n: 10, wr: 0.2 }],
+      },
+    })
+    expect(getBookMove(['e0e1', 'f0f1'])).toBe('bad1')
   })
 
   it('maxPly 截断', () => {
