@@ -120,8 +120,8 @@ interface AppState {
   } | null
 
   /** 棋谱页子导航（供训练计划等外部跳转） */
-  gamesSubTab: 'list' | 'mistakes' | 'training'
-  setGamesSubTab: (t: 'list' | 'mistakes' | 'training') => void
+  gamesSubTab: 'list' | 'library' | 'mistakes' | 'training'
+  setGamesSubTab: (t: 'list' | 'library' | 'mistakes' | 'training') => void
 
   /** 应用设置（响应式：改皮肤/主题即时生效） */
   settings: AppSettings
@@ -188,6 +188,7 @@ interface AppState {
   // ── 棋谱操作 ──
   saveCurrentGame: () => void
   loadGame: (id: string) => void
+  loadGameObject: (game: Game) => void
   loadFromPGN: (pgn: string) => void
   exportCurrentPGN: () => string
   deleteGameById: (id: string) => void
@@ -761,7 +762,11 @@ export const useStore = create<AppState>((set, get) => ({
     const games = getAllGames()
     const game = games.find(g => g.id === id)
     if (!game) return
+    get().loadGameObject(game)
+  },
 
+  /** 直接载入一个未入存储的棋谱（大师库浏览用，不写 localStorage） */
+  loadGameObject: (game) => {
     const board = boardFromGame(game, game.plies.length)
     set({
       mode: 'replay',

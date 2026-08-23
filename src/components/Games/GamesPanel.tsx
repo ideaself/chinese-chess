@@ -6,6 +6,7 @@
 import React from 'react'
 import { useStore } from '../../store/useStore'
 import { GameList } from '../GameList/GameList'
+import { MasterLibrary } from './MasterLibrary'
 import { MistakeBook } from './MistakeBook'
 import { TrainingPanel } from './TrainingPanel'
 
@@ -16,7 +17,7 @@ export const GamesPanel: React.FC = () => {
   return (
     <div className="games-panel">
       <div className="sub-nav">
-        {([['list', '棋谱'], ['mistakes', '错题本'], ['training', '训练']] as const).map(([t, label]) => (
+        {([['list', '棋谱'], ['library', '大师库'], ['mistakes', '错题本'], ['training', '训练']] as const).map(([t, label]) => (
           <button
             key={t}
             className={`filter-btn ${tab === t ? 'btn-active' : ''}`}
@@ -25,6 +26,7 @@ export const GamesPanel: React.FC = () => {
         ))}
       </div>
       {tab === 'list' && <GameList />}
+      {tab === 'library' && <MasterLibrary />}
       {tab === 'mistakes' && <MistakeBook />}
       {tab === 'training' && <TrainingPanel />}
     </div>

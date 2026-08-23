@@ -13,6 +13,7 @@ import React, { useState, useRef, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Game } from '../../game/model'
 import { parsePGN, splitPGNGames } from '../../game/pgn'
+import { isDhtmlXQText, splitDhtmlXQGames, parseDhtmlXQBlock, parseDhtmlXQText } from '../../game/dhtmlxq'
 import {
   saveGame as storageSaveGame, toggleStar as storageToggleStar,
   exportAllGames, importAllGames, getStorageUsage,
@@ -111,7 +112,9 @@ export const GameList: React.FC = () => {
   const handleImportText = () => {
     if (!importText.trim()) return
     setImportError('')
-    const result = parsePGN(importText)
+    const result = isDhtmlXQText(importText)
+      ? parseDhtmlXQText(importText)
+      : parsePGN(importText)
     if (result.success && result.game) {
       storageSaveGame(result.game)
       refreshSavedGames()
@@ -124,15 +127,19 @@ export const GameList: React.FC = () => {
     }
   }
 
-  /** 导入多局文本并载入最后一局 */
+  /** 导入多局文本并载入最后一局（自动识别 PGN / 东萍 DhtmlXQ 格式） */
   const importGamesText = useCallback((text: string) => {
-    const chunks = splitPGNGames(text)
+    const chunks = isDhtmlXQText(text)
+      ? splitDhtmlXQGames(text)
+      : splitPGNGames(text)
     let imported = 0
     let lastGame: Game | null = null
     let firstError = ''
 
     for (const chunk of chunks) {
-      const result = parsePGN(chunk)
+      const result = isDhtmlXQText(text)
+        ? parseDhtmlXQBlock(chunk)
+        : parsePGN(chunk)
       if (result.success && result.game) {
         storageSaveGame(result.game)
         lastGame = result.game
@@ -269,7 +276,7 @@ export const GameList: React.FC = () => {
           <textarea
             value={importText}
             onChange={e => { setImportText(e.target.value); setImportError('') }}
-            placeholder={'粘贴 PGN 棋谱...\n\n[Event "对局"]\n[Red "红方"]\n[Black "黑方"]\n\n1. 炮二平五 马2进3\n2. 马二进三 ...'}
+            placeholder={'粘贴 PGN 或东萍 DhtmlXQ 棋谱...\n\n[Event "对局"]\n[Red "红方"]\n[Black "黑方"]\n\n1. 炮二平五 马2进3\n2. 马二进三 ...\n\n或 [DhtmlXQ]...[/DhtmlXQ] 块（dpxq.com）'}
             rows={10}
             className="import-textarea"
           />

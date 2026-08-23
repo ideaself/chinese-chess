@@ -366,6 +366,43 @@ const SettingsPanel: React.FC = () => {
           </div>
         </div>
         <div className="settings-group">
+          <h4>AI 教练</h4>
+          <div className="settings-row">
+            <span>API Key</span>
+            <input
+              type="password"
+              className="settings-select"
+              style={{ maxWidth: 180 }}
+              placeholder="sk-...（DeepSeek）"
+              value={settings.aiCoachApiKey || ''}
+              onChange={e => update({ aiCoachApiKey: e.target.value })}
+            />
+          </div>
+          <div className="settings-row">
+            <span>模型</span>
+            <select className="settings-select" value={settings.aiCoachModel || 'deepseek-chat'}
+              onChange={e => update({ aiCoachModel: e.target.value })}>
+              <option value="deepseek-chat">deepseek-chat（V3）</option>
+              <option value="deepseek-reasoner">deepseek-reasoner（R1 推理）</option>
+            </select>
+          </div>
+          <div className="settings-row">
+            <span>接口地址</span>
+            <input
+              type="text"
+              className="settings-select"
+              style={{ maxWidth: 180 }}
+              placeholder="/ai-proxy 或 https://api.deepseek.com"
+              value={settings.aiCoachBaseUrl || '/ai-proxy'}
+              onChange={e => update({ aiCoachBaseUrl: e.target.value })}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+            填入 Key 后，复盘教练面板可向 AI 教练提问。开发模式默认经本地代理转发到 api.deepseek.com；
+            生产/移动端可改为直连地址或自建网关。
+          </div>
+        </div>
+        <div className="settings-group">
           <h4>关于</h4>
           <div className="settings-row">
             <span>版本</span>

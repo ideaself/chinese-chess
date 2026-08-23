@@ -11,6 +11,7 @@ import type { Difficulty } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportGameImage } from '../../game/imageExport'
 import { TriRight } from '../ui/icons'
+import { CoachPanel } from '../Games/CoachPanel'
 
 export const Controls: React.FC = () => {
   const mode = useStore(s => s.mode)
@@ -167,6 +168,9 @@ export const Controls: React.FC = () => {
             URL.revokeObjectURL(url)
           }}>📥 导出 PGN</button>
         </div>
+
+        {/* 教练指导（复盘研习） */}
+        <CoachPanel />
 
         <EngineStatus />
       </div>

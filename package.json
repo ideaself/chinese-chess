@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "node scripts/e2e/run.cjs",
-    "icons": "node scripts/gen-icons.cjs"
+    "icons": "node scripts/gen-icons.cjs",
+    "dpxq": "node scripts/dpxq-convert.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",

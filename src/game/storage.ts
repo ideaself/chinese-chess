@@ -165,6 +165,13 @@ export interface AppSettings {
   theme: 'dark' | 'light'
   /** 对战时自动评估局面（评估条） */
   autoEval: boolean
+  // ── AI 教练（DeepSeek 等 OpenAI 兼容接口）──
+  /** API Key，为空则 AI 教练不可用 */
+  aiCoachApiKey: string
+  /** 接口基础地址；默认走开发代理 /ai-proxy */
+  aiCoachBaseUrl: string
+  /** 模型名 */
+  aiCoachModel: string
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -183,6 +190,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   analysisDepth: 16,
   theme: 'dark',
   autoEval: true,
+  aiCoachApiKey: '',
+  aiCoachBaseUrl: '/ai-proxy',
+  aiCoachModel: 'deepseek-chat',
 }
 
 export function getSettings(): AppSettings {
