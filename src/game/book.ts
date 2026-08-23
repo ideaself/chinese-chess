@@ -1,65 +1,118 @@
 /**
- * 内置开局库
+ * 开局库
  *
- * 覆盖常见首着与主流应对，AI 行棋时优先从库中随机选择，
- * 提升开局质量与多样性；脱离库范围后交由引擎搜索。
+ * 两层数据:
+ *   1. 大数据开局书 public/opening-book.json（scripts/book-gen.mjs 从 dpxq 语料聚合，
+ *      每个局面保留行棋方视角最优的主流着法，附出现次数与红方得分率）
+ *   2. 内置小型定式表（离线兜底，覆盖常见首着）
  *
- * 键 = 已走着法的 UCI 序列（空格分隔），值 = 候选 UCI 着法。
- * 使用前需经走法合法性校验（aiMove 中兜底）。
+ * 查询按行棋方视角过滤得分率过低着法后，按实战频率加权随机，
+ * 兼顾开局强度与多样性；超出库范围交由引擎搜索。
  */
 
-const BOOK: Record<string, string[]> = {
-  // ── 红方首着 ──
-  '': [
-    'h2e2', // 炮二平五（中炮）
-    'c0e2', // 相三进五（飞相局）
-    'c3c4', // 兵七进一（仙人指路）
-    'h0g2', // 马二进三（起马局）
-    'b2d2', // 炮八平六（过宫炮）
-  ],
-
-  // ── 黑方应对 ──
-  'h2e2': [
-    'b9c7', // 马2进3（屏风马）
-    'h7e7', // 炮8平5（顺炮）
-    'c6c5', // 卒3进1
-  ],
-  'c0e2': [
-    'h9g7', // 马8进7
-    'c6c5', // 卒3进1
-  ],
-  'c3c4': [
-    'b7e7', // 炮2平5
-    'c6c5', // 卒3进1（对兵局）
-  ],
-  'h0g2': [
-    'b7c7', // 马2进3
-    'h9g7', // 马8进7
-  ],
-  'b2d2': [
-    'h9g7',
-    'c6c5',
-  ],
-
-  // ── 红方第三着（对屏风马）──
-  'h2e2 b9c7': [
-    'h0g2', // 马二进三
-    'b0c2', // 马八进七
-  ],
-  // ── 红方第三着（对顺炮）──
-  'h2e2 h7e7': [
-    'h0g2',
-    'b0c2',
-  ],
+export interface BookCandidate {
+  /** UCI 着法 */
+  m: string
+  /** 实战出现次数 */
+  n: number
+  /** 红方视角得分率 (红胜+0.5×和)/n */
+  wr: number
 }
+
+interface BookData {
+  generatedAt?: string
+  games?: number
+  maxPly?: number
+  positions: Record<string, BookCandidate[]>
+}
+
+/** 行棋方可接受的最低得分率（避免选到明显吃亏的着法） */
+const MIN_MOVER_SCORE = 0.45
+
+// ── 内置兜底定式（开局书未加载时使用） ───────────────────────────
+
+const BUILTIN_BOOK: Record<string, string[]> = {
+  '': ['h2e2', 'c3c4', 'c0e2', 'h0g2'],
+  'h2e2': ['b9c7', 'h9g7', 'h7e7'],
+  'c0e2': ['h9g7', 'c6c5'],
+  'c3c4': ['b7e7', 'c6c5'],
+  'h0g2': ['b9c7', 'h9g7'],
+  'h2e2 b9c7': ['h0g2', 'b0c2'],
+  'h2e2 h7e7': ['h0g2', 'b0c2'],
+}
+
+const builtinCandidates: Record<string, BookCandidate[]> = Object.fromEntries(
+  Object.entries(BUILTIN_BOOK).map(([k, arr]) => [k, arr.map(m => ({ m, n: 1000, wr: 0.5 }))]),
+)
+
+// ── 大数据开局书加载 ──────────────────────────────────────────────
+
+let bigBook: BookData | null = null
+let loadPromise: Promise<boolean> | null = null
+
+/** 拉取大数据开局书（幂等，失败返回 false 且可重试） */
+export function loadOpeningBook(): Promise<boolean> {
+  if (!loadPromise) {
+    loadPromise = fetch('opening-book.json')
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data: BookData) => {
+        if (data && typeof data.positions === 'object') {
+          bigBook = data
+          return true
+        }
+        return false
+      })
+      .catch(e => {
+        console.warn('开局书加载失败，使用内置定式:', e)
+        loadPromise = null // 允许重试
+        return false
+      })
+  }
+  return loadPromise
+}
+
+export function isBookLoaded(): boolean {
+  return bigBook !== null
+}
+
+// ── 查询 ──────────────────────────────────────────────────────────
 
 /**
  * 查询开局库
  * @param moves 已走着法（UCI 数组）
- * @returns 随机候选着法，或 null（不在库中）
+ * @returns 加权随机候选着法，或 null（不在库中）
  */
 export function getBookMove(moves: string[]): string | null {
-  const candidates = BOOK[moves.join(' ')]
+  const table = bigBook?.positions ?? builtinCandidates
+  if (bigBook && moves.length >= (bigBook.maxPly ?? 10)) return null
+
+  const candidates = table[moves.join(' ')]
   if (!candidates || candidates.length === 0) return null
-  return candidates[Math.floor(Math.random() * candidates.length)]
+
+  const redToMove = moves.length % 2 === 0
+
+  // 行棋方视角过滤（带浮点容差）+ 按频率加权随机
+  const usable = candidates.filter(c =>
+    builtinHas(table, moves.join(' '), c) ||
+      (redToMove ? c.wr : 1 - c.wr) >= MIN_MOVER_SCORE - 1e-9,
+  )
+  const pool = usable.length > 0 ? usable : [candidates[0]]
+
+  const totalWeight = pool.reduce((s, c) => s + Math.sqrt(Math.max(1, c.n)), 0)
+  let roll = Math.random() * totalWeight
+  for (const c of pool) {
+    roll -= Math.sqrt(Math.max(1, c.n))
+    if (roll <= 0) return c.m
+  }
+  return pool[pool.length - 1].m
+}
+
+function builtinHas(table: Record<string, BookCandidate[]>, key: string, c: BookCandidate): boolean {
+  return table === builtinCandidates && builtinCandidates[key]?.some(x => x.m === c.m)
+}
+
+/** 测试辅助：注入数据 */
+export function _setBookDataForTest(data: BookData | null): void {
+  bigBook = data
+  loadPromise = data ? Promise.resolve(true) : null
 }

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "e2e": "node scripts/e2e/run.cjs",
     "icons": "node scripts/gen-icons.cjs",
-    "dpxq": "node scripts/dpxq-convert.mjs"
+    "dpxq": "node scripts/dpxq-convert.mjs",
+    "book": "node scripts/book-gen.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",

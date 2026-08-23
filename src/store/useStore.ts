@@ -34,7 +34,7 @@ import {
 } from '../game/storage'
 import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
-import { getBookMove } from '../game/book'
+import { getBookMove, loadOpeningBook } from '../game/book'
 import { OPENING_LINES } from '../game/openings'
 import { getCachedLibrary, recordToGame } from '../game/masterLibrary'
 import { playMoveSound, playCaptureSound, playCheckSound, resumeAudio, playMoveHaptic, playCheckHaptic, playGameOverHaptic } from '../game/sound'
@@ -469,6 +469,8 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('棋谱存储初始化失败:', e)
     }
     set({ savedGames: getAllGames() })
+    // 大数据开局书后台加载（未就绪时 AI 用内置定式兜底）
+    loadOpeningBook()
     const engine = new PikafishEngine({ depth: DIFFICULTY_DEPTH.medium })
     try {
       await engine.init()
