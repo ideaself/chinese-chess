@@ -8,7 +8,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
-  loadLibrary, getCachedLibrary, recordToGame, recordTitle,
+  loadLibrary, getCachedLibrary, loadMoreGames, hasMoreGames, getLibraryInfo,
+  recordToGame, recordTitle,
   FAMILY_INFO, DEFENSE_INFO,
   aggregateOpeningStats, formatStats,
 } from '../../game/masterLibrary'
@@ -30,14 +31,31 @@ export const MasterLibrary: React.FC = () => {
   const [family, setFamily] = useState<OpeningFamily | 'all'>('all')
   const [query, setQuery] = useState('')
   const [visible, setVisible] = useState(PAGE_SIZE)
+  const [info, setInfo] = useState<{ total: number; loaded: number; source: string } | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
     let alive = true
     loadLibrary()
-      .then(() => { if (alive) setGames(getCachedLibrary() ?? []) })
+      .then(() => { if (alive) { setGames(getCachedLibrary() ?? []); setInfo(getLibraryInfo()) } })
       .catch(e => { if (alive) setError(`棋谱库加载失败: ${e.message}`) })
     return () => { alive = false }
   }, [])
+
+  /** 加载下一分片 */
+  const handleLoadMore = async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    try {
+      await loadMoreGames()
+      setGames(getCachedLibrary() ?? [])
+      setInfo(getLibraryInfo())
+    } catch (e) {
+      showToast(`分片加载失败: ${e instanceof Error ? e.message : e}`)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // 开局体系计数（用于子筛选徽标）
   const familyCounts = useMemo(() => {
@@ -104,7 +122,9 @@ export const MasterLibrary: React.FC = () => {
       <div className="panel-header">
         <h3>大师棋谱库</h3>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#888' }}>共 {games.length} 局</span>
+          <span style={{ fontSize: 12, color: '#888' }}>
+            {info ? `已加载 ${info.loaded}/${info.total} 局` : `共 ${games.length} 局`}
+          </span>
           <button className="btn btn-sm btn-active" title="随机选一局，猜大师的每一步"
             onClick={() => useStore.getState().startMasterQuiz()}>
             🎯 名局拆解
@@ -232,6 +252,13 @@ export const MasterLibrary: React.FC = () => {
         <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
           onClick={() => setVisible(v => v + PAGE_SIZE)}>
           加载更多（剩余 {filtered.length - visible} 局）
+        </button>
+      )}
+      {filtered.length <= visible && hasMoreGames() && (
+        <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
+          disabled={loadingMore}
+          onClick={handleLoadMore}>
+          {loadingMore ? '加载中…' : '加载更多棋谱（下一分片）'}
         </button>
       )}
     </div>

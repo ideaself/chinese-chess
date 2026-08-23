@@ -13,30 +13,61 @@ import type { Game } from './model'
 import type { MasterRecord } from './dhtmlxq'
 import { buildGameFromRecord } from './dhtmlxq'
 
-// ── 数据加载 ──────────────────────────────────────────────────────
+// ── 数据加载（分片懒加载） ────────────────────────────────────────
 
-export interface LibraryPayload {
+export interface LibraryManifest {
   generatedAt: string
   source: string
-  count: number
-  games: MasterRecord[]
+  total: number
+  shardSize: number
+  shards: string[]
 }
 
-let cachePromise: Promise<LibraryPayload> | null = null
+let cachePromise: Promise<void> | null = null
 let cacheGames: LibraryGame[] | null = null
+let manifest: LibraryManifest | null = null
+let loadedShards = 0
 
-/** 懒加载棋谱库（模块级缓存，只请求一次） */
-export function loadLibrary(): Promise<LibraryPayload> {
+/** 懒加载棋谱库：manifest + 首个分片（模块级缓存，只请求一次） */
+export function loadLibrary(): Promise<void> {
   if (!cachePromise) {
-    cachePromise = fetch('master-games.json').then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json() as Promise<LibraryPayload>
-    }).then(payload => {
-      cacheGames = classifyLibrary(payload.games)
-      return payload
-    })
+    cachePromise = (async () => {
+      const m = await fetch('master-games/manifest.json')
+      if (!m.ok) throw new Error(`HTTP ${m.status}`)
+      manifest = await m.json()
+      cacheGames = []
+      await loadShard(0)
+    })()
   }
   return cachePromise
+}
+
+async function loadShard(i: number): Promise<void> {
+  const name = manifest?.shards[i]
+  if (!name) return
+  const res = await fetch(`master-games/${name}`)
+  if (!res.ok) throw new Error(`分片 ${name} 加载失败 (HTTP ${res.status})`)
+  const games = (await res.json()) as MasterRecord[]
+  cacheGames!.push(...games.map(g => ({ ...g, cls: classifyRecord(g) })))
+  loadedShards++
+}
+
+/** 加载下一分片；返回是否还有更多 */
+export async function loadMoreGames(): Promise<boolean> {
+  if (!manifest || loadedShards >= manifest.shards.length) return false
+  await loadShard(loadedShards)
+  return loadedShards < manifest.shards.length
+}
+
+/** 是否还有未加载的分片 */
+export function hasMoreGames(): boolean {
+  return !!manifest && loadedShards < manifest.shards.length
+}
+
+/** 库概况（未加载时返回 null） */
+export function getLibraryInfo(): { total: number; loaded: number; source: string } | null {
+  if (!manifest) return null
+  return { total: manifest.total, loaded: cacheGames?.length ?? 0, source: manifest.source }
 }
 
 /** 同步获取已分类的棋谱（尚未加载时返回 null） */
