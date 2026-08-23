@@ -23,7 +23,7 @@ export interface DpxqParseResult {
   errorPly?: number
 }
 
-/** 大师棋谱库记录（转换脚本产出的精简 JSON 条目） */
+/** 大师棋谱库记录（转换脚本产出的精简 JSON 条目，mv 为应用 UCI 串） */
 export interface MasterRecord {
   /** 东萍 gameid */
   id: number
@@ -39,7 +39,7 @@ export interface MasterRecord {
   b?: string
   /** 结果: 红胜 | 黑胜 | 和棋 | 其他 */
   res?: string
-  /** movelist 原始串 */
+  /** 着法串（UCI 连写，如 "h2e2h9g7..."） */
   mv: string
 }
 
@@ -83,10 +83,11 @@ export function dpxqPairToUci(s: string, i: number): string {
 
 /**
  * 由大师棋谱库记录构建完整 Game（逐步验证合法性并生成中文记谱）
+ * rec.mv 为 UCI 连写串（转换脚本已从 dpxq 坐标转出）
  */
 export function buildGameFromRecord(rec: MasterRecord): DpxqParseResult {
   const mv = rec.mv || ''
-  if (!mv || mv.length % 4 !== 0 || /[^0-9]/.test(mv)) {
+  if (!mv || mv.length % 4 !== 0 || /[^a-i0-9]/.test(mv)) {
     return { success: false, error: '着法序列无效或为空' }
   }
 
@@ -109,10 +110,14 @@ export function buildGameFromRecord(rec: MasterRecord): DpxqParseResult {
 
   let currentFen = START_FEN
   for (let i = 0; i < mv.length; i += 4) {
-    const uci = dpxqPairToUci(mv, i)
-    const state = boardFromFen(currentFen)
+    const uci = mv.slice(i, i + 4)
     const from = { col: uci.charCodeAt(0) - 97, row: parseInt(uci[1]) }
     const to = { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) }
+    if (from.col < 0 || from.col > 8 || isNaN(from.row) || from.row < 0 || from.row > 9 ||
+        to.col < 0 || to.col > 8 || isNaN(to.row) || to.row < 0 || to.row > 9) {
+      return { success: false, error: `第 ${game.plies.length + 1} 步 "${uci}" 坐标越界`, errorPly: game.plies.length + 1 }
+    }
+    const state = boardFromFen(currentFen)
     const legal = getLegalMoves(state, from.col, from.row)
     if (!legal.some(m => m.col === to.col && m.row === to.row)) {
       return {
@@ -143,6 +148,15 @@ export function parseDhtmlXQBlock(block: string): DpxqParseResult {
     return { success: false, error: '缺少 movelist 字段' }
   }
 
+  // 原始 dpxq 坐标 movelist → UCI 连写
+  let mvUci = ''
+  for (let i = 0; i < f.movelist.length; i += 4) {
+    if (i + 4 > f.movelist.length || /[^0-9]/.test(f.movelist.slice(i, i + 4))) {
+      return { success: false, error: 'movelist 着法编码无效' }
+    }
+    mvUci += dpxqPairToUci(f.movelist, i)
+  }
+
   return buildGameFromRecord({
     id: parseInt(f.gameid || '0', 10) || 0,
     t: f.title,
@@ -151,7 +165,7 @@ export function parseDhtmlXQBlock(block: string): DpxqParseResult {
     r: f.red,
     b: f.black,
     res: f.result,
-    mv: f.movelist,
+    mv: mvUci,
   })
 }
 

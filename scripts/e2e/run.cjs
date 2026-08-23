@@ -58,7 +58,11 @@ function http_get(url) {
 }
 
 async function main() {
-  const suites = ['core', 'training', 'rating'].map(f => require(path.join(__dirname, `${f}.cjs`)))
+  // 可用 E2E_SUITES=core,master 选择性运行
+  const wanted = (process.env.E2E_SUITES || '').split(',').map(s => s.trim()).filter(Boolean)
+  const suites = ['core', 'training', 'rating', 'master']
+    .filter(f => wanted.length === 0 || wanted.includes(f))
+    .map(f => require(path.join(__dirname, `${f}.cjs`)))
   const procs = []
 
   // 1. preview server

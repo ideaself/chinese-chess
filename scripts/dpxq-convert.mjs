@@ -93,6 +93,16 @@ function extractField(text, name) {
   return m ? m[1].trim() : ''
 }
 
+/** dpxq 坐标串 → 应用 UCI 串（每 4 字符一组，col=x, row=9-y） */
+function toUciMv(mv) {
+  let out = ''
+  for (let i = 0; i < mv.length; i += 4) {
+    out += String.fromCharCode(97 + (mv.charCodeAt(i) - 48)) + (9 - (mv.charCodeAt(i + 1) - 48)) +
+      String.fromCharCode(97 + (mv.charCodeAt(i + 2) - 48)) + (9 - (mv.charCodeAt(i + 3) - 48))
+  }
+  return out
+}
+
 function parseFile(path) {
   let text
   try {
@@ -114,7 +124,8 @@ function parseFile(path) {
     r: extractField(text, 'red') || undefined,
     b: extractField(text, 'black') || undefined,
     res: extractField(text, 'result') || undefined,
-    ...converted,
+    mv: toUciMv(converted.mv), // 统一输出 UCI，供分类器与对局构建直接使用
+    eg: converted.eg,
   }
 }
 
@@ -133,11 +144,15 @@ try {
 
 mkdirSync(OUT_DIR, { recursive: true })
 
-// 增量状态：{ [文件名]: { mtime, size, rec } }，rec 为解析结果（null 表示无效文件）
-let state = { files: {} }
+// 增量状态：{ v, files: { [文件名]: { mtime, size, rec } } }
+// v=2: rec.mv 为 UCI 格式（v1 为 dpxq 坐标，不兼容则弃用缓存）
+const STATE_VERSION = 2
+let state = null
 try {
-  state = JSON.parse(readFileSync(STATE_FILE, 'utf-8'))
+  const raw = JSON.parse(readFileSync(STATE_FILE, 'utf-8'))
+  if (raw && raw.v === STATE_VERSION) state = raw
 } catch { /* 首次运行 */ }
+if (!state) state = { v: STATE_VERSION, files: {} }
 
 const records = []
 let scanned = 0, fromCache = 0, reparsed = 0, invalid = 0, dupIds = new Set(), dupGames = 0

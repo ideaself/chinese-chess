@@ -78,11 +78,25 @@ describe('异常输入', () => {
     expect(buildGameFromRecord({ id: 1, mv: '' }).success).toBe(false)
   })
 
-  it('非法着法报错并给出版本号', () => {
-    // 红帅从 e0 直接到 c0 不合法
-    const r = buildGameFromRecord({ id: 1, mv: '4020' }) // (4,0)->(2,0): 帅横移穿仕
+  it('非法着法报错并给出步号', () => {
+    // 红帅从 e0 直跳 e2 不合法
+    const r = buildGameFromRecord({ id: 1, mv: 'e0e2' })
     expect(r.success).toBe(false)
     expect(r.errorPly).toBe(1)
+  })
+
+  it('坐标越界安全报错（非 UCI 输入）', () => {
+    const r = buildGameFromRecord({ id: 1, mv: '4020' })
+    expect(r.success).toBe(false)
+  })
+
+  it('dpxq 块内 movelist 自动转 UCI', () => {
+    // 块内原始 dpxq 坐标 7747 = 炮二平五
+    const block = `[DhtmlXQ_binit][/DhtmlXQ_binit][DhtmlXQ_movelist]77477062[/DhtmlXQ_movelist]`
+    const r = parseDhtmlXQBlock(block)
+    expect(r.success).toBe(true)
+    expect(r.game!.plies[0].move).toBe('h2e2')
+    expect(r.game!.plies[1].moveCn).toBe('马8进7')
   })
 
   it('无 DhtmlXQ 块的文本报错', () => {

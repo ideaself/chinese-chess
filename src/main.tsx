@@ -2,9 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import { useStore } from './store/useStore'
+import { getLegalMoves } from './game/rules'
 
 // 暴露 store 供调试/自动化测试使用
 ;(window as any).__store = useStore
+;(window as any).__getLegalMoves = getLegalMoves
 
 // PWA: 仅生产环境注册 Service Worker（离线缓存）
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

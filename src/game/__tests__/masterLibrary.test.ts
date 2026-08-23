@@ -2,6 +2,8 @@
  * 大师棋谱库分类测试
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
 import { classifyRecord, classifyLibrary } from '../masterLibrary'
 
 function rec(mv: string, eg = 0) {
@@ -63,4 +65,24 @@ describe('classifyLibrary 批量', () => {
     expect(out[0].cls.family).toBe('zhongpao')
     expect(out[0].r).toBe('红方')
   })
+})
+
+describe('真实分片数据回归（防 dpxq/UCI 格式错配）', () => {
+  it('生成的分片为 UCI 且开局分类非全部 other', () => {
+    const shard = join(process.cwd(), 'public', 'master-games', 'shard_0.json')
+    if (!existsSync(shard)) {
+      console.warn('跳过：分片未生成')
+      return
+    }
+    const games = JSON.parse(readFileSync(shard, 'utf-8'))
+    expect(games.length).toBeGreaterThan(100)
+    // mv 必须是 UCI 连写
+    for (const g of games.slice(0, 50)) {
+      expect(g.mv).toMatch(/^[a-i][0-9]([a-i][0-9])+$/)
+    }
+    const cls = classifyLibrary(games)
+    const others = cls.filter(g => g.cls.family === 'other').length
+    // 真实大师对局绝大多数可识别布局；若格式错配会 100% other
+    expect(others / cls.length).toBeLessThan(0.3)
+  }, 30000)
 })
