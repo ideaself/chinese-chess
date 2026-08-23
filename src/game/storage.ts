@@ -1,7 +1,10 @@
 /**
  * 棋谱存储层
  *
- * 使用 localStorage 持久化棋谱。
+ * 使用 IndexedDB 持久化棋谱（容量远超 localStorage 的 5MB 限制），
+ * 对外保持同步 API：启动时由 initGameStorage() 把数据载入内存镜像，
+ * 写操作同步更新内存、异步落库。
+ * 首次运行自动迁移 localStorage 中的旧棋谱。
  * 遵循计划文档第7.1节：每盘人机对战结束后自动保存。
  */
 
@@ -10,36 +13,150 @@ import type { Game } from '../game/model'
 const STORAGE_KEY = 'xiangqi_games'
 const SETTINGS_KEY = 'xiangqi_settings'
 
-// ── 棋谱存储 ──────────────────────────────────────────────────────
+// ── IndexedDB 基础 ────────────────────────────────────────────────
 
-/** 获取所有棋谱 */
-export function getAllGames(): Game[] {
+const DB_NAME = 'xiangqi'
+const DB_VERSION = 1
+const GAMES_STORE = 'games'
+
+let dbPromise: Promise<IDBDatabase> | null = null
+/** 内存镜像；initGameStorage 后可用 */
+let memoryGames: Game[] | null = null
+/** 容量配额（init 时通过 storage.estimate 校正） */
+let quotaBytes = 250 * 1024 * 1024
+/** IndexedDB 是否可用（不可用时回退 localStorage） */
+let idbBroken = false
+
+function openDB(): Promise<IDBDatabase> {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(GAMES_STORE)) {
+          db.createObjectStore(GAMES_STORE, { keyPath: 'id' })
+        }
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error ?? new Error('IndexedDB 打开失败'))
+    })
+  }
+  return dbPromise
+}
+
+function reqAsPromise<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error ?? new Error('IndexedDB 请求失败'))
+  })
+}
+
+async function idbPut(game: Game): Promise<void> {
+  const db = await openDB()
+  await reqAsPromise(db.transaction(GAMES_STORE, 'readwrite').objectStore(GAMES_STORE).put(game))
+}
+
+async function idbDelete(id: string): Promise<void> {
+  const db = await openDB()
+  await reqAsPromise(db.transaction(GAMES_STORE, 'readwrite').objectStore(GAMES_STORE).delete(id))
+}
+
+async function idbLoadAll(): Promise<Game[]> {
+  const db = await openDB()
+  const games = await reqAsPromise<Game[]>(db.transaction(GAMES_STORE).objectStore(GAMES_STORE).getAll())
+  // 新棋谱在前（与旧 localStorage unshift 行为一致）
+  return games.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** 旧 localStorage 数据读取（迁移源 / IDB 不可用时的回退） */
+function readLegacy(): Game[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    return JSON.parse(raw)
+    const games = JSON.parse(raw)
+    return Array.isArray(games) ? games : []
   } catch {
     return []
   }
 }
 
-/** 保存棋谱（返回是否成功，失败多为容量超限） */
-export function saveGame(game: Game): boolean {
-  const games = getAllGames()
-  const idx = games.findIndex(g => g.id === game.id)
-  if (idx >= 0) {
-    games[idx] = game
-  } else {
-    games.unshift(game) // 新棋谱放最前面
-  }
+/** 内存镜像写回兜底：IDB 故障时尽量写入 localStorage */
+function fallbackPersist(): void {
+  if (!idbBroken) return
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
-    return true
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryGames ?? []))
+  } catch { /* 空间超限则放弃 */ }
+}
+
+/**
+ * 初始化存储：加载数据到内存并迁移旧数据。
+ * 必须在首次调用 getAllGames 前 await 完成。
+ */
+export async function initGameStorage(): Promise<void> {
+  if (memoryGames) return
+  let loaded: Game[] | null = null
+  try {
+    loaded = await idbLoadAll()
   } catch (e) {
-    // 容量超限：回滚内存外不做持久化，由调用方提示用户备份/清理
-    console.error('保存棋谱失败（可能超出存储容量）:', e)
-    return false
+    console.warn('IndexedDB 不可用，回退 localStorage:', e)
+    idbBroken = true
+    dbPromise = null
   }
+
+  if (loaded && loaded.length === 0) {
+    // 首次使用 IndexedDB：迁移 localStorage 旧棋谱
+    const legacy = readLegacy()
+    if (legacy.length > 0) {
+      loaded = legacy
+      try {
+        const db = await openDB()
+        const tx = db.transaction(GAMES_STORE, 'readwrite')
+        const store = tx.objectStore(GAMES_STORE)
+        for (const g of legacy) store.put(g)
+        await new Promise<void>((resolve, reject) => {
+          tx.oncomplete = () => resolve()
+          tx.onerror = () => reject(tx.error ?? new Error('迁移失败'))
+        })
+        console.log(`已从 localStorage 迁移 ${legacy.length} 局棋谱到 IndexedDB`)
+      } catch (e) {
+        console.warn('迁移旧棋谱失败:', e)
+      }
+    }
+  }
+
+  memoryGames = loaded ?? readLegacy()
+
+  // 校正容量配额
+  try {
+    const est = await navigator.storage?.estimate?.()
+    if (est?.quota && est.quota > 0) quotaBytes = est.quota
+  } catch { /* 保持默认估值 */ }
+}
+
+// ── 棋谱存储（同步 API，内存镜像） ───────────────────────────────
+
+/** 获取所有棋谱 */
+export function getAllGames(): Game[] {
+  return memoryGames ?? []
+}
+
+/** 保存棋谱（内存即时生效，异步落库） */
+export function saveGame(game: Game): boolean {
+  if (!memoryGames) memoryGames = []
+  const idx = memoryGames.findIndex(g => g.id === game.id)
+  if (idx >= 0) {
+    memoryGames[idx] = game
+  } else {
+    memoryGames.unshift(game) // 新棋谱放最前面
+  }
+  if (!idbBroken) {
+    idbPut(game).catch(e => {
+      console.error('棋谱写入 IndexedDB 失败:', e)
+    })
+  } else {
+    fallbackPersist()
+  }
+  return true
 }
 
 // ── 备份 / 恢复 / 容量 ────────────────────────────────────────────
@@ -64,18 +181,25 @@ export function importAllGames(json: string): number {
     const data = JSON.parse(json)
     const incoming: Game[] = Array.isArray(data) ? data : data.games
     if (!Array.isArray(incoming)) return 0
-    const existing = getAllGames()
-    const ids = new Set(existing.map(g => g.id))
+    if (!memoryGames) memoryGames = []
+    const ids = new Set(memoryGames.map(g => g.id))
     let added = 0
     for (const g of incoming) {
       if (!g?.id || !Array.isArray(g.plies)) continue
       if (ids.has(g.id)) continue // 已存在跳过
-      existing.unshift(g)
+      memoryGames.unshift(g)
       ids.add(g.id)
       added++
     }
     if (added > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(existing))
+      if (!idbBroken) {
+        for (const g of incoming) {
+          if (!g?.id || !Array.isArray(g.plies)) continue
+          idbPut(g).catch(() => {})
+        }
+      } else {
+        fallbackPersist()
+      }
     }
     return added
   } catch (e) {
@@ -86,28 +210,36 @@ export function importAllGames(json: string): number {
 
 /** 当前棋谱库占用估算 */
 export function getStorageUsage(): { bytes: number; games: number; limitBytes: number } {
-  const raw = localStorage.getItem(STORAGE_KEY) ?? '[]'
+  const raw = JSON.stringify(memoryGames ?? [])
   return {
     bytes: raw.length * 2, // UTF-16 粗略估算
-    games: getAllGames().length,
-    limitBytes: 5 * 1024 * 1024,
+    games: (memoryGames ?? []).length,
+    limitBytes: quotaBytes,
   }
 }
 
 /** 删除棋谱 */
 export function deleteGame(id: string): void {
-  const games = getAllGames().filter(g => g.id !== id)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+  memoryGames = (memoryGames ?? []).filter(g => g.id !== id)
+  if (!idbBroken) {
+    idbDelete(id).catch(e => console.error('删除棋谱失败:', e))
+  } else {
+    fallbackPersist()
+  }
 }
 
 /** 切换收藏 */
 export function toggleStar(id: string): void {
-  const games = getAllGames()
-  const game = games.find(g => g.id === id)
+  const game = (memoryGames ?? []).find(g => g.id === id)
   if (game) {
     game.starred = !game.starred
     game.updatedAt = Date.now()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(games))
+    // 置顶新收藏（与旧行为一致：列表按数组顺序展示）
+    if (!idbBroken) {
+      idbPut(game).catch(() => {})
+    } else {
+      fallbackPersist()
+    }
   }
 }
 

@@ -30,7 +30,7 @@ import {
 import { parsePGN, exportPGN } from '../game/pgn'
 import {
   saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
-  deleteGame as storageDeleteGame,
+  deleteGame as storageDeleteGame, initGameStorage,
 } from '../game/storage'
 import type { AppSettings } from '../game/storage'
 import { PikafishEngine } from '../engine/pikafish'
@@ -462,6 +462,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   init: async () => {
     resumeAudio()
+    // 先载入棋谱存储（IndexedDB → 内存镜像）
+    try {
+      await initGameStorage()
+    } catch (e) {
+      console.error('棋谱存储初始化失败:', e)
+    }
+    set({ savedGames: getAllGames() })
     const engine = new PikafishEngine({ depth: DIFFICULTY_DEPTH.medium })
     try {
       await engine.init()
@@ -469,7 +476,6 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e) {
       console.error('引擎初始化失败:', e)
     }
-    set({ savedGames: getAllGames() })
   },
 
   // ══════════════════════════════════════════════════════════════════
