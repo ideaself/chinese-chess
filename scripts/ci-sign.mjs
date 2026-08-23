@@ -17,7 +17,7 @@
  * 未配置 Secrets 时仅注入版本号并跳过正式签名（退出码 0），由工作流回退 debug 构建。
  */
 
-import { writeFileSync, readFileSync, existsSync } from 'fs'
+import { writeFileSync, readFileSync, existsSync, cpSync } from 'fs'
 import { join } from 'path'
 
 // ── 0. 版本号注入（与签名无关，总是执行） ──────────────────────────
@@ -30,6 +30,16 @@ const androidDir0 = join(process.cwd(), 'android')
 if (!existsSync(androidDir0)) {
   console.error('[ci-sign] android 目录不存在，请先执行 cap add android')
   process.exit(1)
+}
+
+// ── 自定义启动图标回填 ─────────────────────────────────────────────
+// android/ 不入库，图标产物随仓库 resources/icons/ 分发（npm run icons 生成的拷贝）
+{
+  const iconsSrc = join(process.cwd(), 'resources', 'icons')
+  if (existsSync(iconsSrc)) {
+    cpSync(iconsSrc, join(androidDir0, 'app', 'src', 'main', 'res'), { recursive: true })
+    console.log('[ci-sign] 已回填自定义启动图标')
+  }
 }
 
 const gradlePath0 = join(androidDir0, 'app', 'build.gradle')

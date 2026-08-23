@@ -64,10 +64,16 @@ jobs:
           fi
 
       - name: 整理产物
-        # 注意: Release 资产名保持 ASCII（action-gh-release 会丢弃非 ASCII 文件名）
+        # 优先用仓库 releases/ 内本地构建的正式签名 APK（图标/签名与已验证版本一致）；
+        # CI 构建仅作编译与测试验证，缺失时才回退 CI 产物（debug 签名）。
+        # 注意: 资产名保持 ASCII（action-gh-release 会丢弃非 ASCII 文件名）
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
+          if [ -f "releases/中国象棋-v${VERSION}.apk" ]; then
+            cp "releases/中国象棋-v${VERSION}.apk" "apk-out/chinese-chess-v${VERSION}.apk"
+          else
+            mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
+          fi
 
       - name: 创建 GitHub Release 并上传 APK
         if: startsWith(github.ref, 'refs/tags/v')
