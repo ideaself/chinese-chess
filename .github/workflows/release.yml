@@ -70,6 +70,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -f "releases/中国象棋-v${VERSION}.apk" ]; then
+            rm -f apk-out/app.apk   # 避免通配符把中间产物也上传
             cp "releases/中国象棋-v${VERSION}.apk" "apk-out/chinese-chess-v${VERSION}.apk"
           else
             mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
