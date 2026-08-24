@@ -7,7 +7,7 @@
  * 生产环境由 main.tsx 注册；更新机制: 版本号变更后旧缓存清理。
  */
 
-const CACHE = 'xiangqi-cache-v1'
+const CACHE = 'xiangqi-cache-v0.0.0' // 构建时由 scripts/bump-sw.cjs 注入版本
 
 self.addEventListener('install', (e) => {
   self.skipWaiting()

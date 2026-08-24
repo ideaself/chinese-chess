@@ -20,6 +20,7 @@ import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
 import { getSettings } from './game/storage'
+import { uploadBackup, downloadBackup, getLastSync } from './game/webdav'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
 import { resumeAudio } from './game/sound'
@@ -460,6 +461,7 @@ const SettingsPanel: React.FC = () => {
             生产/移动端可改为直连地址或自建网关。
           </div>
         </div>
+        <CloudSyncSection settings={settings} update={update} />
         <div className="settings-group">
           <h4>关于</h4>
           <div className="settings-row">
@@ -471,6 +473,93 @@ const SettingsPanel: React.FC = () => {
             <span style={{ color: '#888' }}>Pikafish WASM</span>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** 云同步（WebDAV）：凭据配置 + 上传/下载全量备份 */
+const CloudSyncSection: React.FC<{
+  settings: AppSettings
+  update: (patch: Partial<AppSettings>) => void
+}> = ({ settings, update }) => {
+  const showToast = useStore(s => s.showToast)
+  const refreshSavedGames = useStore(s => s.refreshSavedGames)
+  const [busy, setBusy] = useState<'upload' | 'download' | null>(null)
+  const cred: { url: string; user: string; password: string } = {
+    url: settings.webdavUrl || '',
+    user: settings.webdavUser || '',
+    password: settings.webdavPassword || '',
+  }
+  const configured = !!(cred.url && cred.user && cred.password)
+  const lastSync = getLastSync()
+
+  const run = async (kind: 'upload' | 'download') => {
+    if (!configured) { showToast('请先填写 WebDAV 地址 / 账号 / 密码'); return }
+    setBusy(kind)
+    const result = kind === 'upload' ? await uploadBackup(cred) : await downloadBackup(cred)
+    setBusy(null)
+    if (result.ok) {
+      refreshSavedGames()
+      showToast('☁ ' + result.message)
+    } else {
+      showToast('⚠ ' + result.message)
+    }
+  }
+
+  return (
+    <div className="settings-group">
+      <h4>云同步（WebDAV）</h4>
+      <div className="settings-row">
+        <span>地址</span>
+        <input
+          type="text"
+          className="settings-select"
+          style={{ maxWidth: 180 }}
+          placeholder="https://dav.jianguoyun.com/dav/xiangqi"
+          value={cred.url}
+          onChange={e => update({ webdavUrl: e.target.value })}
+        />
+      </div>
+      <div className="settings-row">
+        <span>账号</span>
+        <input
+          type="text"
+          className="settings-select"
+          style={{ maxWidth: 180 }}
+          placeholder="WebDAV 账号"
+          value={cred.user}
+          onChange={e => update({ webdavUser: e.target.value })}
+        />
+      </div>
+      <div className="settings-row">
+        <span>密码</span>
+        <input
+          type="password"
+          className="settings-select"
+          style={{ maxWidth: 180 }}
+          placeholder="密码 / 应用密码"
+          value={cred.password}
+          onChange={e => update({ webdavPassword: e.target.value })}
+        />
+      </div>
+      <div className="settings-row" style={{ gap: 8 }}>
+        <button className="btn btn-sm btn-primary" disabled={!configured || busy !== null}
+          onClick={() => void run('upload')}>
+          {busy === 'upload' ? '⏳ 上传中…' : '☁ 备份到云端'}
+        </button>
+        <button className="btn btn-sm" disabled={!configured || busy !== null}
+          onClick={() => void run('download')}>
+          {busy === 'download' ? '⏳ 恢复中…' : '⬇ 从云端恢复'}
+        </button>
+        <span style={{ fontSize: 12, color: '#888' }}>
+          {lastSync ? `上次同步 ${new Date(lastSync).toLocaleString()}` : '未同步过'}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+        全量备份（棋谱/设置/战绩/错题本/棋力分）上传为 xiangqi-backup.json；
+        恢复为合并语义，不覆盖本机已有数据。坚果云等支持 WebDAV 的网盘均可，
+        推荐使用应用密码。凭据仅保存在本机。
       </div>
     </div>
   )
