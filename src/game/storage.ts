@@ -579,13 +579,6 @@ export interface AppSettings {
   aiCoachBaseUrl: string
   /** 模型名 */
   aiCoachModel: string
-  // ── 云同步（WebDAV，坚果云等）──
-  /** WebDAV 地址（目录），如 https://dav.jianguoyun.com/dav/xiangqi */
-  webdavUrl: string
-  /** WebDAV 账号 */
-  webdavUser: string
-  /** WebDAV 密码/应用密码 */
-  webdavPassword: string
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -607,9 +600,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   aiCoachApiKey: '',
   aiCoachBaseUrl: '/ai-proxy',
   aiCoachModel: 'deepseek-chat',
-  webdavUrl: '',
-  webdavUser: '',
-  webdavPassword: '',
 }
 
 export function getSettings(): AppSettings {
