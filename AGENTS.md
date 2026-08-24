@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.7.0（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.11.0（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess/data/raw/dpxq_master/` 东萍棋谱语料（持续下载中，~11万局）
 
