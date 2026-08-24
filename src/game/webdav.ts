@@ -113,22 +113,46 @@ function readable(e: unknown): SyncResult {
   return { ok: false, message: e instanceof Error ? e.message : String(e) }
 }
 
-/** 逐级创建目录；405（已存在）视为成功 */
+/**
+ * 确保目录存在：
+ * 先对完整目录做一次 MKCOL（多数网盘父目录已存在，直接成功）；
+ * 返回 409（父级缺失）时再从浅到深逐级补建；405 = 已存在忽略。
+ * 其余状态抛错并携带 URL，便于排查地址填写问题。
+ */
 async function ensureCollection(cred: WebdavCred): Promise<void> {
-  const segments = collectionPath(cred).split('/').filter(Boolean)
-  let pathAcc = ''
-  for (const seg of segments) {
-    pathAcc += '/' + seg
-    try {
-      const r = await wdRaw(cred, 'MKCOL', backupOrigin(cred) + pathAcc)
-      if (!r.ok && r.status !== 405) {
-        throw new Error(`创建目录失败 (HTTP ${r.status})`)
+  const full = collectionPath(cred)
+  const whole = await mkcolTolerant(cred, full)
+  if (whole === null) return // 成功或已存在
+
+  if (whole.status === 409) {
+    const segments = full.split('/').filter(Boolean)
+    let pathAcc = ''
+    for (const seg of segments) {
+      pathAcc += '/' + seg
+      const r = await mkcolTolerant(cred, pathAcc)
+      if (r !== null) {
+        throw new Error(`创建目录失败 (HTTP ${r.status})：${backupOrigin(cred)}${pathAcc}`)
       }
-    } catch (e) {
-      if (e instanceof TypeError && e.message.startsWith(FETCH_FAILED)) throw e
-      if (e instanceof TypeError) throw new TypeError(FETCH_FAILED)
-      throw e
     }
+    return
+  }
+
+  throw new Error(
+    `创建目录失败 (HTTP ${whole.status})：${backupOrigin(cred)}${full}` +
+    (whole.status === 403 ? '（无权限，检查账号/应用密码）' : whole.status === 404 ? '（地址路径不存在，确认 WebDAV 地址格式）' : ''),
+  )
+}
+
+/** 执行 MKCOL；2xx/405 返回 null（视为成功），其余返回响应 */
+async function mkcolTolerant(cred: WebdavCred, path: string): Promise<WdResponse | null> {
+  try {
+    const r = await wdRaw(cred, 'MKCOL', backupOrigin(cred) + path)
+    if (r.ok || r.status === 405) return null
+    return r
+  } catch (e) {
+    if (e instanceof TypeError && e.message.startsWith(FETCH_FAILED)) throw e
+    if (e instanceof TypeError) throw new TypeError(FETCH_FAILED)
+    throw e
   }
 }
 
@@ -144,7 +168,7 @@ export async function uploadBackup(cred: WebdavCred): Promise<SyncResult> {
     const json = exportFullBackup()
     const r = await wdRaw(cred, 'PUT', backupUrl(cred), json)
     if (!r.ok && r.status !== 201 && r.status !== 204) {
-      return { ok: false, message: `上传失败 (HTTP ${r.status})${r.status === 401 ? '：账号或密码错误' : ''}` }
+      return { ok: false, message: `上传失败 (HTTP ${r.status})：${backupUrl(cred)}${r.status === 401 ? '（账号或密码错误）' : r.status === 404 ? '（目录不存在）' : ''}` }
     }
     markLastSync()
     return { ok: true, message: `已备份到云端（${(json.length / 1024).toFixed(0)} KB）` }
@@ -159,7 +183,7 @@ export async function downloadBackup(cred: WebdavCred): Promise<SyncResult> {
     const r = await wdRaw(cred, 'GET', backupUrl(cred))
     if (r.status === 404) return { ok: false, message: '云端暂无备份' }
     if (!r.ok) {
-      return { ok: false, message: `下载失败 (HTTP ${r.status})${r.status === 401 ? '：账号或密码错误' : ''}` }
+      return { ok: false, message: `下载失败 (HTTP ${r.status})：${backupUrl(cred)}${r.status === 401 ? '（账号或密码错误）' : ''}` }
     }
     const s = importFullBackup(r.text)
     const parts = [
