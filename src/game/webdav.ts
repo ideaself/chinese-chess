@@ -183,7 +183,13 @@ export async function uploadBackup(cred: WebdavCred): Promise<SyncResult> {
       }
     }
     if (!r.ok && r.status !== 201 && r.status !== 204) {
-      return { ok: false, message: `上传失败 (HTTP ${r.status})：${backupUrl(cred)}${r.status === 401 ? '（账号或密码错误）' : r.status === 404 ? '（目录不存在，尝试在地址末尾加子目录，如 http://…:8080/xiangqi）' : ''}` }
+      const hints: Record<number, string> = {
+        401: '账号或密码错误',
+        403: '服务器拒绝写入',
+        404: '目录不存在，尝试在地址末尾加子目录',
+        405: '服务器不允许写入——若用 rclone serve webdav，请检查是否带了 --read-only 或后端不支持上传',
+      }
+      return { ok: false, message: `上传失败 (HTTP ${r.status})：${backupUrl(cred)}${hints[r.status] ? '（' + hints[r.status] + '）' : ''}` }
     }
     markLastSync()
     return { ok: true, message: `已备份到云端（${(json.length / 1024).toFixed(0)} KB）` }
