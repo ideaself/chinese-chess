@@ -1215,3 +1215,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   border-color: rgba(61, 43, 0, 0.35);
   color: #3d2b00;
 }
+
+/* AI 教练思考过程预览 */
+.coach-bubble.coach-thinking {
+  opacity: 0.65;
+  font-style: italic;
+  font-size: 12px;
+}

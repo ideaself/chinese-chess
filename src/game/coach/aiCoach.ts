@@ -51,23 +51,33 @@ const SYSTEM_PROMPT = `你是一位资深中国象棋高级教练，擅长指导
 - 回答简洁有条理，控制在 300 字以内，先总评再给建议
 - 若学生问的是刚走过的着法，点评其优劣并说明更好的选择`
 
-/** 调用 AI 教练；传入 onDelta 时使用流式输出（SSE，逐段回调累计文本）；失败抛出异常。
+/** 调用 AI 教练；hooks.onDelta 流式输出回答，hooks.onReasoning 流式输出思考过程
+ *  （deepseek-reasoner 先思考后作答）。失败抛出异常。
  *  history 为多轮对话上下文（不含本轮提问），自动截取最近 6 条。 */
 export async function askCoach(
   ctx: CoachContext,
   question: string,
-  onDelta?: (fullText: string) => void,
+  hooks: {
+    onDelta?: (fullText: string) => void
+    onReasoning?: (fullReasoning: string) => void
+  } = {},
   history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
 ): Promise<string> {
   const cfg = getCoachConfig()
   if (!cfg.apiKey) throw new Error('未配置 AI 教练 API Key')
 
+  const isReasoner = cfg.model.includes('reasoner')
+  // deepseek-reasoner 不接受 system 消息：把人设并入首条用户消息
+  const userContent = isReasoner
+    ? `${SYSTEM_PROMPT}\n\n${buildFacts(ctx)}\n\n学生的问题: ${question}`
+    : `${buildFacts(ctx)}\n\n学生的问题: ${question}`
   const messages: Array<{ role: string; content: string }> = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    ...(!isReasoner ? [{ role: 'system', content: SYSTEM_PROMPT }] : []),
     ...history.slice(-6),
-    { role: 'user', content: `${buildFacts(ctx)}\n\n学生的问题: ${question}` },
+    { role: 'user', content: userContent },
   ]
 
+  const onDelta = hooks.onDelta
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -77,8 +87,8 @@ export async function askCoach(
     body: JSON.stringify({
       model: cfg.model,
       messages,
-      temperature: 0.7,
-      max_tokens: 800,
+      temperature: isReasoner ? undefined : 0.7,
+      max_tokens: 2048,
       stream: typeof onDelta === 'function',
     }),
   })
@@ -91,33 +101,24 @@ export async function askCoach(
   // 非流式路径
   if (!onDelta || !res.body) {
     const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
+    const msg = data?.choices?.[0]?.message
+    const content = typeof msg?.content === 'string' && msg.content.trim()
+      ? msg.content
+      : (typeof msg?.reasoning_content === 'string' && !msg.content?.trim() ? '' : msg?.content)
     if (typeof content !== 'string' || !content.trim()) {
-      throw new Error('AI 教练返回内容为空')
+      throw new Error(emptyHint(msg?.reasoning_content, data?.usage))
     }
-    onDelta?.(content.trim())
+    hooks.onDelta?.(content.trim())
     return content.trim()
   }
 
-  // 流式路径：解析 SSE data 行
+  // 流式路径：解析 SSE data 行（兼容 content / reasoning_content / finish_reason）
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
-
-  const handleLine = (line: string) => {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('data:')) return
-    const payload = trimmed.slice(5).trim()
-    if (payload === '[DONE]') return
-    try {
-      const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content
-      if (typeof delta === 'string' && delta) {
-        full += delta
-        onDelta(full)
-      }
-    } catch { /* 忽略无法解析的心跳行 */ }
-  }
+  let reasoning = ''
+  let finishReason = ''
 
   for (;;) {
     const { done, value } = await reader.read()
@@ -131,8 +132,37 @@ export async function askCoach(
   }
   if (buffer.trim()) handleLine(buffer)
 
-  if (!full.trim()) throw new Error('AI 教练返回内容为空')
+  function handleLine(line: string): void {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('data:')) return
+    const payload = trimmed.slice(5).trim()
+    if (payload === '[DONE]') return
+    try {
+      const choice = JSON.parse(payload)?.choices?.[0]
+      if (!choice) return
+      if (choice.finish_reason) finishReason = choice.finish_reason
+      const delta = choice.delta ?? {}
+      if (typeof delta.content === 'string' && delta.content) {
+        full += delta.content
+        onDelta?.(full)
+      } else if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+        reasoning += delta.reasoning_content
+        hooks.onReasoning?.(reasoning)
+      }
+    } catch { /* 忽略无法解析的心跳行 */ }
+  }
+
+  if (!full.trim()) throw new Error(emptyHint(reasoning || undefined, undefined, finishReason))
   return full.trim()
+
+  function emptyHint(r?: string, _usage?: unknown, finish?: string): string {
+    if (r && r.trim()) {
+      const why = finish === 'length' ? '输出达到 max_tokens 上限' : '模型只输出了思考过程'
+      return `AI 教练没有给出最终回答（${why}）。建议改用 deepseek-chat 后重试`
+    }
+    if (finish === 'length') return 'AI 教练返回内容为空（输出达到 max_tokens 上限）'
+    return 'AI 教练返回内容为空'
+  }
 }
 
 function buildFacts(ctx: CoachContext): string {

@@ -49,6 +49,7 @@ export const CoachPanel: React.FC = () => {
   const [chat, setChat] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [asking, setAsking] = useState(false)
   const [coachError, setCoachError] = useState('')
+  const [thinking, setThinking] = useState('')
   const chatEndRef = React.useRef<HTMLDivElement>(null)
 
   // 新消息时滚动到底部
@@ -102,6 +103,7 @@ export const CoachPanel: React.FC = () => {
     const q = question.trim()
     setQuestion('')
     setCoachError('')
+    setThinking('')
     setAsking(true)
     // 追加用户消息 + 空的助手消息（流式填充）
     const history = chat.slice(-6)
@@ -120,13 +122,16 @@ export const CoachPanel: React.FC = () => {
         ctx.score = analysis.score
         ctx.bestMoveCn = analysis.bestMove ? chineseFromFen(analysis.fen, analysis.bestMove) : undefined
       }
-      await askCoach(ctx, q, partial => {
-        // 流式更新最后一条 assistant 消息
-        setChat(c => {
-          const next = [...c]
-          next[next.length - 1] = { role: 'assistant', content: partial }
-          return next
-        })
+      await askCoach(ctx, q, {
+        onDelta: partial => {
+          // 流式更新最后一条 assistant 消息
+          setChat(c => {
+            const next = [...c]
+            next[next.length - 1] = { role: 'assistant', content: partial }
+            return next
+          })
+        },
+        onReasoning: t => setThinking(t),
       }, history)
     } catch (e) {
       setCoachError(e instanceof Error ? e.message : String(e))
@@ -134,6 +139,7 @@ export const CoachPanel: React.FC = () => {
       setChat(c => (c[c.length - 1]?.content === '' ? c.slice(0, -1) : c))
     } finally {
       setAsking(false)
+      setThinking('')
     }
   }
 
@@ -230,6 +236,12 @@ export const CoachPanel: React.FC = () => {
                 {chat.map((m, i) => (
                   <div key={i} className={`coach-bubble ${m.role}`}>{m.content}</div>
                 ))}
+                {/* 思考过程预览（deepseek-reasoner 等先思考后作答的模型） */}
+                {asking && thinking && (
+                  <div className="coach-bubble assistant coach-thinking">
+                    💭 {thinking.length > 80 ? '…' + thinking.slice(-80) : thinking}
+                  </div>
+                )}
                 <div ref={chatEndRef} />
               </div>
             )}

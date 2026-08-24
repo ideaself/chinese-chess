@@ -93,7 +93,7 @@ describe('askCoach', () => {
     store['xiangqi_settings'] = JSON.stringify({ aiCoachApiKey: 'sk-test' })
 
     const partials: string[] = []
-    const reply = await askCoach({ fen: 'x', movesCn: '' }, '?', p => partials.push(p))
+    const reply = await askCoach({ fen: 'x', movesCn: '' }, '?', { onDelta: p => partials.push(p) })
 
     expect(sentStream).toBe(true)
     expect(reply).toBe('先出车，再跳马')

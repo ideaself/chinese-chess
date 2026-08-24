@@ -39,17 +39,18 @@ describe('URL 构造', () => {
 
 describe('uploadBackup', () => {
   it('先逐级 MKCOL 再 PUT，带 Basic 认证', async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 201 })
+    fetchMock.mockResolvedValue({ ok: true, status: 201, text: async () => '' })
     const r = await uploadBackup(CRED)
     expect(r.ok).toBe(true)
     // /dav 与 /dav/xiangqi 两次 MKCOL + 一次 PUT
     expect(fetchMock).toHaveBeenCalledTimes(3)
     const [url1, init1] = fetchMock.mock.calls[0]
-    expect(url1).toBe('https://dav.example.com/dav')
+    expect(url1).toBe('/__webdav/dav')
+    expect(init1.headers['x-wd-target']).toBe('https://dav.example.com')
     expect(init1.method).toBe('MKCOL')
     expect(init1.headers.Authorization).toMatch(/^Basic /)
     const [putUrl, putInit] = fetchMock.mock.calls[2]
-    expect(putUrl).toContain(BACKUP_FILENAME)
+    expect(putUrl).toBe('/__webdav/dav/xiangqi/' + BACKUP_FILENAME)
     expect(putInit.method).toBe('PUT')
     expect(JSON.parse(putInit.body).version).toBe(2) // 全量备份格式
   })
@@ -57,8 +58,8 @@ describe('uploadBackup', () => {
   it('MKCOL 405（已存在）不视为失败', async () => {
     fetchMock.mockImplementation(async (url: string) =>
       url.endsWith(BACKUP_FILENAME)
-        ? { ok: true, status: 204 }
-        : { ok: false, status: 405 })
+        ? { ok: true, status: 204, text: async () => '' }
+        : { ok: false, status: 405, text: async () => '' })
     const r = await uploadBackup(CRED)
     expect(r.ok).toBe(true)
   })
@@ -66,8 +67,8 @@ describe('uploadBackup', () => {
   it('PUT 失败返回错误消息', async () => {
     fetchMock.mockImplementation(async (url: string) =>
       url.endsWith(BACKUP_FILENAME)
-        ? { ok: false, status: 507 }
-        : { ok: true, status: 201 })
+        ? { ok: false, status: 507, text: async () => '' }
+        : { ok: true, status: 201, text: async () => '' })
     const r = await uploadBackup(CRED)
     expect(r.ok).toBe(false)
     expect(r.message).toContain('507')
@@ -83,7 +84,7 @@ describe('uploadBackup', () => {
 
 describe('downloadBackup', () => {
   it('404 提示云端暂无备份', async () => {
-    fetchMock.mockResolvedValue({ ok: false, status: 404 })
+    fetchMock.mockResolvedValue({ ok: false, status: 404, text: async () => '' })
     const r = await downloadBackup(CRED)
     expect(r.ok).toBe(false)
     expect(r.message).toContain('暂无')
