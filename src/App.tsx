@@ -20,7 +20,8 @@ import { GamesPanel } from './components/Games/GamesPanel'
 import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
 import { getSettings } from './game/storage'
-import { uploadBackup, downloadBackup, getLastSync } from './game/webdav'
+import { uploadBackup, downloadBackup, getLastSync, diagnoseConnection } from './game/webdav'
+import type { DiagStep } from './game/webdav'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
 import { resumeAudio } from './game/sound'
@@ -486,6 +487,9 @@ const CloudSyncSection: React.FC<{
   const showToast = useStore(s => s.showToast)
   const refreshSavedGames = useStore(s => s.refreshSavedGames)
   const [busy, setBusy] = useState<'upload' | 'download' | null>(null)
+  const [diag, setDiag] = useState<DiagStep[] | null>(null)
+  const [diagWorkingPath, setDiagWorkingPath] = useState<string | undefined>(undefined)
+  const [diagBusy, setDiagBusy] = useState(false)
   const cred: { url: string; user: string; password: string } = {
     url: settings.webdavUrl || '',
     user: settings.webdavUser || '',
@@ -505,6 +509,16 @@ const CloudSyncSection: React.FC<{
     } else {
       showToast('⚠ ' + result.message)
     }
+  }
+
+  const runDiag = async () => {
+    if (!configured) { showToast('请先填写 WebDAV 地址 / 账号 / 密码'); return }
+    setDiagBusy(true)
+    setDiag(null)
+    const r = await diagnoseConnection(cred)
+    setDiag(r.steps)
+    setDiagWorkingPath(r.workingPath)
+    setDiagBusy(false)
   }
 
   return (
@@ -552,10 +566,37 @@ const CloudSyncSection: React.FC<{
           onClick={() => void run('download')}>
           {busy === 'download' ? '⏳ 恢复中…' : '⬇ 从云端恢复'}
         </button>
+        <button className="btn btn-sm" disabled={!configured || diagBusy}
+          title="探测服务器与可写目录位置"
+          onClick={() => void runDiag()}>
+          {diagBusy ? '⏳ 诊断中…' : '🔍 连接诊断'}
+        </button>
         <span style={{ fontSize: 12, color: '#888' }}>
           {lastSync ? `上次同步 ${new Date(lastSync).toLocaleString()}` : '未同步过'}
         </span>
       </div>
+
+      {/* 诊断结果 */}
+      {diag && (
+        <div style={{ fontSize: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', borderRadius: 6, padding: '6px 10px', marginTop: 4 }}>
+          {diag.map((d, i) => (
+            <div key={i} style={{ padding: '2px 0' }}>
+              {d.ok ? '✓' : '✗'} {d.name} — <span style={{ color: d.ok ? '#888' : '#e67e22' }}>{d.detail}</span>
+            </div>
+          ))}
+          {diagWorkingPath && diagWorkingPath !== (settings.webdavUrl || '').replace(/^https?:\/\/[^/]+/, '').replace(/\/+$/, '') && (
+            <button className="btn btn-sm btn-primary" style={{ marginTop: 4 }}
+              onClick={() => {
+                const origin = cred.url.replace(/^https?:\/\/[^/]+/, m => m)
+                update({ webdavUrl: cred.url.slice(0, cred.url.length - origin.length) + diagWorkingPath })
+                setDiag(null)
+                showToast(`已改用 ${diagWorkingPath}`)
+              }}>
+              采用 {diagWorkingPath}
+            </button>
+          )}
+        </div>
+      )}
       <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
         全量备份（棋谱/设置/战绩/错题本/棋力分）上传为 xiangqi-backup.json；
         恢复为合并语义，不覆盖本机已有数据。坚果云等支持 WebDAV 的网盘均可，

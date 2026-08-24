@@ -133,3 +133,33 @@ describe('downloadBackup', () => {
     expect(r.message).toContain('设置已合并')
   })
 })
+
+describe('根路径 404 自动兜底子目录', () => {
+  it('PUT 根路径 404 → MKCOL+PUT /xiangqi → 回写设置', async () => {
+    saveSettings({ webdavUrl: CRED.url, webdavUser: 'u', webdavPassword: 'p' })
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const m = (init as { method?: string })?.method
+      if (url === '/__webdav/xiangqi/xiangqi-backup.json') {
+        return m === 'PUT' ? { ok: true, status: 201, text: async () => '' } : { ok: true, status: 200, text: async () => '{}' }
+      }
+      if (m === 'MKCOL' && url === '/__webdav/xiangqi') return { ok: false, status: 405, text: async () => '' }
+      return { ok: false, status: 404, text: async () => '' } // 根路径全部 404
+    })
+    const r = await uploadBackup({ ...CRED, url: 'https://dav.example.com' })
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('/xiangqi')
+    // 设置已更新为兜底目录
+    expect(credFromSettings()?.url).toBe('https://dav.example.com/xiangqi')
+  })
+
+  it('下载：根路径 404 → 命中 /xiangqi 备份并回写设置', async () => {
+    saveSettings({ webdavUrl: CRED.url, webdavUser: 'u', webdavPassword: 'p' })
+    fetchMock.mockImplementation(async (url: string) =>
+      url === '/__webdav/xiangqi/xiangqi-backup.json'
+        ? { ok: true, status: 200, text: async () => '{"version":2,"games":[]}' }
+        : { ok: false, status: 404, text: async () => '' })
+    const r = await downloadBackup({ ...CRED, url: 'https://dav.example.com' })
+    expect(r.ok).toBe(true)
+    expect(credFromSettings()?.url).toBe('https://dav.example.com/xiangqi')
+  })
+})
