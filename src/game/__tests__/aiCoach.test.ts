@@ -59,6 +59,44 @@ describe('askCoach', () => {
     expect(body.messages[1].content).toContain('红方领先约 0.3 兵')
   })
 
+  it('思考型模型空回答(length)自动放开 max_tokens 重试', async () => {
+    store['xiangqi_settings'] = JSON.stringify({ aiCoachApiKey: 'sk-test', aiCoachModel: 'deepseek-reasoner' })
+
+    const bodies: Array<Record<string, unknown>> = []
+    let call = 0
+    const mkSse = (lines: string[]) => {
+      const enc = new TextEncoder()
+      const payload = lines.map(l => `data: ${l}\n\n`).join('') + 'data: [DONE]\n\n'
+      return new ReadableStream<Uint8Array>({
+        start(c) { c.enqueue(enc.encode(payload)); c.close() },
+      })
+    }
+    vi.stubGlobal('fetch', vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(init!.body as string))
+      call++
+      if (call === 1) {
+        // 第一次：只有思考内容，length 收尾（吞掉额度）
+        return { ok: true, status: 200, body: mkSse([
+          '{"choices":[{"delta":{"reasoning_content":"推演中…"}}]}',
+          '{"choices":[{"delta":{},"finish_reason":"length"}]}',
+        ]), json: async () => ({}) }
+      }
+      // 重试：正常产出回答
+      return { ok: true, status: 200, body: mkSse(['{"choices":[{"delta":{"content":"最终建议"}}]}']), json: async () => ({}) }
+    }))
+
+    const partials: string[] = []
+    const reply = await askCoach({ fen: 'x', movesCn: '' }, '?', { onDelta: t => partials.push(t) })
+    expect(reply).toBe('最终建议')
+    expect(partials).toEqual(['最终建议'])
+    expect(call).toBe(2)
+    // reasoner 首次就不带 max_tokens，重试同样不带
+    expect('max_tokens' in bodies[0]).toBe(false)
+    expect('max_tokens' in bodies[1]).toBe(false)
+    // reasoner 不发送 system 消息
+    expect((bodies[0].messages as Array<{ role: string }>).some(m => m.role === 'system')).toBe(false)
+  })
+
   it('HTTP 错误抛出带状态码的异常', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: false,

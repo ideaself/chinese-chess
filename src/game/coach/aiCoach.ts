@@ -53,6 +53,8 @@ const SYSTEM_PROMPT = `你是一位资深中国象棋高级教练，擅长指导
 
 /** 调用 AI 教练；hooks.onDelta 流式输出回答，hooks.onReasoning 流式输出思考过程
  *  （deepseek-reasoner 先思考后作答）。失败抛出异常。
+ *  思考型模型若把输出额度全部耗在思考上（空回答 + finish_reason=length），
+ *  自动去掉 max_tokens 限制重试一次。
  *  history 为多轮对话上下文（不含本轮提问），自动截取最近 6 条。 */
 export async function askCoach(
   ctx: CoachContext,
@@ -77,90 +79,108 @@ export async function askCoach(
     { role: 'user', content: userContent },
   ]
 
-  const onDelta = hooks.onDelta
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.apiKey}`,
-    },
-    body: JSON.stringify({
+  const emitDelta = hooks.onDelta
+
+  /** 单次请求；omitLimit 时不下发 max_tokens（交由服务端默认） */
+  const requestOnce = async (omitLimit: boolean): Promise<{
+    full: string
+    reasoning: string
+    finish: string
+  }> => {
+    const bodyObj: Record<string, unknown> = {
       model: cfg.model,
       messages,
       temperature: isReasoner ? undefined : 0.7,
-      max_tokens: 2048,
-      stream: typeof onDelta === 'function',
-    }),
-  })
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`AI 教练请求失败 (HTTP ${res.status}) ${text.slice(0, 120)}`)
-  }
-
-  // 非流式路径
-  if (!onDelta || !res.body) {
-    const data = await res.json()
-    const msg = data?.choices?.[0]?.message
-    const content = typeof msg?.content === 'string' && msg.content.trim()
-      ? msg.content
-      : (typeof msg?.reasoning_content === 'string' && !msg.content?.trim() ? '' : msg?.content)
-    if (typeof content !== 'string' || !content.trim()) {
-      throw new Error(emptyHint(msg?.reasoning_content, data?.usage))
+      stream: typeof emitDelta === 'function',
     }
-    hooks.onDelta?.(content.trim())
-    return content.trim()
-  }
+    if (!omitLimit && !isReasoner) bodyObj.max_tokens = 2048
 
-  // 流式路径：解析 SSE data 行（兼容 content / reasoning_content / finish_reason）
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let full = ''
-  let reasoning = ''
-  let finishReason = ''
+    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify(bodyObj),
+    })
 
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let idx: number
-    while ((idx = buffer.indexOf('\n')) >= 0) {
-      handleLine(buffer.slice(0, idx))
-      buffer = buffer.slice(idx + 1)
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`AI 教练请求失败 (HTTP ${res.status}) ${text.slice(0, 120)}`)
     }
-  }
-  if (buffer.trim()) handleLine(buffer)
 
-  function handleLine(line: string): void {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('data:')) return
-    const payload = trimmed.slice(5).trim()
-    if (payload === '[DONE]') return
-    try {
-      const choice = JSON.parse(payload)?.choices?.[0]
-      if (!choice) return
-      if (choice.finish_reason) finishReason = choice.finish_reason
-      const delta = choice.delta ?? {}
-      if (typeof delta.content === 'string' && delta.content) {
-        full += delta.content
-        onDelta?.(full)
-      } else if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
-        reasoning += delta.reasoning_content
-        hooks.onReasoning?.(reasoning)
+    // 非流式：整体 JSON
+    if (!emitDelta || !res.body) {
+      const data = await res.json()
+      const choice = data?.choices?.[0]
+      const msg = choice?.message ?? {}
+      let full = ''
+      if (typeof msg.content === 'string' && msg.content.trim()) {
+        full = msg.content
+        emitDelta?.(full.trim())
       }
-    } catch { /* 忽略无法解析的心跳行 */ }
+      return {
+        full,
+        reasoning: typeof msg.reasoning_content === 'string' ? msg.reasoning_content : '',
+        finish: choice?.finish_reason ?? '',
+      }
+    }
+
+    // 流式 SSE
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let full = ''
+    let reasoning = ''
+    let finish = ''
+
+    const handleLine = (line: string): void => {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) return
+      const payload = trimmed.slice(5).trim()
+      if (payload === '[DONE]') return
+      try {
+        const choice = JSON.parse(payload)?.choices?.[0]
+        if (!choice) return
+        if (choice.finish_reason) finish = choice.finish_reason
+        const delta = choice.delta ?? {}
+        if (typeof delta.content === 'string' && delta.content) {
+          full += delta.content
+          emitDelta?.(full)
+        } else if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+          reasoning += delta.reasoning_content
+          hooks.onReasoning?.(reasoning)
+        }
+      } catch { /* 忽略无法解析的心跳行 */ }
+    }
+
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let idx: number
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        handleLine(buffer.slice(0, idx))
+        buffer = buffer.slice(idx + 1)
+      }
+    }
+    if (buffer.trim()) handleLine(buffer)
+    return { full, reasoning, finish }
   }
 
-  if (!full.trim()) throw new Error(emptyHint(reasoning || undefined, undefined, finishReason))
-  return full.trim()
+  // 首次请求；空回答且疑似思考吞掉额度（finish=length 或仅有思考内容）→ 放开限制重试一次
+  let r = await requestOnce(false)
+  if (!r.full.trim() && (r.finish === 'length' || !!r.reasoning.trim())) {
+    r = await requestOnce(true)
+  }
+  if (!r.full.trim()) throw new Error(emptyHint(r))
+  return r.full.trim()
 
-  function emptyHint(r?: string, _usage?: unknown, finish?: string): string {
-    if (r && r.trim()) {
-      const why = finish === 'length' ? '输出达到 max_tokens 上限' : '模型只输出了思考过程'
-      return `AI 教练没有给出最终回答（${why}）。建议改用 deepseek-chat 后重试`
+  function emptyHint(x: { reasoning: string; finish: string }): string {
+    if (x.reasoning.trim()) {
+      return 'AI 教练没有给出最终回答：该模型的思考占用了全部输出额度（已自动重试仍如此）。建议更换为非思考型模型'
     }
-    if (finish === 'length') return 'AI 教练返回内容为空（输出达到 max_tokens 上限）'
+    if (x.finish === 'length') return 'AI 教练返回内容为空（输出达到上限）'
     return 'AI 教练返回内容为空'
   }
 }

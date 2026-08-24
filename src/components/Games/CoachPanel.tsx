@@ -248,9 +248,16 @@ export const CoachPanel: React.FC = () => {
             <textarea
               className="import-textarea"
               rows={2}
-              placeholder={asking ? '教练思考中…' : '向 AI 教练提问… 可连续追问（如「为什么？」「那如果黑方反击呢？」）'}
+              placeholder={asking ? '教练思考中…' : '向 AI 教练提问… 回车发送，可连续追问（如「为什么？」）'}
               value={question}
               onChange={e => { setQuestion(e.target.value); setCoachError('') }}
+              onKeyDown={e => {
+                // 回车发送；Shift+Enter 换行；中文输入法组词中的回车不触发
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  void askAi()
+                }
+              }}
             />
             <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
               <button className="btn btn-sm btn-primary" style={{ flex: 1 }}
