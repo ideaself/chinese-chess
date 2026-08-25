@@ -7,6 +7,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
+import { BOARD_HOME } from '../../store/constants'
 import {
   loadLibrary, getCachedLibrary, getLibraryInfo,
   recordToGame, recordTitle,
@@ -28,6 +29,7 @@ type Category = 'all' | 'opening' | 'endgame'
 
 export const MasterLibrary: React.FC = () => {
   const loadGameObject = useStore(s => s.loadGameObject)
+  const setSheetTab = useStore(s => s.setSheetTab)
   const setTab = useStore(s => s.setTab)
   const showToast = useStore(s => s.showToast)
 
@@ -130,6 +132,7 @@ export const MasterLibrary: React.FC = () => {
     if (!game) { showToast('⚠ 该棋谱数据有误，无法打开'); return }
     loadGameObject(game)
     setTab('play')
+    setSheetTab(BOARD_HOME)
   }
 
   if (error) {

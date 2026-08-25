@@ -68,11 +68,19 @@ export const Board: React.FC = () => {
   const isThinking = useStore(s => s.isThinking)
   const mode = useStore(s => s.mode)
   const sideControl = useStore(s => s.sideControl)
+  const game = useStore(s => s.game)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
 
-  const redRole = sideControl.w === 'human' ? '玩家' : 'AI'
-  const blackRole = sideControl.b === 'human' ? '玩家' : 'AI'
+  // 棋手标注：复盘/分析/推演显示实际棋手名；实时对战显示 玩家/AI
+  const redName = game?.header?.Red
+  const blackName = game?.header?.Black
+  const redRole = mode === 'play'
+    ? (sideControl.w === 'human' ? '玩家' : 'AI')
+    : (redName || (sideControl.w === 'human' ? '玩家' : 'AI'))
+  const blackRole = mode === 'play'
+    ? (sideControl.b === 'human' ? '玩家' : 'AI')
+    : (blackName || (sideControl.b === 'human' ? '玩家' : 'AI'))
 
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')

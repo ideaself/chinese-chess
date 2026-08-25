@@ -113,7 +113,6 @@ export const App: React.FC = () => {
   // 移动端覆盖层 key：显式 sheetTab 优先；特殊模式自动弹出对应面板；__board__ 表示用户主动回到纯棋盘
   const specialSheet: string | null = mode === 'setup' ? 'setup'
     : mode === 'puzzle' ? 'puzzle'
-    : variation ? 'variation'
     : masterQuiz ? 'quiz'
     : openingTraining ? 'opening'
     : null

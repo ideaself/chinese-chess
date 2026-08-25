@@ -43,6 +43,41 @@ async function run(ctx) {
   const hasTransport = await evalJs(`!!document.querySelector('.mpb-transport')`)
   check('复盘模式显示运输条', hasTransport)
 
+  // 分支推演（试走变化）回归：曾因 Hooks 顺序问题（useEffect 位于 early return 之后）导致白屏，
+  // 这里确认点击后棋盘仍可见且出现推演操作条。
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '试走变化')?.click()`)
+  await sleep(400)
+  const boardAfterVariation = await evalJs(`!!document.querySelector('.board-container svg')`)
+  check('试走变化后棋盘仍可见（无白屏回归）', boardAfterVariation)
+  const hasVarTransport = await evalJs(`!!document.querySelector('.mpb-transport')`)
+  check('试走变化后出现推演操作条', hasVarTransport)
+  // 退出推演回到复盘操作条
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出推演'))?.click()`)
+  await sleep(300)
+  const backToReplay = await evalJs(`!!document.querySelector('.mpb-transport')`)
+  check('退出推演回到复盘操作条', backToReplay)
+
+  // 大师库对局：黑方/红方应显示对战棋手名；试走变化不得白屏
+  await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)
+  await sleep(300)
+  await evalJs(`[...document.querySelectorAll('.sub-nav .filter-btn')].find(b => b.textContent === '大师库')?.click()`)
+  let loaded = false
+  for (let i = 0; i < 16; i++) {
+    await sleep(500)
+    if (await evalJs(`!!document.querySelector('.game-item')`)) { loaded = true; break }
+  }
+  if (loaded) {
+    await evalJs(`document.querySelector('.game-item')?.click()`)
+    await sleep(500)
+    const names = await evalJs(`[...document.querySelectorAll('.player-name')].map(e => e.textContent).join(' | ')`)
+    check('大师库对局显示棋手名（含角色标注）', names.includes('（'), names)
+    await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '试走变化')?.click()`)
+    await sleep(400)
+    check('大师库试走变化后棋盘仍可见', await evalJs(`!!document.querySelector('.board-container svg')`))
+    await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出推演'))?.click()`)
+    await sleep(300)
+  }
+
   // 还原桌面视口，避免影响后续套件
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false })
   await sleep(400)

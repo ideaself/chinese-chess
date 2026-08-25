@@ -21,6 +21,9 @@ export const MobilePlayBar: React.FC = () => {
   const sideControl = useStore(s => s.sideControl)
   const autoPlay = useStore(s => s.autoPlaying)
   const setSheetTab = useStore(s => s.setSheetTab)
+  const variation = useStore(s => s.variation)
+  const variationGo = useStore(s => s.variationGo)
+  const exitVariation = useStore(s => s.exitVariation)
 
   const undo = useStore(s => s.undo)
   const flipBoard = useStore(s => s.flipBoard)
@@ -42,11 +45,32 @@ export const MobilePlayBar: React.FC = () => {
   const over = game.result !== '*'
 
   useEffect(() => {
-    if (!autoPlay || mode !== 'replay') return
+    if (!autoPlay || mode !== 'replay' || variation) return
     if (currentPlyIndex >= game.plies.length) { setAutoPlay(false); return }
     const timer = setTimeout(() => goForward(), autoPlaySpeed)
     return () => clearTimeout(timer)
-  }, [autoPlay, currentPlyIndex, game.plies.length, autoPlaySpeed, mode, goForward, setAutoPlay])
+  }, [autoPlay, currentPlyIndex, game.plies.length, autoPlaySpeed, mode, goForward, setAutoPlay, variation])
+
+  // 分支推演（试走变化）：棋盘常驻可见，直接点子落子；本操作条提供前进/后退与退出/分支列表
+  if (variation) {
+    const { moves, index } = variation
+    return (
+      <div className="mobile-play-bar">
+        <div className="mpb-transport">
+          <button className="mpb-btn" onClick={() => variationGo(0)} title="起点">⏮</button>
+          <button className="mpb-btn" onClick={() => variationGo(index - 1)} disabled={index <= 0} title="上一步">◀</button>
+          <button className={`mpb-btn mpb-main`} onClick={() => variationGo(index + 1)} disabled={index >= moves.length} title="下一步"><TriRight /></button>
+          <button className="mpb-btn" onClick={() => variationGo(moves.length)} title="终点">⏭</button>
+        </div>
+        <div className="mpb-actions">
+          <button className="mpb-btn" onClick={() => setSheetTab('variation')} title="分支列表">📑 分支</button>
+          <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
+          <button className="mpb-btn wide" onClick={() => exitVariation()}>✕ 退出推演</button>
+        </div>
+        <div className="mpb-hint">在棋盘上点击棋子落子，试走你的变化</div>
+      </div>
+    )
+  }
 
   if (mode === 'replay') {
     return (
