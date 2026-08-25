@@ -63,6 +63,7 @@ export const Board: React.FC = () => {
   const selected = useStore(s => s.selected)
   const legalTargets = useStore(s => s.legalTargets)
   const lastMove = useStore(s => s.lastMove)
+  const hintInfo = useStore(s => s.hintInfo)
   const boardFlipped = useStore(s => s.boardFlipped)
   const selectPiece = useStore(s => s.selectPiece)
   const isThinking = useStore(s => s.isThinking)
@@ -231,6 +232,24 @@ export const Board: React.FC = () => {
     }) : []
   , [legalTargets, board, boardFlipped, settings.showLegalMoves])
 
+   // ── 提示箭头（天天象棋风格：带序号的三步变化线）──
+   const hintArrows = React.useMemo(() => {
+     const moves = hintInfo?.movesUci
+     if (!moves || moves.length === 0) return null
+     return moves.map((uci, i) => {
+       const fromPos = { col: uci.charCodeAt(0) - 97, row: Number(uci[1]) }
+       const toPos = { col: uci.charCodeAt(2) - 97, row: Number(uci[3]) }
+       const from = posToSvg(fromPos, boardFlipped)
+       const to = posToSvg(toPos, boardFlipped)
+       const dx = to.x - from.x
+       const dy = to.y - from.y
+       const len = Math.hypot(dx, dy) || 1
+       const ex = to.x - (dx / len) * (PIECE_RADIUS + 2)
+       const ey = to.y - (dy / len) * (PIECE_RADIUS + 2)
+       return { from, ex, ey, n: i + 1 }
+     })
+   }, [hintInfo, boardFlipped])
+
   return (
     <div className="board-container">
       <EvalBar />
@@ -242,9 +261,26 @@ export const Board: React.FC = () => {
         onPointerDown={handlePointer}
         style={{ touchAction: 'none', cursor: 'pointer' }}>
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
+        <defs>
+          <marker id="hintArrow" markerWidth="12" markerHeight="12" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L9,4 L0,8 Z" fill="#f59e0b" />
+          </marker>
+        </defs>
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
         <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="16" style={{ userSelect: 'none' }}>楚河 汉界</text>
         {gridLines}{lastMoveMarks}{targetMarks}{pieces}
+        {hintArrows && (
+          <g className="hint-arrows" pointerEvents="none">
+            {hintArrows.map((a, i) => (
+              <g key={i}>
+                <line x1={a.from.x} y1={a.from.y} x2={a.ex} y2={a.ey}
+                  stroke="#f59e0b" strokeWidth="4.5" strokeLinecap="round" markerEnd="url(#hintArrow)" opacity="0.95" />
+                <circle cx={a.from.x} cy={a.from.y} r="11" fill="#f59e0b" stroke="#fff" strokeWidth="1.5" />
+                <text x={a.from.x} y={a.from.y + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
+              </g>
+            ))}
+          </g>
+        )}
         {anim && (() => {
           const color = isRed(anim.piece) ? 'red' : 'black'
           const glyph = GLYPHS[anim.piece] || '?'
@@ -280,6 +316,14 @@ export const Board: React.FC = () => {
         <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
         <span className="timer">{formatTime(redTime)}</span>
       </div>
+      {hintInfo && (
+        <div className="board-hint-overlay">
+          💡 推荐 {hintInfo.line.join(' → ')}
+          <span className="board-hint-score">
+            {(hintInfo.score / 100 >= 0 ? '+' : '') + (hintInfo.score / 100).toFixed(2)}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

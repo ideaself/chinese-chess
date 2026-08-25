@@ -20,7 +20,6 @@ export const Controls: React.FC = () => {
   const isThinking = useStore(s => s.isThinking)
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const game = useStore(s => s.game)
-  const hintInfo = useStore(s => s.hintInfo)
   const sideControl = useStore(s => s.sideControl)
 
   const startNewGame = useStore(s => s.startNewGame)
@@ -100,15 +99,6 @@ export const Controls: React.FC = () => {
         )}
         {demo && (
           <div className="hint-banner">🤖 AI 对弈演示中 — 点「新对局」可退出</div>
-        )}
-
-        {hintInfo && (
-          <div className="hint-banner">
-            💡 推荐 <b>{hintInfo.moveCn}</b>
-            <span className="hint-score">
-              {(hintInfo.score / 100 >= 0 ? '+' : '') + (hintInfo.score / 100).toFixed(2)}
-            </span>
-          </div>
         )}
 
         <div className="action-grid">
@@ -206,7 +196,7 @@ export const Controls: React.FC = () => {
         {/* 变化试走入口：从当前局面自由分支 */}
         <button className="btn btn-primary" style={{ width: '100%', marginBottom: 8 }}
           title="从当前局面在棋盘上试走自己的着法，随时回到主线"
-          onClick={() => useStore.getState().startReplayVariation()}>
+          onClick={() => { const s = useStore.getState(); s.startReplayVariation(); s.setSheetTab('variation') }}>
           🌿 试走变化（分支推演）
         </button>
 

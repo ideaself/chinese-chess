@@ -158,11 +158,38 @@ body { overflow: hidden; }
 }
 
 .board-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   max-width: 100%;
   user-select: none;
   -webkit-user-select: none;
+}
+.board-hint-overlay {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 94%;
+  padding: 5px 12px;
+  border-radius: 10px;
+  background: rgba(17, 17, 24, 0.78);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.board-hint-overlay .board-hint-score {
+  color: #ffd34d;
+  font-family: 'SF Mono', ui-monospace, monospace;
 }
 .board-container svg:focus { outline: none; }
 
@@ -223,6 +250,30 @@ body { overflow: hidden; }
 html[data-theme='light'] .eval-bar-label.label-red { color: #c23a3a; }
 .eval-bar-label.label-black { color: #9db8d8; }
 html[data-theme='light'] .eval-bar-label.label-black { color: #35608f; }
+
+.eval-bar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-family: 'SF Mono', ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.eval-bar-meta .eval-score {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.eval-bar-meta .eval-score.label-red { color: #ff8a8a; }
+html[data-theme='light'] .eval-bar-meta .eval-score.label-red { color: #c23a3a; }
+.eval-bar-meta .eval-score.label-black { color: #9db8d8; }
+html[data-theme='light'] .eval-bar-meta .eval-score.label-black { color: #35608f; }
+.eval-bar-meta .eval-meta { white-space: nowrap; }
 
 .player-info {
   display: flex;
@@ -432,6 +483,38 @@ html[data-theme='light'] .eval-bar-label.label-black { color: #35608f; }
   background: var(--accent);
   color: #fff;
 }
+.variation-moves .history-move.cur {
+  box-shadow: 0 0 0 2px var(--green) inset;
+}
+.move-eval {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+.ev-raw { color: var(--text-2); }
+.ev-none { color: var(--text-3); }
+.ev-even { color: #b8b8c8; }
+.ev-better { color: var(--green); font-weight: 600; }
+.ev-worse { color: #ff6b6b; font-weight: 600; }
+
+/* 分支列表（多分支树 + 评分对比） */
+.branch-list { display: flex; flex-direction: column; gap: 5px; }
+.branch-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--panel-2); color: var(--text-2);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 10px; font-size: 13px; cursor: pointer; text-align: left;
+  transition: all 0.15s;
+}
+.branch-row:hover { background: #35354f; color: var(--text); }
+.branch-row.branch-current { border-color: var(--accent); background: rgba(99,102,241,0.14); color: var(--text); }
+.branch-name { font-weight: 600; min-width: 42px; }
+.branch-div { flex: 1; color: var(--text-3); font-size: 11px; }
+.branch-eval {
+  font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12px;
+}
+.eval-busy { color: #f39c12; font-size: 12px; font-weight: 400; }
 
 /* 难度下拉 */
 .difficulty-select {
@@ -705,6 +788,51 @@ kbd {
 }
 .history-move:hover { background: #35354f; color: var(--text); }
 .history-move.btn-active { background: var(--accent); color: #fff; }
+
+/* 拆棋·多候选着法 */
+.decompose-box {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.cand-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.cand-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel); color: var(--text-2);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; font-size: 13px; cursor: pointer; text-align: left;
+  transition: all 0.15s;
+}
+.cand-row:hover:not(:disabled) { background: #35354f; color: var(--text); }
+.cand-row:disabled { opacity: 0.5; cursor: default; }
+.cand-rank {
+  width: 18px; height: 18px; line-height: 18px; text-align: center;
+  border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.cand-move { font-weight: 600; min-width: 56px; }
+.cand-score { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* 走法评级徽标（好/恶手标注） */
+.move-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 14px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.mt-best { background: rgba(120,200,140,0.18); color: #7ec894; }
+.mt-excellent { background: rgba(46,204,113,0.20); color: #2ecc71; }
+.mt-good { background: rgba(46,204,113,0.14); color: #5fd089; }
+.mt-inaccuracy { background: rgba(243,156,18,0.18); color: #f0a93b; }
+.mt-mistake { background: rgba(230,126,34,0.20); color: #e67e22; }
+.mt-blunder { background: rgba(231,76,60,0.20); color: #ff7a6b; }
+.mt-blunder2 { background: rgba(231,76,60,0.30); color: #ff5e4d; }
 
 /* ── 棋谱列表 ─────────────────────────────────────────────────── */
 
@@ -1270,6 +1398,33 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   border-radius: 10px;
   padding: 2px 8px;
   flex-shrink: 0;
+}
+
+/* 棋手页聚合卡 */
+.player-profile {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.player-profile-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.player-profile-name { font-weight: 700; font-size: 14px; color: var(--text); }
+.player-profile-total { color: var(--text-3); font-size: 12px; }
+.player-profile-head .player-clear {
+  margin-left: auto; width: 22px; height: 22px; line-height: 1;
+  border-radius: 4px; border: none; background: var(--panel); color: var(--text-2); cursor: pointer;
+}
+.player-profile-stats { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.pp-side { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.pp-side-label { color: var(--text-3); min-width: 32px; }
+.pp-wdl { color: var(--text); font-variant-numeric: tabular-nums; }
+.player-profile-openings { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.pp-opening {
+  background: var(--panel); color: var(--accent);
+  padding: 1px 7px; border-radius: 4px; font-size: 11px;
 }
 
 /* ── 复盘教练面板 ───────────────────────────────────────────── */

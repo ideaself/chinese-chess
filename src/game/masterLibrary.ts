@@ -251,6 +251,35 @@ export function gameHasPlayer(g: LibraryGame, name: string): boolean {
   return (g.r || '').includes(name) || (g.b || '').includes(name)
 }
 
+/** 棋手页聚合：总对局、执红/执黑胜负、常用开局（爱棋谱式棋手库） */
+export interface PlayerProfile {
+  name: string
+  total: number
+  asRed: OpeningStats
+  asBlack: OpeningStats
+  topOpenings: { name: string; count: number }[]
+}
+export function aggregatePlayerProfile(games: LibraryGame[], name: string): PlayerProfile {
+  const asRed: OpeningStats = { total: 0, redWin: 0, blackWin: 0, draw: 0 }
+  const asBlack: OpeningStats = { total: 0, redWin: 0, blackWin: 0, draw: 0 }
+  const famCount = new Map<OpeningFamily, number>()
+  for (const g of games) {
+    const isRed = (g.r || '').includes(name)
+    const isBlack = (g.b || '').includes(name)
+    if (!isRed && !isBlack) continue
+    const stat = isRed ? asRed : asBlack
+    stat.total++
+    if (g.res === '红胜') stat.redWin++
+    else if (g.res === '黑胜') stat.blackWin++
+    else stat.draw++
+    if (g.cls.family) famCount.set(g.cls.family, (famCount.get(g.cls.family) || 0) + 1)
+  }
+  const topOpenings = [...famCount.entries()]
+    .sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([f, count]) => ({ name: FAMILY_INFO[f]?.name ?? f, count }))
+  return { name, total: asRed.total + asBlack.total, asRed, asBlack, topOpenings }
+}
+
 // ── 开局胜率统计 ──────────────────────────────────────────────────
 
 export interface OpeningStats {

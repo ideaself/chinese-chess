@@ -161,7 +161,7 @@ export const KeyMoments: React.FC = () => {
                 {ply.analysis!.pv.length > 0 && (
                   <button
                     className="btn btn-sm key-moment-retry"
-                    onClick={(e) => { e.stopPropagation(); enterVariationFromPly(m.index) }}
+                    onClick={(e) => { e.stopPropagation(); enterVariationFromPly(m.index); useStore.getState().setSheetTab('variation') }}
                   >
                     变化
                   </button>

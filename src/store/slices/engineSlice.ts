@@ -16,6 +16,7 @@ import {
 } from '../../game/storage'
 import type { MasterAnalysisRecord } from '../../game/storage'
 import { PikafishEngine } from '../../engine/pikafish'
+import type { EngineInfo } from '../../engine/pikafish'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
 import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
 import {
@@ -140,24 +141,30 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     set({ isThinking: true })
     try {
+      // 引擎可能在最佳着法后补发一条无 pv 的 info，故本地保留最长 pv 的结果
+      const holder: { latest: EngineInfo | null } = { latest: null }
       await engine.analyze(fen, moveList, Math.min(engineDepth, 14), (info) => {
+        if (!holder.latest || info.pv.length >= (holder.latest.pv?.length ?? 0)) holder.latest = info
         set({
           analysis: {
             depth: info.depth,
             score: info.score,
             bestMove: info.move,
-            pv: info.pv,
+            pv: info.pv.length ? info.pv : (holder.latest?.pv ?? []),
             fen,
           },
         })
       })
-      // 完成后生成中文提示（计划第6.4节：最佳着法 + 局面评价）
-      const cur = get().analysis
-      if (cur && cur.fen === fen && cur.bestMove.length >= 4) {
+      const latest = holder.latest
+      if (latest && latest.move.length >= 4) {
+        const lineUci = latest.pv.slice(0, 3) // pv[0] 即最佳着法，其后为对手应法与我方续着
+        const line = lineUci.length > 1 ? pvToChinese(fen, lineUci) : [chineseFromFen(fen, latest.move)]
         set({
           hintInfo: {
-            moveCn: chineseFromFen(fen, cur.bestMove),
-            score: cur.score,
+            moveCn: chineseFromFen(fen, latest.move),
+            score: latest.score,
+            line: line.slice(0, 3),
+            movesUci: lineUci,
           },
         })
       }
@@ -185,7 +192,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
             pv: info.pv,
             fen,
           },
-          evalBar: { score: info.score, fen },
+          evalBar: { score: info.score, fen, depth: info.depth, nodes: info.nodes, nps: info.nps },
         })
       })
     } catch {}
@@ -210,7 +217,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
             pv: info.pv,
             fen,
           },
-          evalBar: { score: info.score, fen },
+          evalBar: { score: info.score, fen, depth: info.depth, nodes: info.nodes, nps: info.nps },
         })
       })
     } catch (e) {

@@ -78,13 +78,13 @@ export const App: React.FC = () => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
 
-      const s = useStore.getState()
+       const s = useStore.getState()
 
-      if (s.variation) {
-        if (e.key === 'ArrowLeft') { s.variationGo(s.variation.index - 1); e.preventDefault() }
-        else if (e.key === 'ArrowRight') { s.variationGo(s.variation.index + 1); e.preventDefault() }
-        return
-      }
+       if (s.variation) {
+         if (e.key === 'ArrowLeft') { s.variationGo(s.variation.currentPly - 1); e.preventDefault() }
+         else if (e.key === 'ArrowRight') { s.variationGo(s.variation.currentPly + 1); e.preventDefault() }
+         return
+       }
 
       if (s.mode === 'replay') {
         switch (e.key) {

@@ -85,7 +85,9 @@ async function run(ctx) {
     const [fc, fr, tc, tr] = legal[0]
     s.selectPiece({ col: fc, row: fr })
     const done = s.tryMove({ col: fc, row: fr }, { col: tc, row: tr })
-    return { ok: done, branchLen: window.__store.getState().variation?.moves.length || 0 }
+    const v = window.__store.getState().variation
+    const line = v ? (v.currentId === null ? v.mainLine : v.branches.find(b => b.id === v.currentId)) : null
+    return { ok: done, branchLen: line ? line.moves.length : 0 }
   })())`))
   check('推演分支落子成功', moveResult.ok === true && moveResult.branchLen === 1, JSON.stringify(moveResult))
 
@@ -146,6 +148,85 @@ async function run(ctx) {
   check('错题已收录', mistakeOk, mistakesRaw ? mistakesRaw.slice(0, 120) : 'null')
 
   await evalJs(`window.__store.getState().exitMasterQuiz()`)
+
+  // ── 结果筛选 + 棋手页（爱棋谱式高级筛选） ──
+  await evalJs(`[...document.querySelectorAll('.tab-btn')].find(b => b.textContent === '棋谱')?.click()`)
+  await sleep(200)
+  await evalJs(`window.__store.getState().setGamesSubTab('library')`)
+  // 等待棋谱库重新挂载并加载分片
+  for (let i = 0; i < 20; i++) {
+    const n = await evalJs(`document.querySelectorAll('.master-library .game-item').length`)
+    if (n > 0) break
+    await sleep(200)
+  }
+  const clickLibBtn = (t) => evalJs(`(() => {
+    const b = [...document.querySelectorAll('.master-library button')].find(x => x.textContent.trim() === '${t}')
+    if (b) { b.click(); return true } return false
+  })()`)
+  const clickAnalysisBtn = (t) => evalJs(`(() => {
+    const b = [...document.querySelectorAll('.analysis-panel button')].find(x => x.textContent.trim().includes('${t}'))
+    if (b) { b.click(); return true } return false
+  })()`)
+  const _r1 = await clickLibBtn('红胜')
+  await sleep(300)
+  const rf = JSON.parse(await evalJs(`JSON.stringify((() => {
+    const res = [...document.querySelectorAll('.master-library .game-result')].map(e => e.textContent.trim())
+    return { total: res.length, allRedWin: res.length > 0 && res.every(r => r === '红胜') }
+  })())`))
+  check('结果筛选(红胜)生效', rf.total > 0 && rf.allRedWin, JSON.stringify(rf))
+  await clickLibBtn('全部')
+  await sleep(200)
+
+  // 棋手页：搜索棋手 → 选第一项 → 聚合卡出现
+  await evalJs(`(() => {
+    const inp = [...document.querySelectorAll('.master-library .search-input')].find(i => i.placeholder.includes('搜索棋手筛选'))
+    if (!inp) return
+    inp.dispatchEvent(new Event('focusin', { bubbles: true }))
+    inp.value = '王'
+    inp.dispatchEvent(new Event('input', { bubbles: true }))
+  })()`)
+  await sleep(400)
+  await evalJs(`(() => {
+    const opts = [...document.querySelectorAll('.master-library .player-option')]
+    const opt = opts.find(o => o.textContent.includes('王')) || opts[0]
+    if (opt) opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+  })()`)
+  await sleep(300)
+  const pp = JSON.parse(await evalJs(`JSON.stringify((() => {
+    const card = document.querySelector('.master-library .player-profile')
+    return { shown: !!card, name: card?.querySelector('.player-profile-name')?.textContent || '' }
+  })())`))
+  check('棋手页聚合卡出现', pp.shown && pp.name.includes('王'), JSON.stringify(pp))
+  await evalJs(`(() => {
+    const x = document.querySelector('.master-library .player-profile .player-clear')
+    if (x) x.click()
+  })()`)
+  await sleep(150)
+
+  // ── 拆棋·多候选着法（引擎 MultiPV）──
+  // 桌面端分析面板仅在 activeTab==='analysis' 时挂载，故点「分析」页签
+  await evalJs(`[...document.querySelectorAll('.tab-btn')].find(b => b.textContent === '分析')?.click()`)
+  await sleep(400)
+  const hasDec = await evalJs(`!!document.querySelector('.decompose-box')`)
+  check('拆棋面板可见', hasDec === true)
+  await clickAnalysisBtn('获取候选着法')
+  // 轮询等待引擎返回多候选（深度搜索可能较慢）
+  let cand = 0
+  for (let i = 0; i < 25; i++) {
+    cand = await evalJs(`document.querySelectorAll('.cand-row').length`)
+    if (cand > 0) break
+    await sleep(800)
+  }
+  check('拆棋多候选着法出现', cand >= 1, 'cand=' + cand)
+
+  // 复位：避免污染后续套件（套件共享同一页面状态）
+  await evalJs(`(() => {
+    const s = window.__store.getState()
+    if (s.variation) s.exitVariation()
+    s.setSheetTab('__board__')
+    s.setTab('play')
+  })()`)
+  await sleep(300)
 
   console.log(`   大师库与拆解: ${results.pass} 通过 / ${results.fail} 失败`)
   return results.fail === 0

@@ -15,6 +15,38 @@ export type GameMode = 'play' | 'replay' | 'analysis' | 'puzzle' | 'setup'
 export type Difficulty = 'beginner' | 'easy' | 'medium' | 'hard' | 'master' | 'grandmaster'
 export type TabType = 'play' | 'games' | 'analysis' | 'settings'
 
+/** 一条推演分支（从 basePly 起点局面出发的完整变化线） */
+export interface BranchLine {
+  /** 分支唯一 id（主变固定为 'main'） */
+  id: string
+  /** 父分支 id（主变无父） */
+  parentId: string | null
+  /** 在父分支第几手之后分歧（0 表示从起点局面直接分歧） */
+  divergePly: number
+  /** 完整 UCI 着法（自起点局面起） */
+  moves: string[]
+  /** 中文记谱 */
+  moveCns: string[]
+  /** 每手之后的引擎评估（厘兵，走棋方视角）；evals[i] 对应 moves[i] 落子后的局面；未评测为 null */
+  evals: (number | null)[]
+}
+
+/** 多分支推演状态 */
+export interface VariationState {
+  /** 推演起点局面（0-based ply 序号，棋盘初始处于该局面） */
+  basePly: number
+  /** 主变（棋谱实际后续，用于对比） */
+  mainLine: BranchLine | null
+  /** 用户试走产生的分支 */
+  branches: BranchLine[]
+  /** 当前显示的分支 id（null = 主变） */
+  currentId: string | null
+  /** 当前分支内走到第几手（0..当前线.moves.length） */
+  currentPly: number
+  /** 是否正在请求引擎评分 */
+  evaluating?: boolean
+}
+
 /** 对局角色：每方由谁控制（玩家 / AI） */
 export type Controller = 'human' | 'ai'
 export interface SideControl { w: Controller; b: Controller }
@@ -43,6 +75,10 @@ export interface AnalysisInfo {
 export interface HintInfo {
   moveCn: string
   score: number
+  /** 推荐三步（中文记谱：首着 + 对手应法 + 我方续着） */
+  line: string[]
+  /** 推荐三步的 UCI 着法序列（用于在棋盘上画带序号箭头） */
+  movesUci: string[]
 }
 
 export interface AppState {
@@ -57,7 +93,7 @@ export interface AppState {
   analysisProgress: { current: number; total: number } | null
 
   /** 局面评估条（对战页棋盘上方，分数为行棋方视角） */
-  evalBar: { score: number; fen: string } | null
+  evalBar: { score: number; fen: string; depth?: number; nodes?: number; nps?: number } | null
   /** 轮到玩家且引擎空闲时快速评估当前局面 */
   quickEval: () => Promise<void>
 
@@ -110,17 +146,8 @@ export interface AppState {
   puzzleResult: 'waiting' | 'correct' | 'wrong'
   puzzleRevealed: boolean
 
-  // ── 变化推演 (计划第15节) ──
-  variation: {
-    /** 推演起点局面（0-based ply 序号，棋盘处于该局面） */
-    basePly: number
-    /** PV 着法（UCI） */
-    moves: string[]
-    /** PV 中文记谱 */
-    moveCns: string[]
-    /** 当前推演到第几步（0..moves.length） */
-    index: number
-  } | null
+  // ── 变化推演（多分支树 + 引擎评分对比）──
+  variation: VariationState | null
 
   // ── UI 状态 ──
   activeTab: TabType
@@ -203,6 +230,8 @@ export interface AppState {
   /** 复盘中从当前局面开始试走变化 */
   startReplayVariation: () => void
   variationGo: (k: number) => void
+  /** 切换到指定分支（id 为 'main' 表示主变） */
+  variationSelectBranch: (id: string) => void
   exitVariation: () => void
   /** 推演中在棋盘上落子（覆盖式改写后续分支） */
   variationTryMove: (from: Pos, to: Pos) => boolean

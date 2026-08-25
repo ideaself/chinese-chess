@@ -54,6 +54,25 @@ async function run(ctx) {
   check('AI 回合拒绝选子', aiTurnBlocked === 'blocked', aiTurnBlocked)
   await sleep(2500) // 等 AI 走完，避免影响后续
 
+  // 提示：天天象棋风格 — 棋盘上画带序号的三步箭头，不占用布局
+  await evalJs(`window.__store.getState().startNewGame('medium', 'w')`)
+  for (let i = 0; i < 40; i++) {
+    if (await evalJs(`window.__store.getState().engineReady`)) break
+    await sleep(250)
+  }
+  await evalJs(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('提示'))?.click()`)
+  let mv = 0
+  for (let i = 0; i < 40; i++) {
+    mv = await evalJs(`(window.__store.getState().hintInfo?.movesUci || []).length`)
+    if (mv >= 3) break
+    await sleep(200)
+  }
+  const arrows = await evalJs(`document.querySelectorAll('.hint-arrows g').length`)
+  const hintText = await evalJs(`document.querySelector('.board-hint-overlay')?.textContent || ''`)
+  check('提示返回三步着法', mv >= 3, `moves=${mv}`)
+  check('提示在棋盘画三步箭头', arrows === mv && mv >= 3, `arrows=${arrows}, moves=${mv}`)
+  check('提示含三步中文变化', (hintText.match(/→/g) || []).length === 2, hintText)
+
   // AI 演示：双 AI 自动行棋
   await evalJs(`window.__store.getState().startNewGame('beginner', 'w', { w: 'ai', b: 'ai' })`)
   await sleep(4500)

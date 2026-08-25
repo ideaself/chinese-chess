@@ -16,6 +16,7 @@ import { boardToFen } from '../../game/board'
 import { chineseFromFen, pvToChinese } from '../../game/rules'
 import { generateGameSummary } from '../../game/summary'
 import { getSettings, saveSettings } from '../../game/storage'
+import { acquireEngineSlot, releaseEngineSlot } from '../../game/masterPreanalysis'
 import { EvalCurve } from './EvalCurve'
 import { KeyMoments } from './KeyMoments'
 
@@ -24,6 +25,21 @@ function formatScore(score: number): string {
   if (score <= -100000) return `败势 (${-score - 100000}步被杀)`
   const pawns = (score / 100).toFixed(1)
   return score >= 0 ? `红优 +${pawns}` : `黑优 ${pawns}`
+}
+
+/** 每步着法评级徽标（复用整盘分析的分类结果，爱棋谱式好/恶手标注） */
+const MOVE_TAGS: Record<string, { t: string; c: string }> = {
+  best: { t: '正', c: 'mt-best' },
+  excellent: { t: '妙', c: 'mt-excellent' },
+  good: { t: '好', c: 'mt-good' },
+  inaccuracy: { t: '软', c: 'mt-inaccuracy' },
+  mistake: { t: '次', c: 'mt-mistake' },
+  blunder: { t: '劣', c: 'mt-blunder' },
+  blunder2: { t: '漏', c: 'mt-blunder2' },
+}
+function moveTag(cls?: string): { t: string; c: string } | null {
+  if (!cls) return null
+  return MOVE_TAGS[cls] ?? null
 }
 
 export const AnalysisPanel: React.FC = () => {
@@ -38,6 +54,40 @@ export const AnalysisPanel: React.FC = () => {
   const analysisProgress = useStore(s => s.analysisProgress)
   const cancelAnalysis = useStore(s => s.cancelAnalysis)
   const enterVariationFromLive = useStore(s => s.enterVariationFromLive)
+  const engine = useStore(s => s.engine)
+  const mode = useStore(s => s.mode)
+
+  // 拆棋·多候选着法（计划第16节：引擎 top-N 着法带评分）
+  const [cands, setCands] = useState<{ uci: string; cn: string; score: number }[] | null>(null)
+  const [candLoading, setCandLoading] = useState(false)
+
+  // 切换局面时清空候选
+  React.useEffect(() => { setCands(null) }, [currentPlyIndex])
+
+  const requestCandidates = async () => {
+    if (!engine || !engineReady || isThinking) return
+    await acquireEngineSlot(() => useStore.getState().isThinking)
+    try {
+      setCandLoading(true); setCands(null)
+      const lines = await engine.analyzeLines(currentFen, [], settings.analysisDepth, 3)
+      setCands(lines
+        .filter(l => l.move && l.move.length >= 4)
+        .map(l => ({ uci: l.move, cn: chineseFromFen(currentFen, l.move), score: l.score })))
+    } finally {
+      setCandLoading(false); releaseEngineSlot()
+    }
+  }
+
+  // 点选候选着法 → 在棋盘上试走（并入分支推演）
+  const playCandidate = (uci: string) => {
+    const s = useStore.getState()
+    if (!s.variation && s.mode === 'replay') s.enterVariationFromLive()
+    const from = { col: uci.charCodeAt(0) - 97, row: parseInt(uci[1]) }
+    const to = { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) }
+    s.selectPiece(from)
+    s.tryMove(from, to)
+    s.setSheetTab('variation')
+  }
 
   // 分析深度档位（计划9.1）
   const [settings, setSettingsState] = useState(() => getSettings())
@@ -159,12 +209,48 @@ export const AnalysisPanel: React.FC = () => {
                 </button>
               </div>
             )}
-            <div className="fen-display">
-              <div className="fen-label">FEN:</div>
-              <div className="fen-text">{analysis.fen}</div>
-            </div>
-          </div>
-        )}
+             <div className="fen-display">
+               <div className="fen-label">FEN:</div>
+               <div className="fen-text">{analysis.fen}</div>
+             </div>
+           </div>
+         )}
+
+         {/* 拆棋·多候选着法（爱棋谱式自由拆棋） */}
+         <div className="decompose-box">
+           <div className="info-label" style={{ marginBottom: 4 }}>
+             拆棋 · 多候选着法
+             <button className="btn btn-sm" style={{ marginLeft: 8, float: 'right' }}
+               disabled={!engineReady || isThinking || candLoading}
+               onClick={requestCandidates}>
+               {candLoading ? '分析中…' : '获取候选着法'}
+             </button>
+           </div>
+           {mode !== 'replay' && (
+             <div className="panel-hint" style={{ fontSize: 11, marginTop: 0 }}>
+               进入复盘模式后，点候选着法即可在棋盘试走并形成分支
+             </div>
+           )}
+           {cands && cands.length > 0 && (
+             <div className="cand-list">
+               {cands.map((c, i) => (
+                 <button key={c.uci + i} className="cand-row"
+                   disabled={mode !== 'replay'}
+                   onClick={() => playCandidate(c.uci)}>
+                   <span className="cand-rank">{i + 1}</span>
+                   <span className="cand-move">{c.cn}</span>
+                   <span className={`cand-score ${c.score >= 0 ? 'score-red' : 'score-black'}`}>
+                     {c.score >= 100000 ? '胜势' : c.score <= -100000 ? '败势'
+                       : (c.score / 100 >= 0 ? '+' : '') + (c.score / 100).toFixed(2)}
+                   </span>
+                 </button>
+               ))}
+             </div>
+           )}
+           {cands && cands.length === 0 && (
+             <div className="panel-hint">该局面已无更好着法</div>
+           )}
+         </div>
 
         {/* 本局总结 - 计划第18节 */}
         {summary && (
@@ -187,13 +273,17 @@ export const AnalysisPanel: React.FC = () => {
           <div className="move-list" style={{ marginTop: 12 }}>
             <div className="info-label" style={{ marginBottom: 4 }}>走法记录</div>
             <div className="history-list" style={{ maxHeight: 150, overflow: 'auto' }}>
-              {game.plies.map((ply, i) => (
-                <span key={i} className={`history-move ${i === currentPlyIndex - 1 ? 'btn-active' : ''}`}
-                  onClick={() => useStore.getState().goToPly(i + 1)}
-                  style={{ cursor: 'pointer' }}>
-                  {i % 2 === 0 ? `${Math.floor(i / 2) + 1}. ` : ''}{ply.moveCn}
-                </span>
-              ))}
+               {game.plies.map((ply, i) => {
+                 const tag = moveTag(ply.analysis?.classification)
+                 return (
+                 <span key={i} className={`history-move ${i === currentPlyIndex - 1 ? 'btn-active' : ''}`}
+                   onClick={() => useStore.getState().goToPly(i + 1)}
+                   style={{ cursor: 'pointer' }}>
+                   {i % 2 === 0 ? `${Math.floor(i / 2) + 1}. ` : ''}{ply.moveCn}
+                   {tag && <i className={`move-tag ${tag.c}`}>{tag.t}</i>}
+                 </span>
+                 )
+               })}
             </div>
           </div>
         )}

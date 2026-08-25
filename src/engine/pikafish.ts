@@ -19,6 +19,10 @@ export interface EngineInfo {
   pv: string[]
   /** MultiPV 序号（从1开始） */
   multipv?: number
+  /** 已搜索节点数 */
+  nodes?: number
+  /** 节点/秒 */
+  nps?: number
 }
 
 export type EngineStatus = 'idle' | 'thinking' | 'ready'
@@ -186,7 +190,11 @@ export class PikafishEngine {
 
     const lines = new Map<number, EngineInfo>()
     this.onInfoCallback = (info) => {
-      lines.set(info.multipv ?? 1, info)
+      // 引擎可能在最佳着法后补发无 pv 的 info，保留上一条的有效 pv
+      const key = info.multipv ?? 1
+      const prev = lines.get(key)
+      const merged = (prev && (!info.pv || info.pv.length === 0)) ? { ...info, pv: prev.pv } : info
+      lines.set(key, merged)
       onUpdate?.(sortLines(lines))
     }
     return new Promise<EngineInfo[]>((resolve) => {
@@ -235,11 +243,13 @@ export class PikafishEngine {
 
   private parseInfo(text: string): EngineInfo | null {
     const parts = text.split(' ')
-    let depth = 0, score = 0, multipv = 1
+    let depth = 0, score = 0, multipv = 1, nodes = 0, nps = 0
     const pv: string[] = []
     for (let i = 0; i < parts.length; i++) {
       if (parts[i] === 'depth' && i + 1 < parts.length) depth = parseInt(parts[i + 1]) || 0
       else if (parts[i] === 'multipv' && i + 1 < parts.length) multipv = parseInt(parts[i + 1]) || 1
+      else if (parts[i] === 'nodes' && i + 1 < parts.length) nodes = parseInt(parts[i + 1]) || 0
+      else if (parts[i] === 'nps' && i + 1 < parts.length) nps = parseInt(parts[i + 1]) || 0
       else if (parts[i] === 'score' && i + 2 < parts.length) {
         const val = parseInt(parts[i + 2]) || 0
         score = parts[i + 1] === 'mate' ? (val > 0 ? 100000 - val : -100000 + val) : val
@@ -248,7 +258,7 @@ export class PikafishEngine {
         break
       }
     }
-    return depth === 0 ? null : { depth, score, move: pv[0] ?? '', pv, multipv }
+    return depth === 0 ? null : { depth, score, move: pv[0] ?? '', pv, multipv, nodes, nps }
   }
 
   private sleep(ms: number): Promise<void> {

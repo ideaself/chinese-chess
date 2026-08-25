@@ -45,14 +45,15 @@ async function run(ctx) {
     if (idx < 0) return 'NO_PV'
     s.enterVariationFromPly(idx)
     const v = window.__store.getState().variation
-    return v ? v.moves.length : 'NO_VARIATION'
+    const line = v ? (v.currentId === null ? v.mainLine : v.branches.find(b => b.id === v.currentId)) : null
+    return line ? line.moves.length : 'NO_VARIATION'
   })()`)
   check('进入主变推演', typeof vStart === 'number' && vStart > 0, String(vStart))
 
   if (typeof vStart === 'number') {
     await evalJs(`window.__store.getState().variationGo(Math.min(2, ${vStart}))`)
     await sleep(200)
-    const idx = await evalJs(`window.__store.getState().variation.index`)
+    const idx = await evalJs(`window.__store.getState().variation.currentPly`)
     check('推演步进', idx === Math.min(2, vStart), String(idx))
     await evalJs(`window.__store.getState().exitVariation()`)
     await sleep(200)

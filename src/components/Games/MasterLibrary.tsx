@@ -11,7 +11,7 @@ import { BOARD_HOME } from '../../store/constants'
 import {
   loadLibrary, getCachedLibrary, getLibraryInfo,
   recordToGame, recordTitle,
-  aggregatePlayers, gameHasPlayer,
+  aggregatePlayers, gameHasPlayer, aggregatePlayerProfile,
   FAMILY_INFO, DEFENSE_INFO,
   aggregateOpeningStats, formatStats,
 } from '../../game/masterLibrary'
@@ -39,6 +39,7 @@ export const MasterLibrary: React.FC = () => {
   const [family, setFamily] = useState<OpeningFamily | 'all'>('all')
   const [query, setQuery] = useState('')
   const [player, setPlayer] = useState('')
+  const [result, setResult] = useState<'all' | '红胜' | '黑胜' | '和'>('all')
   const [playerInput, setPlayerInput] = useState('')
   const [playerOpen, setPlayerOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
@@ -108,6 +109,12 @@ export const MasterLibrary: React.FC = () => {
     [games, category],
   )
 
+  // 棋手页聚合（选中棋手时展示）
+  const profile = useMemo(
+    () => (player && games ? aggregatePlayerProfile(games, player) : null),
+    [player, games],
+  )
+
   const filtered = useMemo(() => {
     if (!games) return []
     let list = games
@@ -118,6 +125,11 @@ export const MasterLibrary: React.FC = () => {
     } else if (category === 'endgame') {
       list = list.filter(g => g.cls.endgame)
     }
+    if (result !== 'all') {
+      list = result === '和'
+        ? list.filter(g => g.res && g.res !== '红胜' && g.res !== '黑胜')
+        : list.filter(g => g.res === result)
+    }
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter(g =>
@@ -125,7 +137,7 @@ export const MasterLibrary: React.FC = () => {
       (g.e || '').toLowerCase().includes(q) ||
       (g.d || '').includes(q),
     )
-  }, [games, category, family, query, player])
+  }, [games, category, family, query, player, result])
 
   const openGame = (rec: LibraryGame) => {
     const game = recordToGame(rec)
@@ -192,6 +204,16 @@ export const MasterLibrary: React.FC = () => {
         {([['all', `全部`], ['opening', '开局'], ['endgame', '实战残局']] as [Category, string][]).map(([c, label]) => (
           <button key={c} className={`btn btn-sm ${category === c ? 'btn-active' : ''}`}
             onClick={() => { setCategory(c); setFamily('all'); setVisible(PAGE_SIZE) }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 结果筛选 */}
+      <div className="controls-row" style={{ marginBottom: 8 }}>
+        {([['all', '全部'], ['红胜', '红胜'], ['黑胜', '黑胜'], ['和', '和棋']] as ['all' | '红胜' | '黑胜' | '和', string][]).map(([r, label]) => (
+          <button key={r} className={`btn btn-sm ${result === r ? 'btn-active' : ''}`}
+            onClick={() => { setResult(r); setVisible(PAGE_SIZE) }}>
             {label}
           </button>
         ))}
@@ -310,6 +332,35 @@ export const MasterLibrary: React.FC = () => {
         value={query}
         onChange={e => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
       />
+
+      {/* 棋手页（选中棋手时的聚合卡） */}
+      {profile && profile.total > 0 && (
+        <div className="player-profile">
+          <div className="player-profile-head">
+            <span className="player-profile-name">👤 {profile.name}</span>
+            <span className="player-profile-total">{profile.total} 局 · 收录</span>
+            <button className="player-clear" title="关闭棋手页" onClick={() => { setPlayer(''); setPlayerInput('') }}>×</button>
+          </div>
+          <div className="player-profile-stats">
+            <div className="pp-side">
+              <span className="pp-side-label">执红</span>
+              <span className="pp-wdl">胜 {profile.asRed.redWin} · 和 {profile.asRed.draw} · 负 {profile.asRed.blackWin}</span>
+            </div>
+            <div className="pp-side">
+              <span className="pp-side-label">执黑</span>
+              <span className="pp-wdl">胜 {profile.asBlack.blackWin} · 和 {profile.asBlack.draw} · 负 {profile.asBlack.redWin}</span>
+            </div>
+          </div>
+          {profile.topOpenings.length > 0 && (
+            <div className="player-profile-openings">
+              <span className="pp-side-label">常用开局</span>
+              {profile.topOpenings.map(o => (
+                <span key={o.name} className="pp-opening">{o.name} {o.count}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 列表 */}
       <div className="game-list-items">

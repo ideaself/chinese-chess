@@ -17,7 +17,6 @@ export const MobilePlayBar: React.FC = () => {
   const isThinking = useStore(s => s.isThinking)
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const game = useStore(s => s.game)
-  const hintInfo = useStore(s => s.hintInfo)
   const sideControl = useStore(s => s.sideControl)
   const autoPlay = useStore(s => s.autoPlaying)
   const setSheetTab = useStore(s => s.setSheetTab)
@@ -53,7 +52,10 @@ export const MobilePlayBar: React.FC = () => {
 
   // 分支推演（试走变化）：棋盘常驻可见，直接点子落子；本操作条提供前进/后退与退出/分支列表
   if (variation) {
-    const { moves, index } = variation
+    const line = variation.currentId === null ? variation.mainLine : variation.branches.find(b => b.id === variation.currentId)
+    const moves = line?.moves ?? []
+    const index = variation.currentPly
+    const branchCount = (variation.mainLine ? 1 : 0) + variation.branches.length
     return (
       <div className="mobile-play-bar">
         <div className="mpb-transport">
@@ -63,11 +65,11 @@ export const MobilePlayBar: React.FC = () => {
           <button className="mpb-btn" onClick={() => variationGo(moves.length)} title="终点">⏭</button>
         </div>
         <div className="mpb-actions">
-          <button className="mpb-btn" onClick={() => setSheetTab('variation')} title="分支列表">📑 分支</button>
+          <button className="mpb-btn" onClick={() => setSheetTab('variation')} title="分支列表">📑 分支 {branchCount}</button>
           <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
           <button className="mpb-btn wide" onClick={() => exitVariation()}>✕ 退出推演</button>
         </div>
-        <div className="mpb-hint">在棋盘上点击棋子落子，试走你的变化</div>
+        <div className="mpb-hint">点棋子试走；同局面可走不同手形成多分支，自动评对比主变</div>
       </div>
     )
   }
@@ -117,11 +119,6 @@ export const MobilePlayBar: React.FC = () => {
         <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
         <button className="mpb-btn" onClick={() => setSheetTab('controls')} title="更多设置">⚙</button>
       </div>
-      {hintInfo && (
-        <div className="mpb-hint">💡 推荐 <b>{hintInfo.moveCn}</b>
-          <span className="hint-score">{(hintInfo.score / 100 >= 0 ? '+' : '') + (hintInfo.score / 100).toFixed(2)}</span>
-        </div>
-      )}
     </div>
   )
 }

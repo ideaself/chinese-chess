@@ -3,18 +3,34 @@
  *
  * 棋盘正上方的横向比例条：左侧红色代表红方优势，右侧黑色代表黑方优势，
  * 哪方占优哪方更长。数据来自引擎快速评估（行棋方视角 → 转红方视角）。
+ * 顶部同时显示 评分 / 深度 / 广度(节点) / 速度(节点每秒)。
  */
 
 import React, { useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { boardToFen } from '../../game/board'
 
-/** 评估分（厘兵，红方视角）→ 红色段占比(%) */
+/** 评估分（厘兵，红方视角）→ 红色段占比(%)：tanh 压缩，平滑饱和 */
 export function evalToRedPct(scoreRed: number): number {
   const abs = Math.abs(scoreRed)
   if (abs >= 100000) return scoreRed >= 0 ? 96 : 4 // 杀棋
-  const clamped = Math.max(-600, Math.min(600, scoreRed))
-  return Math.max(4, Math.min(96, 50 + (clamped / 600) * 46))
+  // 以 ±1200 厘兵(±12 兵)为半饱和尺度：普通局面(±4)约占 1/3~2/3，
+  // 仅大优/被杀才逼近两端，避免小幅摆动看起来像崩盘
+  const p = Math.tanh(scoreRed / 1200)
+  return Math.max(4, Math.min(96, 50 + p * 46))
+}
+
+function fmtNodes(n?: number): string {
+  if (!n) return '—'
+  if (n >= 1e8) return (n / 1e8).toFixed(1) + '亿'
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + '万'
+  return String(n)
+}
+
+function fmtNps(n?: number): string {
+  if (!n) return '—'
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'k/s'
+  return n + '/s'
 }
 
 export const EvalBar: React.FC = () => {
@@ -29,18 +45,22 @@ export const EvalBar: React.FC = () => {
   }, [board])
 
   // 数据源: evalBar 优先（对战自动评估），其次单局面分析
-  const source = useMemo(() => {
-    if (evalBar && evalBar.fen.split(' ').slice(0, 2).join(' ') === curFen) return evalBar.score
-    if (analysis && analysis.fen.split(' ').slice(0, 2).join(' ') === curFen) return analysis.score
+  const src = useMemo(() => {
+    if (evalBar && evalBar.fen.split(' ').slice(0, 2).join(' ') === curFen) {
+      return { score: evalBar.score, depth: evalBar.depth, nodes: evalBar.nodes, nps: evalBar.nps }
+    }
+    if (analysis && analysis.fen.split(' ').slice(0, 2).join(' ') === curFen) {
+      return { score: analysis.score, depth: analysis.depth, nodes: undefined, nps: undefined }
+    }
     return null
   }, [evalBar, analysis, curFen])
 
   if (mode !== 'play' && mode !== 'replay') return null
 
   // 转红方视角: 行棋方为黑时取负
-  const scoreRed = source === null ? 0 : (board.turn === 'w' ? source : -source)
+  const scoreRed = src === null ? 0 : (board.turn === 'w' ? src.score : -src.score)
   const redPct = evalToRedPct(scoreRed)
-  const label = source === null
+  const label = src === null
     ? '—'
     : Math.abs(scoreRed) >= 100000
       ? (scoreRed >= 0 ? '红杀' : '黑杀')
@@ -53,9 +73,12 @@ export const EvalBar: React.FC = () => {
         <div className="eval-bar-black" style={{ width: `${100 - redPct}%` }} />
         <div className="eval-bar-notch" />
       </div>
-      <span className={`eval-bar-label ${scoreRed >= 0 ? 'label-red' : 'label-black'}`}>
-        {label}
-      </span>
+      <div className="eval-bar-meta">
+        <span className={`eval-score ${scoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
+        <span className="eval-meta">深度 {src?.depth ?? '—'}</span>
+        <span className="eval-meta">广度 {fmtNodes(src?.nodes)}</span>
+        <span className="eval-meta">速度 {fmtNps(src?.nps)}</span>
+      </div>
     </div>
   )
 }
