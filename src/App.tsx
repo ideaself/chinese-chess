@@ -26,6 +26,8 @@ import { resumeAudio } from './game/sound'
 import { fetchModels } from './game/coach/aiCoach'
 import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
+import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
+import { MobilePlayBar } from './components/Controls/MobilePlayBar'
 import './App.css'
 
 type Tab = 'play' | 'games' | 'analysis' | 'settings'
@@ -48,6 +50,9 @@ export const App: React.FC = () => {
   const openingTraining = useStore(s => s.openingTraining)
   const masterQuiz = useStore(s => s.masterQuiz)
   const theme = useStore(s => s.settings.theme)
+  const sheetTab = useStore(s => s.sheetTab)
+  const setSheetTab = useStore(s => s.setSheetTab)
+  const isMobile = useMediaQuery(MOBILE_QUERY)
 
   useEffect(() => {
     init()
@@ -103,6 +108,36 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('xiangqi-update-ready', onUpdate)
   }, [])
 
+  // 移动端覆盖层 key：显式 sheetTab 优先；特殊模式自动弹出对应面板；__board__ 表示用户主动回到纯棋盘
+  const BOARD_HOME = '__board__'
+  const specialSheet: string | null = mode === 'setup' ? 'setup'
+    : mode === 'puzzle' ? 'puzzle'
+    : variation ? 'variation'
+    : masterQuiz ? 'quiz'
+    : openingTraining ? 'opening'
+    : null
+  const mobileSheet = sheetTab === BOARD_HOME ? null : (sheetTab ?? specialSheet)
+
+  const renderPanelContent = (key: string | null) => {
+    switch (key) {
+      case 'controls': return <Controls />
+      case 'games': return <GamesPanel />
+      case 'analysis': return <AnalysisPanel />
+      case 'settings': return <><StatsPanel /><SettingsPanel /></>
+      case 'setup': return <SetupPanel />
+      case 'puzzle': return <PuzzlePanel />
+      case 'variation': return <VariationPanel />
+      case 'quiz': return <MasterQuizPanel />
+      case 'opening': return <OpeningTrainingPanel />
+      default: return null
+    }
+  }
+
+  const SHEET_TITLES: Record<string, string> = {
+    controls: '对局设置', games: '棋谱库', analysis: '局面分析', settings: '设置',
+    setup: '摆棋', puzzle: '错题练习', variation: '分支推演', quiz: '名局拆解', opening: '开局训练',
+  }
+
   return (
     <div className="app">
       {updateReady && (
@@ -112,17 +147,19 @@ export const App: React.FC = () => {
           <button className="btn btn-sm" onClick={() => setUpdateReady(false)}>✕</button>
         </div>
       )}
-      {/* 顶部导航 */}
+      {/* 顶部导航（移动端仅标题，Tab 移至底部） */}
       <header className="app-header">
         <h1 className="app-title">♟ 中国象棋</h1>
-        <nav className="tab-nav">
-          {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} className={`tab-btn ${activeTab === t ? 'tab-active' : ''}`}
-              onClick={() => setTab(t)}>
-              {label}
-            </button>
-          ))}
-        </nav>
+        {!isMobile && (
+          <nav className="tab-nav">
+            {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
+              <button key={t} className={`tab-btn ${activeTab === t ? 'tab-active' : ''}`}
+                onClick={() => setTab(t)}>
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
       {/* 状态栏 */}
@@ -150,8 +187,8 @@ export const App: React.FC = () => {
 
       {/* 对局结束结果面板 */}
       {game.result !== '*' && mode === 'play' && (
-        <GameOverModal 
-          result={game.result} 
+        <GameOverModal
+          result={game.result}
           plies={game.plies.length}
           redTime={redTime}
           blackTime={blackTime}
@@ -161,38 +198,75 @@ export const App: React.FC = () => {
       {/* 全局轻提示 */}
       {toast && <div className="toast">{toast}</div>}
 
-      {/* 主内容区 */}
-      <main className="app-main">
-        <div className="board-area">
-          <Board />
-        </div>
+      {isMobile ? (
+        <>
+          {/* 移动端：棋盘常驻满屏，面板以全屏覆盖层呈现 */}
+          <main className="app-main">
+            <div className="board-area">
+              <Board />
+            </div>
+          </main>
 
-        <div className="side-panel">
-          {mode === 'setup' ? (
-            <SetupPanel />
-          ) : mode === 'puzzle' ? (
-            <PuzzlePanel />
-          ) : variation ? (
-            <VariationPanel />
-          ) : activeTab === 'play' && openingTraining ? (
-            <OpeningTrainingPanel />
-          ) : activeTab === 'play' && masterQuiz ? (
-            <MasterQuizPanel />
-          ) : (
-            <>
-              {activeTab === 'play' && <Controls />}
-              {activeTab === 'games' && <GamesPanel />}
-              {activeTab === 'analysis' && <AnalysisPanel />}
-              {activeTab === 'settings' && (
-                <>
-                  <StatsPanel />
-                  <SettingsPanel />
-                </>
-              )}
-            </>
+          {!mobileSheet && <MobilePlayBar />}
+
+          {mobileSheet && (
+            <div className="mobile-overlay">
+              <div className="mobile-overlay-header">
+                <span>{SHEET_TITLES[mobileSheet] ?? '面板'}</span>
+                <button className="mobile-overlay-close" aria-label="关闭"
+                  onClick={() => setSheetTab(BOARD_HOME)}>✕</button>
+              </div>
+              <div className="mobile-overlay-body">
+                {renderPanelContent(mobileSheet)}
+              </div>
+            </div>
           )}
-        </div>
-      </main>
+
+          {/* 底部 Tab 栏 */}
+          <nav className="bottom-bar">
+            {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
+              <button key={t}
+                className={`bottom-tab ${(t === 'play' ? sheetTab === null || sheetTab === BOARD_HOME : sheetTab === t) ? 'bottom-tab-active' : ''}`}
+                onClick={() => { setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t) }}>
+                {label}
+              </button>
+            ))}
+          </nav>
+        </>
+      ) : (
+        /* 桌面端：棋盘常驻 + 右侧栏（保持现状） */
+        <main className="app-main">
+          <div className="board-area">
+            <Board />
+          </div>
+
+          <div className="side-panel">
+            {mode === 'setup' ? (
+              <SetupPanel />
+            ) : mode === 'puzzle' ? (
+              <PuzzlePanel />
+            ) : variation ? (
+              <VariationPanel />
+            ) : activeTab === 'play' && openingTraining ? (
+              <OpeningTrainingPanel />
+            ) : activeTab === 'play' && masterQuiz ? (
+              <MasterQuizPanel />
+            ) : (
+              <>
+                {activeTab === 'play' && <Controls />}
+                {activeTab === 'games' && <GamesPanel />}
+                {activeTab === 'analysis' && <AnalysisPanel />}
+                {activeTab === 'settings' && (
+                  <>
+                    <StatsPanel />
+                    <SettingsPanel />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </main>
+      )}
     </div>
   )
 }

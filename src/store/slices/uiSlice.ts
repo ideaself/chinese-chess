@@ -34,9 +34,13 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 
 export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'activeTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab'> {
+    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab'> {
   return {
     activeTab: 'play',
+
+    sheetTab: null,
+
+    setSheetTab: (t) => set({ sheetTab: t }),
 
     toast: null,
 

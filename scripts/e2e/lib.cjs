@@ -77,7 +77,10 @@ async function connect(port = 9222) {
 async function waitEngineReady(ctx) {
   for (let i = 0; i < 30; i++) {
     await ctx.sleep(3000)
-    if (await ctx.evalJs(`!!document.querySelector('.status-ready')`)) return true
+    const ready = await ctx.evalJs(
+      `!!document.querySelector('.status-ready') || (window.__store && window.__store.getState().engineReady === true)`
+    )
+    if (ready) return true
   }
   return false
 }

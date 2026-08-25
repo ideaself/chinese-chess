@@ -124,6 +124,9 @@ export interface AppState {
 
   // ── UI 状态 ──
   activeTab: TabType
+  /** 移动端覆盖层（全屏面板）key：底部 Tab 或特殊模式（setup/puzzle/quiz/opening/variation/controls）；null 时为纯棋盘主页 */
+  sheetTab: string | null
+  setSheetTab: (tab: string | null) => void
   /** 全局轻提示（自动消失） */
   toast: string | null
   showToast: (msg: string) => void

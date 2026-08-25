@@ -390,6 +390,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       hintInfo: null,
       // 跳到对战页签，重放控件在该页签
       activeTab: 'play',
+      // 移动端：从棋谱库点开对局回到纯棋盘主页（关闭覆盖层）
+      sheetTab: null,
     })
 
     // 大师局：预分析缓存点亮复盘视图 + 后台预热缺失关键点（随分析进度逐步显现）

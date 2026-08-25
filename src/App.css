@@ -1102,17 +1102,159 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 /* ── 响应式 ───────────────────────────────────────────────────── */
 
 @media (max-width: 860px) {
-  .app { padding: 8px; gap: 8px; }
-  .app-header { padding: 6px 10px; }
+  .app {
+    padding: 0;
+    gap: 0;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .app-header {
+    padding: 6px 12px;
+    border-radius: 0;
+    border-left: none; border-right: none; border-top: none;
+  }
   .app-title { font-size: 15px; }
-  .tab-btn { padding: 6px 12px; font-size: 12px; }
-  .app-main { flex-direction: column; overflow-y: auto; }
-  .board-area { order: 1; padding: 8px; flex-shrink: 0; }
-  .board-container svg { max-height: 52vh; }
+  .status-bar {
+    padding: 4px 12px;
+    min-height: auto;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* 主区：棋盘固定满屏（状态栏与底部 Tab 栏之间） */
+  .app-main { flex-direction: row; position: relative; overflow: hidden; }
+  .board-area {
+    position: absolute;
+    inset: 0;
+    order: 0;
+    padding: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: none;
+    border-radius: 0;
+    flex-shrink: 0;
+  }
+  .board-container svg { max-height: calc(100dvh - 230px); }
   .player-info { max-width: 100%; margin: 5px 0; padding: 5px 12px; }
   .timer { font-size: 14px; }
-  .side-panel { order: 2; width: 100%; max-height: none; overflow: visible; flex-shrink: 0; }
-  .status-bar { min-height: 20px; }
+  .side-panel { display: none; }
+
+  /* 底部 Tab 栏（固定） */
+  .bottom-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: calc(54px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    display: flex;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    z-index: 20;
+  }
+  .bottom-tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .bottom-tab.bottom-tab-active { color: var(--accent); font-weight: bold; }
+
+  /* 棋盘主页操作条（固定在底部 Tab 栏之上） */
+  .mobile-play-bar {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(54px + env(safe-area-inset-bottom));
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: linear-gradient(to top, var(--bg) 72%, transparent);
+    pointer-events: none;
+  }
+  .mobile-play-bar > * { pointer-events: auto; }
+  .mpb-transport, .mpb-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .mpb-btn {
+    flex: 1 1 auto;
+    min-width: 44px;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .mpb-btn:disabled { opacity: 0.4; }
+  .mpb-btn.wide { flex: 2 1 120px; font-weight: bold; background: var(--accent); border-color: var(--accent); color: #fff; }
+  .mpb-main { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .mpb-playing { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .mpb-hint {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-2);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+  }
+  .mpb-hint .hint-score { margin-left: 6px; color: var(--gold); }
+
+  /* 全屏覆盖层（棋谱/分析/设置/特殊模式） */
+  .mobile-overlay {
+    position: fixed;
+    left: 0; right: 0;
+    top: 0;
+    bottom: calc(54px + env(safe-area-inset-bottom));
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    animation: sheet-in 0.22s ease;
+  }
+  @keyframes sheet-in { from { transform: translateY(16px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+  .mobile-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    font-size: 15px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+  .mobile-overlay-close {
+    border: none;
+    background: var(--panel-2);
+    color: var(--text-2);
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .mobile-overlay-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* ── 大师棋谱库 ─────────────────────────────────────────────── */

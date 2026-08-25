@@ -60,7 +60,7 @@ function http_get(url) {
 async function main() {
   // 可用 E2E_SUITES=core,master 选择性运行
   const wanted = (process.env.E2E_SUITES || '').split(',').map(s => s.trim()).filter(Boolean)
-  const suites = ['core', 'training', 'rating', 'master', 'roles']
+  const suites = ['core', 'training', 'rating', 'master', 'roles', 'mobile']
     .filter(f => wanted.length === 0 || wanted.includes(f))
     .map(f => require(path.join(__dirname, `${f}.cjs`)))
   const procs = []
@@ -92,6 +92,10 @@ async function main() {
 
     const { connect, waitEngineReady } = require(path.join(__dirname, 'lib.cjs'))
     const ctx = await connect(CDP_PORT)
+    // 无头 Chromium 默认视口 800×600 会触发移动端布局（<860px），
+    // 用 CDP Emulation 显式设为桌面视口，保证桌面向 e2e 套件在桌面布局下运行（移动套件自行切换）。
+    await ctx.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+    await new Promise(r => setTimeout(r, 300))
 
     console.log('[e2e] 等待引擎就绪…')
     if (!(await waitEngineReady(ctx))) throw new Error('引擎未就绪')
