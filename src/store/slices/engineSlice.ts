@@ -121,8 +121,12 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       console.error('AI 走棋失败:', e)
     } finally {
       set({ isThinking: false })
-      // AI 走完轮到玩家，自动评估局面供评估条显示
-      setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 120)
+      // AI 走完轮到玩家时自动评估局面（供评估条显示）；演示模式（下一方仍为 AI）
+      // 不触发 quickEval，避免与下一步 engine.go 在同一引擎上并发搜索而中断链。
+      const st = get()
+      if (st.mode === 'play' && st.sideControl[st.board.turn] === 'human' && getSettings().autoEval !== false) {
+        setTimeout(() => get().quickEval(), 120)
+      }
     }
   },
 

@@ -67,8 +67,12 @@ export const Board: React.FC = () => {
   const selectPiece = useStore(s => s.selectPiece)
   const isThinking = useStore(s => s.isThinking)
   const mode = useStore(s => s.mode)
+  const sideControl = useStore(s => s.sideControl)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
+
+  const redRole = sideControl.w === 'human' ? '玩家' : 'AI'
+  const blackRole = sideControl.b === 'human' ? '玩家' : 'AI'
 
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')
@@ -107,12 +111,15 @@ export const Board: React.FC = () => {
   }, [board, lastMove, boardFlipped, mode])
 
   const getSvgCoords = useCallback((clientX: number, clientY: number) => {
-    const rect = svgRef.current?.getBoundingClientRect()
-    if (!rect) return null
-    return {
-      x: (clientX - rect.left) * (BOARD_WIDTH / rect.width),
-      y: (clientY - rect.top) * (BOARD_HEIGHT / rect.height),
-    }
+    const svg = svgRef.current
+    if (!svg) return null
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    pt.y = clientY
+    const p = pt.matrixTransform(ctm.inverse())
+    return { x: p.x, y: p.y }
   }, [])
 
   // 统一指针处理（鼠标/触摸/笔均只触发一次）
@@ -220,7 +227,7 @@ export const Board: React.FC = () => {
     <div className="board-container">
       <EvalBar />
       <div className="player-info black-info">
-        <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方</span>
+        <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
         <span className="timer">{formatTime(blackTime)}</span>
       </div>
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
@@ -262,7 +269,7 @@ export const Board: React.FC = () => {
         })()}
       </svg>
       <div className="player-info red-info">
-        <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方</span>
+        <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
         <span className="timer">{formatTime(redTime)}</span>
       </div>
     </div>

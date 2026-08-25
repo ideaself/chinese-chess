@@ -20,4 +20,7 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   grandmaster: '特级大师',
 }
 
+/** 移动端覆盖层 key: 用户主动回到纯棋盘主页 */
+export const BOARD_HOME = '__board__'
+
 

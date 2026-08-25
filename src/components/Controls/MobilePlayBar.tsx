@@ -13,7 +13,6 @@ import { TriRight } from '../ui/icons'
 
 export const MobilePlayBar: React.FC = () => {
   const mode = useStore(s => s.mode)
-  const difficulty = useStore(s => s.difficulty)
   const engineReady = useStore(s => s.engineReady)
   const isThinking = useStore(s => s.isThinking)
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
@@ -23,7 +22,6 @@ export const MobilePlayBar: React.FC = () => {
   const autoPlay = useStore(s => s.autoPlaying)
   const setSheetTab = useStore(s => s.setSheetTab)
 
-  const startNewGame = useStore(s => s.startNewGame)
   const undo = useStore(s => s.undo)
   const flipBoard = useStore(s => s.flipBoard)
   const aiHint = useStore(s => s.aiHint)
@@ -50,11 +48,6 @@ export const MobilePlayBar: React.FC = () => {
     return () => clearTimeout(timer)
   }, [autoPlay, currentPlyIndex, game.plies.length, autoPlaySpeed, mode, goForward, setAutoPlay])
 
-  const startDefault = () => {
-    const side = getSettings().defaultSide
-    startNewGame(difficulty, side === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : side)
-  }
-
   if (mode === 'replay') {
     return (
       <div className="mobile-play-bar">
@@ -69,7 +62,7 @@ export const MobilePlayBar: React.FC = () => {
           <button className="mpb-btn" onClick={goToEnd} title="末局">⏭</button>
         </div>
         <div className="mpb-actions">
-          <button className="mpb-btn wide" onClick={startDefault}>⚔ 新对局</button>
+          <button className="mpb-btn wide" onClick={() => setSheetTab('newgame')}>⚔ 新对局</button>
           <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
           <button className="mpb-btn" onClick={() => startReplayVariation()} title="试走变化">🌿</button>
           <button className="mpb-btn" onClick={() => setSheetTab('controls')} title="更多">⚙</button>
@@ -81,14 +74,14 @@ export const MobilePlayBar: React.FC = () => {
   // 对战 / 摆棋 / 错题 / 拆解 / 训练等模式：棋盘下常驻核心操作
   return (
     <div className="mobile-play-bar">
-      <div className="mpb-actions">
-        <button className="mpb-btn wide" onClick={() => setSheetTab('controls')}>🎮 新对局</button>
+        <div className="mpb-actions">
+          <button className="mpb-btn wide" onClick={() => setSheetTab('newgame')}>🎮 新对局</button>
         <button className="mpb-btn" onClick={undo}
           disabled={isThinking || currentPlyIndex < 1 || over || demo}
           title={demo ? '演示模式不可悔棋' : over ? '对局已结束' : '悔棋'}>↺ 悔棋</button>
-        <button className="mpb-btn" onClick={() => aiHint()}
+        <button className={`mpb-btn${isThinking ? ' mpb-thinking' : ''}`} onClick={() => aiHint()}
           disabled={!engineReady || isThinking || demo} title={isThinking ? '思考中' : '提示'}>
-          {isThinking ? '⏳' : '💡 提示'}</button>
+          💡 提示</button>
         {singleHuman && (
           <button className="mpb-btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }}
             disabled={over} title="认输">🏳</button>

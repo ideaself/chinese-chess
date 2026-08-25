@@ -34,6 +34,26 @@ import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playM
 
 export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
+  // AI（含 AI 演示）自动走棋调度：演示模式间隔 1 秒，并在引擎空闲后再落子，
+  // 避免与 quickEval 并发搜索导致链断。
+  const scheduleAiMove = (base: number) => {
+    const st = get()
+    if (st.mode !== 'play') return
+    if (st.sideControl[st.board.turn] !== 'ai') return
+    const demo = st.sideControl.w === 'ai' && st.sideControl.b === 'ai'
+    const delay = demo ? 1000 : base
+    setTimeout(() => {
+      const step = () => {
+        const s = get()
+        if (s.mode !== 'play') return
+        if (s.sideControl[s.board.turn] !== 'ai') return
+        if (s.isThinking || !s.engineReady || !s.engine) { setTimeout(step, 250); return }
+        get().aiMove()
+      }
+      step()
+    }, delay)
+  }
+
   return {
     mode: 'play',
 
@@ -142,7 +162,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     // AI 先手时自动走棋（红方先手）
     if (sideControl.w === 'ai') {
-      setTimeout(() => get().aiMove(), 500)
+      scheduleAiMove(500)
     }
   },
 
@@ -254,7 +274,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     // 轮到 AI：自动走棋；轮到人类（含双人）：刷新评估条
     if (mode === 'play' && engineReady && engine && !get().openingTraining) {
       if (get().sideControl[newState.turn] === 'ai') {
-        setTimeout(() => get().aiMove(), 200)
+        scheduleAiMove(200)
       } else {
         setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 150)
       }
@@ -307,7 +327,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     // 撤完轮到 AI（如玩家执黑撤回开局）→ 让 AI 重走
     if (sideControl[turnAt(target)] === 'ai') {
-      setTimeout(() => get().aiMove(), 300)
+      scheduleAiMove(300)
     } else {
       setTimeout(() => { if (get().settings.autoEval !== false) get().quickEval() }, 150)
     }

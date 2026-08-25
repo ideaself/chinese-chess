@@ -10,6 +10,7 @@ import { useStore, DIFFICULTY_LABELS } from './store/useStore'
 import type { Difficulty } from './store/useStore'
 import { Board } from './components/Board/Board'
 import { Controls } from './components/Controls/Controls'
+import { NewGamePanel } from './components/Controls/NewGamePanel'
 import { AnalysisPanel } from './components/Analysis/AnalysisPanel'
 import { SetupPanel } from './components/Analysis/SetupPanel'
 import { PuzzlePanel } from './components/Analysis/PuzzlePanel'
@@ -28,6 +29,7 @@ import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
 import { MobilePlayBar } from './components/Controls/MobilePlayBar'
+import { BOARD_HOME } from './store/constants'
 import './App.css'
 
 type Tab = 'play' | 'games' | 'analysis' | 'settings'
@@ -109,7 +111,6 @@ export const App: React.FC = () => {
   }, [])
 
   // 移动端覆盖层 key：显式 sheetTab 优先；特殊模式自动弹出对应面板；__board__ 表示用户主动回到纯棋盘
-  const BOARD_HOME = '__board__'
   const specialSheet: string | null = mode === 'setup' ? 'setup'
     : mode === 'puzzle' ? 'puzzle'
     : variation ? 'variation'
@@ -129,6 +130,7 @@ export const App: React.FC = () => {
       case 'variation': return <VariationPanel />
       case 'quiz': return <MasterQuizPanel />
       case 'opening': return <OpeningTrainingPanel />
+      case 'newgame': return <NewGamePanel />
       default: return null
     }
   }
@@ -136,6 +138,7 @@ export const App: React.FC = () => {
   const SHEET_TITLES: Record<string, string> = {
     controls: '对局设置', games: '棋谱库', analysis: '局面分析', settings: '设置',
     setup: '摆棋', puzzle: '错题练习', variation: '分支推演', quiz: '名局拆解', opening: '开局训练',
+    newgame: '新对局',
   }
 
   return (
