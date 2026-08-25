@@ -28,15 +28,22 @@ let cacheGames: LibraryGame[] | null = null
 let manifest: LibraryManifest | null = null
 let loadedShards = 0
 
-/** 懒加载棋谱库：manifest + 首个分片（模块级缓存，只请求一次） */
+/** 加载棋谱库：manifest + 全部分片并行请求（模块级缓存，只请求一次） */
 export function loadLibrary(): Promise<void> {
   if (!cachePromise) {
     cachePromise = (async () => {
       const m = await fetch('master-games/manifest.json')
       if (!m.ok) throw new Error(`HTTP ${m.status}`)
-      manifest = await m.json()
-      cacheGames = []
-      await loadShard(0)
+      const mf: LibraryManifest = await m.json()
+      manifest = mf
+      // 并行拉取全部分片，按分片顺序合并（浏览器对同源并发自动排队）
+      const shardGames = await Promise.all(mf.shards.map(async name => {
+        const res = await fetch(`master-games/${name}`)
+        if (!res.ok) throw new Error(`分片 ${name} 加载失败 (HTTP ${res.status})`)
+        return (await res.json()) as MasterRecord[]
+      }))
+      cacheGames = shardGames.flat().map(g => ({ ...g, cls: classifyRecord(g) }))
+      loadedShards = mf.shards.length
     })()
   }
   return cachePromise
@@ -209,6 +216,39 @@ export function recordToGame(rec: LibraryGame): Game | null {
 export function recordTitle(rec: LibraryGame): string {
   if (rec.t) return rec.t
   return `${rec.r || '红方'} vs ${rec.b || '黑方'}`
+}
+
+// ── 棋手索引 ──────────────────────────────────────────────────────
+
+/** "广东 许银川" → "许银川"（取最后一段，兼容无地区前缀写法） */
+function bareName(raw: string): string {
+  const parts = raw.trim().split(/\s+/)
+  return parts[parts.length - 1] || raw.trim()
+}
+
+export interface PlayerEntry {
+  name: string
+  count: number
+}
+
+/** 从已加载对局统计棋手出场对局数（红黑方合并），按局数降序 */
+export function aggregatePlayers(games: LibraryGame[]): PlayerEntry[] {
+  const counts = new Map<string, number>()
+  const bump = (raw?: string) => {
+    if (!raw) return
+    const name = bareName(raw)
+    if (!name || name === '未知' || name === '?' || name === '-') return
+    counts.set(name, (counts.get(name) || 0) + 1)
+  }
+  for (const g of games) { bump(g.r); bump(g.b) }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'))
+}
+
+/** 对局是否为指定棋手参与（子串匹配红/黑方原始字段） */
+export function gameHasPlayer(g: LibraryGame, name: string): boolean {
+  return (g.r || '').includes(name) || (g.b || '').includes(name)
 }
 
 // ── 开局胜率统计 ──────────────────────────────────────────────────

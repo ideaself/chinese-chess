@@ -8,8 +8,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
-  loadLibrary, getCachedLibrary, loadMoreGames, hasMoreGames, getLibraryInfo,
+  loadLibrary, getCachedLibrary, getLibraryInfo,
   recordToGame, recordTitle,
+  aggregatePlayers, gameHasPlayer,
   FAMILY_INFO, DEFENSE_INFO,
   aggregateOpeningStats, formatStats,
 } from '../../game/masterLibrary'
@@ -35,9 +36,11 @@ export const MasterLibrary: React.FC = () => {
   const [category, setCategory] = useState<Category>('all')
   const [family, setFamily] = useState<OpeningFamily | 'all'>('all')
   const [query, setQuery] = useState('')
+  const [player, setPlayer] = useState('')
+  const [playerInput, setPlayerInput] = useState('')
+  const [playerOpen, setPlayerOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
   const [info, setInfo] = useState<{ total: number; loaded: number; source: string } | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
   // 批量预分析状态
   const [preRunning, setPreRunning] = useState(isPreanalysisRunning())
   const [preProgress, setPreProgress] = useState<PreanalysisProgress | null>(null)
@@ -79,20 +82,15 @@ export const MasterLibrary: React.FC = () => {
     }
   }
 
-  /** 加载下一分片 */
-  const handleLoadMore = async () => {
-    if (loadingMore) return
-    setLoadingMore(true)
-    try {
-      await loadMoreGames()
-      setGames(getCachedLibrary() ?? [])
-      setInfo(getLibraryInfo())
-    } catch (e) {
-      showToast(`分片加载失败: ${e instanceof Error ? e.message : e}`)
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  // 棋手选项（来自已加载对局，按局数降序）
+  const players = useMemo(() => (games ? aggregatePlayers(games) : []), [games])
+
+  // 棋手下拉匹配（输入过滤，空串显示局数最多的前 50 人）
+  const playerMatches = useMemo(() => {
+    const q = playerInput.trim().toLowerCase()
+    const list = q ? players.filter(p => p.name.toLowerCase().includes(q)) : players
+    return list.slice(0, 50)
+  }, [players, playerInput])
 
   // 开局体系计数（用于子筛选徽标）
   const familyCounts = useMemo(() => {
@@ -111,6 +109,7 @@ export const MasterLibrary: React.FC = () => {
   const filtered = useMemo(() => {
     if (!games) return []
     let list = games
+    if (player) list = list.filter(g => gameHasPlayer(g, player))
     if (category === 'opening') {
       list = list.filter(g => g.cls.family !== 'other')
       if (family !== 'all') list = list.filter(g => g.cls.family === family)
@@ -124,7 +123,7 @@ export const MasterLibrary: React.FC = () => {
       (g.e || '').toLowerCase().includes(q) ||
       (g.d || '').includes(q),
     )
-  }, [games, category, family, query])
+  }, [games, category, family, query, player])
 
   const openGame = (rec: LibraryGame) => {
     const game = recordToGame(rec)
@@ -193,6 +192,40 @@ export const MasterLibrary: React.FC = () => {
             {label}
           </button>
         ))}
+      </div>
+
+      {/* 棋手筛选（可搜索下拉） */}
+      <div style={{ position: 'relative', marginBottom: 8 }}>
+        <input
+          className="search-input"
+          style={{ marginBottom: 0, paddingRight: player ? 30 : undefined }}
+          placeholder={`搜索棋手筛选对局（已收录 ${players.length} 人）…`}
+          value={player || playerInput}
+          onChange={e => { setPlayer(''); setPlayerInput(e.target.value); setVisible(PAGE_SIZE) }}
+          onFocus={() => setPlayerOpen(true)}
+          onBlur={() => setTimeout(() => setPlayerOpen(false), 120)}
+        />
+        {player && (
+          <button className="player-clear" title="清除棋手筛选"
+            onClick={() => { setPlayer(''); setPlayerInput(''); setVisible(PAGE_SIZE) }}>×</button>
+        )}
+        {playerOpen && (
+          <div className="player-dropdown">
+            {playerMatches.map(p => (
+              <div key={p.name} className="player-option"
+                onMouseDown={e => {
+                  e.preventDefault()
+                  setPlayer(p.name); setPlayerInput(''); setPlayerOpen(false); setVisible(PAGE_SIZE)
+                }}>
+                <span>{p.name}</span>
+                <span className="player-option-count">{p.count}局</span>
+              </div>
+            ))}
+            {playerMatches.length === 0 && (
+              <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--text-3)' }}>无匹配棋手</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 开局体系子筛选 */}
@@ -270,9 +303,7 @@ export const MasterLibrary: React.FC = () => {
       {/* 搜索 */}
       <input
         className="search-input"
-        placeholder={info && info.loaded < info.total
-          ? `搜索棋手 / 赛事 / 日期（已加载 ${info.loaded} 局，可点底部加载更多）…`
-          : '搜索棋手 / 赛事 / 日期…'}
+        placeholder="搜索棋手 / 赛事 / 日期…"
         value={query}
         onChange={e => { setQuery(e.target.value); setVisible(PAGE_SIZE) }}
       />
@@ -307,13 +338,6 @@ export const MasterLibrary: React.FC = () => {
         <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
           onClick={() => setVisible(v => v + PAGE_SIZE)}>
           加载更多（剩余 {filtered.length - visible} 局）
-        </button>
-      )}
-      {filtered.length <= visible && hasMoreGames() && (
-        <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
-          disabled={loadingMore}
-          onClick={handleLoadMore}>
-          {loadingMore ? '加载中…' : '加载更多棋谱（下一分片）'}
         </button>
       )}
     </div>

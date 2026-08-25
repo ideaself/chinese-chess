@@ -161,13 +161,11 @@ export const Board: React.FC = () => {
         if (anim && lastMove && c === lastMove.to.col && r === lastMove.to.row) continue
         const { x, y } = posToSvg({ col: c, row: r }, boardFlipped)
         const isSel = selected?.col === c && selected?.row === r
-        const isLast = lastMove && ((lastMove.from.col === c && lastMove.from.row === r) || (lastMove.to.col === c && lastMove.to.row === r))
         const isCheck = kingPos?.col === c && kingPos?.row === r
         const color = isRed(piece) ? 'red' : 'black'
         const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(piece)}.webp` : null
         nodes.push(
           <g key={`p${c}${r}`}>
-            {isLast && <circle cx={x} cy={y} r={PIECE_RADIUS + 4} fill="rgba(255,200,0,0.3)" />}
             {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 6} fill="none" stroke="#e74c3c" strokeWidth="3" opacity="0.8">
               <animate attributeName="r" values={`${PIECE_RADIUS + 4};${PIECE_RADIUS + 8};${PIECE_RADIUS + 4}`} dur="1s" repeatCount="indefinite" />
             </circle>}
@@ -190,6 +188,21 @@ export const Board: React.FC = () => {
     }
     return nodes
   }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin])
+
+  // ── 上一手标记：起点虚线圈（空格也可见）+ 落点棋子高亮环 ──
+  const lastMoveMarks = React.useMemo(() => {
+    if (!lastMove) return null
+    const from = posToSvg(lastMove.from, boardFlipped)
+    const to = posToSvg(lastMove.to, boardFlipped)
+    return (
+      <g>
+        <circle cx={from.x} cy={from.y} r={PIECE_RADIUS - 6} fill="none"
+          stroke="#16a34a" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.95" />
+        <circle cx={to.x} cy={to.y} r={PIECE_RADIUS + 5} fill="rgba(22,163,74,0.28)"
+          stroke="#16a34a" strokeWidth="3" />
+      </g>
+    )
+  }, [lastMove, boardFlipped])
 
   // ── 合法走法标记 ──
   const targetMarks = React.useMemo(() =>
@@ -216,7 +229,7 @@ export const Board: React.FC = () => {
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
         <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="16" style={{ userSelect: 'none' }}>楚河 汉界</text>
-        {gridLines}{targetMarks}{pieces}
+        {gridLines}{lastMoveMarks}{targetMarks}{pieces}
         {anim && (() => {
           const color = isRed(anim.piece) ? 'red' : 'black'
           const glyph = GLYPHS[anim.piece] || '?'

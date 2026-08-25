@@ -14,7 +14,10 @@
  *
  * 用法:
  *   node scripts/dpxq-convert.mjs [--src <dir>] [--out-dir <dir>]
- *        [--max <N>=3000] [--min-plies <N>=16] [--shard <N>=1000]
+ *        [--max <N>=3000] [--min-plies <N>=16] [--shard <N>=1000] [--no-famous]
+ *
+ * 默认名家优先: 全量扫描语料，含名家棋手的对局排前，取前 --max 局；
+ * --no-famous 恢复旧的按文件顺序取前 N 局行为。
  */
 
 import { readdirSync, readFileSync, writeFileSync, statSync, mkdirSync, rmSync } from 'fs'
@@ -36,6 +39,30 @@ const OUT_DIR = resolve(arg('out-dir', join(REPO_ROOT, 'public', 'master-games')
 const MAX_GAMES = parseInt(arg('max', '3000'), 10)
 const MIN_PLIES = parseInt(arg('min-plies', '16'), 10)
 const SHARD_SIZE = parseInt(arg('shard', '1000'), 10)
+const NO_FAMOUS = process.argv.includes('--no-famous')
+
+// 名家名单（跨代特级大师/全国冠军为主，按姓名子串匹配红黑方任一方）
+const FAMOUS_PLAYERS = [
+  // 老一辈名家
+  '杨官璘', '李义庭', '何顺安', '朱剑秋', '董文渊', '陈松顺', '刘忆慈',
+  '王嘉良', '屠景明', '侯玉山', '张德魁', '谢小然', '罗天扬', '窦国柱',
+  '徐天利', '臧如意', '钱洪发', '刘殿中', '孟立国', '蔡福如', '陈孝堃',
+  // 全国冠军/特级大师
+  '胡荣华', '柳大华', '李来群', '赵国荣', '吕钦', '许银川', '徐天红',
+  '陶汉明', '于幼华', '洪智', '赵鑫鑫', '蒋川', '孙勇征', '谢靖',
+  '徐超', '王廓', '王天一', '郑惟桐',
+  // 特级/强大师
+  '孟辰', '汪洋', '王跃飞', '苗永鹏', '林宏敏', '徐建明', '卜凤波',
+  '傅光明', '宋国强', '张强', '聂铁文', '黄仕清', '尚威', '金波',
+  // 新生代
+  '王禹博', '孟繁睿', '许文章', '赵攀伟', '莫梓健', '尹昇',
+  // 女子名家
+  '唐丹', '王琳娜', '张国凤', '金海英', '陈丽淳', '赵冠芳',
+]
+
+function isFamousGame(rec) {
+  return FAMOUS_PLAYERS.some(n => (rec.r || '').includes(n) || (rec.b || '').includes(n))
+}
 
 const STATE_FILE = join(OUT_DIR, 'state.json')
 
@@ -191,7 +218,18 @@ for (const f of files) {
   mvSeen.add(rec.mv)
   records.push(rec)
 
-  if (records.length >= MAX_GAMES) stopScan = true
+  // 名家模式需全量扫描后排序截取；仅旧顺序模式可提前停止
+  if (NO_FAMOUS && records.length >= MAX_GAMES) stopScan = true
+}
+
+// 名家优先: 全量收集后按名家局排前（同组内按 id 升序），截取前 MAX_GAMES 局
+let famousCount = 0
+if (!NO_FAMOUS) {
+  records.sort((a, b) => (isFamousGame(b) ? 1 : 0) - (isFamousGame(a) ? 1 : 0) || a.id - b.id)
+  if (records.length > MAX_GAMES) records.length = MAX_GAMES
+  famousCount = records.filter(isFamousGame).length
+} else {
+  if (records.length > MAX_GAMES) records.length = MAX_GAMES
 }
 
 records.sort((a, b) => a.id - b.id)
@@ -220,7 +258,7 @@ const manifest = {
 writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest))
 writeFileSync(STATE_FILE, JSON.stringify(state))
 
-console.log(`完成: 扫描 ${scanned} 文件（缓存命中 ${fromCache} · 重新解析 ${reparsed}）→ 收录 ${records.length} 局`)
+console.log(`完成: 扫描 ${scanned} 文件（缓存命中 ${fromCache} · 重新解析 ${reparsed}）→ 收录 ${records.length} 局${!NO_FAMOUS ? ` · 名家局 ${famousCount}` : ''}`)
 console.log(`  跳过: 无效 ${invalid} · 重复棋谱 ${dupGames}${stopScan ? ' · 达到上限停止扫描' : ''}`)
 console.log(`输出: ${OUT_DIR}/manifest.json + ${shards.length} 个分片`)
 console.log(`耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
