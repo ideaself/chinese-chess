@@ -137,6 +137,18 @@ export const App: React.FC = () => {
   const layerCount = (variation ? 1 : 0) + (mobileSheet ? 1 : 0)
   useEffect(() => { syncLayers(layerCount) }, [layerCount])
 
+  // 推演收尾守卫：
+  // 1) 自我分析中推演被面板内「退出推演」等路径终止 → 复位标志、清箭头残留
+  // 2) variation 已不存在但分支面板覆盖层仍开着 → 关闭（曾致空白页）
+  useEffect(() => {
+    if (selfAnalysis && !variation) {
+      useStore.setState({ selfAnalysis: false, hintInfo: null })
+    }
+    if (sheetTab === 'variation' && !useStore.getState().variation) {
+      setSheetTab(BOARD_HOME)
+    }
+  }, [selfAnalysis, variation, sheetTab, setSheetTab])
+
   const renderPanelContent = (key: string | null) => {
     switch (key) {
       case 'controls': return <Controls />

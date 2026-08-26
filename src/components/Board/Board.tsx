@@ -136,13 +136,15 @@ export const Board: React.FC = () => {
   // 造成"选中→立即取消"的一闪现象。
   const handlePointer = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return // 仅主键/触摸
-    const { mode, isThinking, boardFlipped, selectPiece, setupClick } = useStore.getState()
+    const { mode, isThinking, boardFlipped, selectPiece, setupClick, variation } = useStore.getState()
     if (isThinking) return
     const coords = getSvgCoords(e.clientX, e.clientY)
     if (!coords) return
     const pos = svgToPos(coords.x, coords.y, boardFlipped)
     if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
     if (mode === 'setup') { setupClick(pos); return }
+    // 推演/自我分析：允许点选双方棋子试走（selectPiece 内部路由到 variationTryMove）
+    if (mode === 'replay' && variation) { selectPiece(pos); return }
     if (mode !== 'play') return
     selectPiece(pos)
   }, [getSvgCoords])

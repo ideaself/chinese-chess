@@ -105,9 +105,43 @@ async function run(ctx) {
     if (await evalJs(`/深度\\d/.test(document.querySelector('.self-meta')?.textContent || '')`)) { engineScored = true; break }
   }
   check('自我分析引擎实时出分（深度/广度/速度）', engineScored)
-  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出自我分析'))?.click()`)
-  await sleep(300)
-  check('退出自我分析回复盘操作条', await evalJs(`!!document.querySelector('.mpb-five') && !document.querySelector('.self-banner')`))
+
+  // 推荐箭头出现后，「隐藏提示」应清掉箭头
+  let arrowShown = false
+  for (let i = 0; i < 16; i++) {
+    await sleep(400)
+    if (await evalJs(`document.querySelectorAll('.hint-arrows g').length >= 1`)) { arrowShown = true; break }
+  }
+  check('自我分析棋盘出现推荐箭头', arrowShown)
+  await evalJs(`[...document.querySelectorAll('.self-chip')].find(b => b.textContent.includes('隐藏提示'))?.click()`)
+  await sleep(400)
+  check('隐藏提示清除箭头与推荐', await evalJs(`document.querySelectorAll('.hint-arrows g').length === 0 && window.__store.getState().hintInfo === null`))
+
+  // 手动走棋（点选红炮二平五）：自我分析可走双方着法
+  // 用 getScreenCTM 把 viewBox 坐标换算为 client 坐标（与应用内 svgToPos 同一套数学，免受 CSS 缩放影响）
+  const tapScript = (col, row) => `(() => {
+    const svg = document.querySelector('.board-container svg');
+    const ctm = svg.getScreenCTM();
+    const pt = svg.createSVGPoint();
+    pt.x = 40 + ${col} * 60;
+    pt.y = 40 + (9 - ${row}) * 60;
+    const p = pt.matrixTransform(ctm);
+    svg.dispatchEvent(new PointerEvent('pointerdown', { clientX: p.x, clientY: p.y, button: 0, bubbles: true }));
+  })()`
+  await evalJs(tapScript(7, 2))
+  await sleep(250)
+  check('自我分析点选棋子出现选中态', await evalJs(`window.__store.getState().selected !== null`))
+  await evalJs(tapScript(4, 2))
+  await sleep(400)
+  check('自我分析试走着法写入变化线', await evalJs(`(() => { const v = window.__store.getState().variation; return !!v && (v.mainLine.moves.length + v.branches.reduce((a, b) => a + b.moves.length, 0)) >= 1 })()`))
+
+  // 分支面板「退出推演」不再空白：应关闭面板并复位自我分析
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '分支列表')?.click()`)
+  await sleep(400)
+  check('分支面板打开', await evalJs(`!!document.querySelector('.mobile-overlay')`))
+  await evalJs(`[...document.querySelectorAll('.mobile-overlay button')].find(b => b.textContent.includes('退出推演'))?.click()`)
+  await sleep(500)
+  check('面板退出推演回复盘（无空白页）', await evalJs(`!document.querySelector('.mobile-overlay') && window.__store.getState().selfAnalysis === false && !!document.querySelector('.mpb-five')`))
 
   // 大师库对局：黑方/红方应显示对战棋手名；试走变化不得白屏
   await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)

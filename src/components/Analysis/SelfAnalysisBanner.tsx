@@ -23,13 +23,12 @@ export const SelfAnalysisBanner: React.FC = () => {
   // 就地读取最新引擎流结果（横幅是唯一写方，避免新增 store action）
   const evalBar = useStore(s => s.evalBar)
   const analysis = useStore(s => s.analysis)
-  const hintInfo = useStore(s => s.hintInfo)
 
   const fen = boardToFen(board)
 
   // 局面变化 → 实时分析（普通=12 深度，精准=18）
   useEffect(() => {
-    if (!engine || !engineReady) return
+    if (!variation || !engine || !engineReady) return
     const runId = ++runIdRef.current
     let last: EngineInfo | null = null
     setRunning(true)
@@ -51,19 +50,27 @@ export const SelfAnalysisBanner: React.FC = () => {
       }
     }).catch(() => { if (runId === runIdRef.current) setRunning(false) })
     return () => { runIdRef.current++ }
-  }, [fen, engine, engineReady, precise])
+  }, [variation, fen, engine, engineReady, precise])
 
-  // 推荐箭头（棋盘带序号 1 的着法箭头），随局面/隐藏开关更新
+  // 推荐箭头（棋盘带序号 1 的着法箭头）；隐藏提示或退出推演时清除残留
   useEffect(() => {
-    if (!variation || hideHints) return
+    if (!variation || hideHints) {
+      if (useStore.getState().hintInfo) useStore.setState({ hintInfo: null })
+      return
+    }
     const a = analysis
     if (!a || a.fen !== fen || !a.bestMove || a.bestMove.length < 4) return
     const moveCn = chineseFromFen(fen, a.bestMove)
-    if (hintInfo?.movesUci?.[0] === a.bestMove) return
+    if (useStore.getState().hintInfo?.movesUci?.[0] === a.bestMove) return
     useStore.setState({
       hintInfo: { moveCn, score: a.score, line: [moveCn], movesUci: [a.bestMove] },
     })
-  }, [variation, hideHints, analysis, fen, hintInfo])
+  }, [variation, hideHints, analysis, fen])
+
+  // 卸载时清除箭头残留
+  useEffect(() => () => {
+    if (useStore.getState().hintInfo) useStore.setState({ hintInfo: null })
+  }, [])
 
   if (!variation) return null
 
