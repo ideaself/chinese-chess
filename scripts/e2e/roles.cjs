@@ -54,6 +54,14 @@ async function run(ctx) {
   check('AI 回合拒绝选子', aiTurnBlocked === 'blocked', aiTurnBlocked)
   await sleep(2500) // 等 AI 走完，避免影响后续
 
+  // 难度联动搜索深度（修复前 engineDepth 不随难度变化，AI 恒为 medium 深度）
+  await evalJs(`window.__store.getState().setDifficulty('beginner')`)
+  const dBeginner = await evalJs(`window.__store.getState().engineDepth`)
+  await evalJs(`window.__store.getState().setDifficulty('grandmaster')`)
+  const dGM = await evalJs(`window.__store.getState().engineDepth`)
+  check('难度联动搜索深度', dBeginner === 2 && dGM === 28, `beginner=${dBeginner}, gm=${dGM}`)
+  await evalJs(`window.__store.getState().setDifficulty('medium')`)
+
   // 提示：天天象棋风格 — 棋盘上画带序号的三步箭头，不占用布局
   await evalJs(`window.__store.getState().startNewGame('medium', 'w')`)
   for (let i = 0; i < 40; i++) {

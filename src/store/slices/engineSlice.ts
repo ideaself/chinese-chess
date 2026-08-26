@@ -2,7 +2,7 @@
  * 引擎/AI 走棋/AI 分析 slice
  */
 import type { AppState, StoreSet, StoreGet } from '../types'
-import type { BoardState, Move, Pos, Turn, GameMode } from '../types'
+import type { BoardState, Move, Pos, Turn, GameMode, Difficulty } from '../types'
 import type { Game } from '../../game/model'
 import { makeMove, boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
 import { getLegalMoves, getAllLegalMoves, getGameStatus, chineseFromFen, pvToChinese } from '../../game/rules'
@@ -17,7 +17,29 @@ import {
 import type { MasterAnalysisRecord } from '../../game/storage'
 import { PikafishEngine } from '../../engine/pikafish'
 import type { EngineInfo } from '../../engine/pikafish'
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
+
+/**
+ * 拟人降强：弱级以一定概率不走最优着法，而从 topN 候选里按权重（名次递减）挑一手。
+ * 失误多为“次优”而非送子，模拟官方 Skill Level 的弱棋手观感。
+ */
+function pickSkillMove(cands: EngineInfo[], difficulty: Difficulty): string | null {
+  const cfg = DIFFICULTY_SKILL[difficulty]
+  if (!cands.length) return null
+  if (cfg.p <= 0) return cands[0].move
+  if (Math.random() > cfg.p) return cands[0].move
+  const k = Math.min(cfg.topN, cands.length)
+  const weights: number[] = []
+  let w = 1
+  for (let i = 0; i < k; i++) { weights.push(w); w *= 0.6 }
+  const sum = weights.reduce((a, b) => a + b, 0)
+  let r = Math.random() * sum
+  for (let i = 0; i < k; i++) {
+    r -= weights[i]
+    if (r <= 0) return cands[i].move
+  }
+  return cands[0].move
+}
+import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL } from '../constants'
 import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
 import {
   pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
@@ -56,12 +78,12 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   // ── 对局状态 ──
 
     setDifficulty: (d) => {
-    set({ difficulty: d })
-    const { engine } = get()
-    if (engine && engine.isReady) {
-      engine.setDepth(DIFFICULTY_DEPTH[d])
-    }
-  },
+      set({ difficulty: d, engineDepth: DIFFICULTY_DEPTH[d] })
+      const { engine } = get()
+      if (engine && engine.isReady) {
+        engine.setDepth(DIFFICULTY_DEPTH[d])
+      }
+    },
 
     init: async () => {
     resumeAudio()
@@ -84,7 +106,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   },
 
     aiMove: async () => {
-    const { game, engine, engineDepth, mode } = get()
+    const { game, engine, engineDepth, difficulty, mode } = get()
     if (!engine || !engine.isReady || get().isThinking) return
     if (mode !== 'play') return
 
@@ -110,7 +132,14 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       }
 
       if (!bestUci) {
-        bestUci = await engine.go(fen, moveList, engineDepth)
+        const skill = DIFFICULTY_SKILL[difficulty]
+        if (skill.p > 0) {
+          // 拟人降强：弱级用 MultiPV 取前 topN 候选，按概率走次优着法（模拟 Skill Level）
+          const cands = await engine.analyzeLines(fen, moveList, Math.min(engineDepth, 12), skill.topN)
+          bestUci = pickSkillMove(cands, difficulty)
+        } else {
+          bestUci = await engine.go(fen, moveList, engineDepth)
+        }
       }
 
       if (bestUci && bestUci !== '(none)' && bestUci.length >= 4) {
@@ -183,7 +212,8 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     const fen = boardToFen(board)
     try {
-      await s.engine.analyze(fen, s.game.plies.map(p => p.move), Math.min(getSettings().analysisDepth, 12), (info) => {
+      // 顶部评分条深度跟随 AI 难度（难度即引擎搜索深度），封顶 16 以免移动端卡顿
+      await s.engine.analyze(fen, s.game.plies.map(p => p.move), Math.min(s.engineDepth, 16), (info) => {
         set({
           analysis: {
             depth: info.depth,
