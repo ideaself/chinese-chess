@@ -39,6 +39,12 @@ jobs:
       - name: 生成 Android 工程
         run: npx cap add android && npx cap sync android
 
+      # 允许明文 HTTP（自建 WebDAV 服务器常为 http://，Android 9+ 默认禁止）
+      - name: 放行明文 HTTP
+        run: |
+          sed -i 's|<application|<application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
+          grep -q usesCleartextTraffic android/app/src/main/AndroidManifest.xml
+
       # 配置了以下 Secrets 时构建正式签名 APK，否则回退 debug 签名：
       #   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD
       #   ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD

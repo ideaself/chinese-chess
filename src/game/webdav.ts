@@ -104,6 +104,12 @@ async function wdRaw(
 function readable(e: unknown): SyncResult {
   if (e instanceof TypeError && e.message.startsWith(FETCH_FAILED)) {
     const detail = e.message.slice(FETCH_FAILED.length + 1)
+    if (/cleartext/i.test(detail)) {
+      return {
+        ok: false,
+        message: '明文 HTTP 被 Android 拦截（cleartext not permitted）。请更新 APK（v1.13.8 起已放行），或改用 https 地址',
+      }
+    }
     if (detail) return { ok: false, message: `请求失败：${detail}` }
     return {
       ok: false,
