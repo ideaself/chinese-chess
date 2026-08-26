@@ -72,6 +72,14 @@ export const Board: React.FC = () => {
   const game = useStore(s => s.game)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
+  const currentPlyIndex = useStore(s => s.currentPlyIndex)
+
+  // 非对局模式（复盘/推演）：玩家信息合并为一行，顶部分数与局势图气泡同源
+  const isPlay = mode === 'play'
+  const curPly = currentPlyIndex > 0 ? game.plies[currentPlyIndex - 1] : null
+  const replayScore = curPly?.analysis
+    ? (curPly.turn === 'w' ? curPly.analysis.score : -curPly.analysis.score)
+    : null
 
   // 棋手标注：复盘/分析/推演显示实际棋手名；实时对战显示 玩家/AI
   const redName = game?.header?.Red
@@ -254,11 +262,32 @@ export const Board: React.FC = () => {
 
   return (
     <div className="board-container">
-      <EvalBar />
-      <div className="player-info black-info">
-        <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
-        <span className="timer">{formatTime(blackTime)}</span>
-      </div>
+      {isPlay ? (
+        <>
+          <EvalBar />
+          <div className="player-info black-info">
+            <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
+            <span className="timer">{formatTime(blackTime)}</span>
+          </div>
+        </>
+      ) : (
+        <div className="player-bar">
+          <span className="player-side">
+            <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
+            <span className="timer">{formatTime(blackTime)}</span>
+          </span>
+          {mode === 'replay' && replayScore !== null && (
+            <span className={`player-score ${replayScore >= 0 ? 'red' : 'black'}`}>
+              {replayScore >= 0 ? '红优' : '黑优'}{Math.abs(replayScore)}分
+            </span>
+          )}
+          <span className="vs">vs</span>
+          <span className="player-side">
+            <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
+            <span className="timer">{formatTime(redTime)}</span>
+          </span>
+        </div>
+      )}
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
         onPointerDown={handlePointer}
         style={{ touchAction: 'none', cursor: 'pointer' }}>
@@ -314,10 +343,12 @@ export const Board: React.FC = () => {
           )
         })()}
       </svg>
-      <div className="player-info red-info">
-        <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
-        <span className="timer">{formatTime(redTime)}</span>
-      </div>
+      {isPlay && (
+        <div className="player-info red-info">
+          <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
+          <span className="timer">{formatTime(redTime)}</span>
+        </div>
+      )}
       {hintInfo && (
         <div className="board-hint-overlay">
           💡 推荐 {hintInfo.line.join(' → ')}

@@ -218,28 +218,30 @@ export const App: React.FC = () => {
         )}
       </header>
 
-      {/* 状态栏 */}
-      <div className="status-bar">
-        <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
-          {variation
-            ? '主变推演'
-            : mode === 'setup'
-              ? '摆棋模式'
-              : mode === 'puzzle'
-                ? '错误重走'
-                : openingTraining
-                  ? '开局训练'
-                  : mode === 'replay'
-                    ? `第 ${currentPlyIndex}/${game.plies.length} 步`
-                    : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
-        </span>
-        {inCheck && <span className="check-badge">将军!</span>}
-        {game.result !== '*' && (
-          <span className="game-over-badge">
-            {game.result === '1-0' ? '红胜' : game.result === '0-1' ? '黑胜' : '和棋'}
+      {/* 状态栏（移动端复盘隐藏：步数与胜负已在标题和局势图中，给棋盘腾空间） */}
+      {!(isMobile && mode === 'replay' && !variation) && (
+        <div className="status-bar">
+          <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
+            {variation
+              ? '主变推演'
+              : mode === 'setup'
+                ? '摆棋模式'
+                : mode === 'puzzle'
+                  ? '错误重走'
+                  : openingTraining
+                    ? '开局训练'
+                    : mode === 'replay'
+                      ? `第 ${currentPlyIndex}/${game.plies.length} 步`
+                      : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
           </span>
-        )}
-      </div>
+          {inCheck && <span className="check-badge">将军!</span>}
+          {game.result !== '*' && (
+            <span className="game-over-badge">
+              {game.result === '1-0' ? '红胜' : game.result === '0-1' ? '黑胜' : '和棋'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* 对局结束结果面板 */}
       {game.result !== '*' && mode === 'play' && (

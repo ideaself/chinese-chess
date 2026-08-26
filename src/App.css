@@ -1261,13 +1261,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    padding: 2px 2px calc(2px + env(safe-area-inset-bottom));
     background: var(--bg);
     border: none;
     border-radius: 0;
   }
   .board-container { width: 100%; height: 100%; justify-content: center; }
-  .board-container svg { max-height: 100%; }
+  .board-container svg { width: 100%; height: auto; max-height: 100%; }
   .player-info { max-width: 100%; margin: 5px 0; padding: 5px 12px; }
   .timer { font-size: 14px; }
   .side-panel { display: none; }
@@ -1604,7 +1604,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   flex-direction: column;
   background: var(--panel);
   border-top: 1px solid var(--line);
-  max-height: 42vh;
+  max-height: 34vh;
 }
 .replay-tabs-bar {
   display: flex;
@@ -1785,3 +1785,28 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .curve-analyze-row .curve-depth { flex: 0 0 auto; font-size: 12px; padding: 4px 6px; }
 .curve-analyze-row .btn { flex: 1; }
 .curve-progress { flex: 1; font-size: 13px; color: var(--text-2); }
+
+/* 复盘/推演：合并玩家栏（黑方 时间 vs 红方 时间 [+分数]） */
+.player-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  font-size: 13px;
+}
+.player-bar .player-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.player-bar .player-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-bar .timer { font-size: 12px; color: var(--text-2); }
+.player-bar .vs { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
+.player-score {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+.player-score.red { color: #c0392b; background: rgba(192,57,43,0.1); }
+.player-score.black { color: #eee; background: rgba(44,44,44,0.75); }

@@ -13,10 +13,10 @@ import { useStore } from '../../store/useStore'
 import { phaseBounds } from '../../game/analysis'
 
 const W = 360
-const H = 200
+const H = 150
 const PAD_L = 36
 const PAD_R = 8
-const PAD_T = 26
+const PAD_T = 22
 const PAD_B = 10
 const MAX_CP = 900
 
