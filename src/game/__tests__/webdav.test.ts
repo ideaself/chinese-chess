@@ -163,3 +163,39 @@ describe('根路径 404 自动兜底子目录', () => {
     expect(credFromSettings()?.url).toBe('https://dav.example.com/xiangqi')
   })
 })
+
+describe('diagnoseConnection', () => {
+  it('MKCOL 被服务器拒绝（如只接受标准 HTTP 方法）时仍继续 PUT 探测，PUT 成功即判定可写', async () => {
+    // 浏览器路径：MKCOL 返回 405（非抛出），PUT/DELETE 成功
+    fetchMock.mockImplementation(async (url: string, init?: { method?: string }) => {
+      const m = init?.method ?? 'GET'
+      if (m === 'MKCOL') return { ok: false, status: 405, text: async () => 'Expected one of [OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, PATCH] but was MKCOL' }
+      if (m === 'PUT') return { ok: true, status: 201, text: async () => '' }
+      if (m === 'DELETE') return { ok: true, status: 204, text: async () => '' }
+      return { ok: true, status: 200, text: async () => '' }
+    })
+    const { diagnoseConnection } = await import('../webdav')
+    const r = await diagnoseConnection(CRED)
+    expect(r.workingPath).toBe('/dav/xiangqi')
+    const probeStep = r.steps.find(s => s.name.includes('写入探测'))
+    expect(probeStep?.ok).toBe(true)
+    expect(probeStep?.detail).toContain('PUT HTTP 201')
+    expect(probeStep?.detail).toContain('目录已存在')
+  })
+
+  it('MKCOL 网络层异常（原生端非 2xx 被 CapacitorHttp reject）时不阻断，PUT 成功仍可写', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: { method?: string }) => {
+      const m = init?.method ?? 'GET'
+      if (m === 'MKCOL') throw new TypeError('Failed to fetch: Expected one of [OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, PATCH] but was MKCOL')
+      if (m === 'PUT') return { ok: true, status: 201, text: async () => '' }
+      if (m === 'DELETE') return { ok: true, status: 204, text: async () => '' }
+      return { ok: true, status: 200, text: async () => '' }
+    })
+    const { diagnoseConnection } = await import('../webdav')
+    const r = await diagnoseConnection(CRED)
+    expect(r.workingPath).toBe('/dav/xiangqi')
+    const probeStep = r.steps.find(s => s.name.includes('写入探测'))
+    expect(probeStep?.ok).toBe(true)
+    expect(probeStep?.detail).toContain('不支持 MKCOL')
+  })
+})

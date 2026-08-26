@@ -150,16 +150,16 @@ async function ensureCollection(cred: WebdavCred): Promise<void> {
   )
 }
 
-/** 执行 MKCOL；2xx/405 返回 null（视为成功），其余返回响应 */
+/** 执行 MKCOL；2xx/405 返回 null（视为成功），其余返回响应。
+ * 网络层异常也返回 null 不阻断：部分自建服务器只接受标准 HTTP 方法、
+ * 拒绝 MKCOL（CapacitorHttp 对非 2xx 直接 reject），真正决定成败的是后续 PUT。 */
 async function mkcolTolerant(cred: WebdavCred, path: string): Promise<WdResponse | null> {
   try {
     const r = await wdRaw(cred, 'MKCOL', backupOrigin(cred) + path)
     if (r.ok || r.status === 405) return null
     return r
-  } catch (e) {
-    if (e instanceof TypeError && e.message.startsWith(FETCH_FAILED)) throw e
-    if (e instanceof TypeError) throw new TypeError(FETCH_FAILED)
-    throw e
+  } catch {
+    return null
   }
 }
 
@@ -304,21 +304,35 @@ export async function diagnoseConnection(cred: WebdavCred): Promise<DiagResult> 
     return { steps }
   }
 
-  // 2. 候选目录写探针：MKCOL → PUT → DELETE 往返
+  // 2. 候选目录写探针：PUT+DELETE 往返（MKCOL 仅作附加信息，失败不阻断——
+  //    部分自建服务器只接受标准 HTTP 方法、不认 WebDAV 扩展方法，但 PUT 可用）
   let workingPath: string | undefined
   for (const dir of candidatePaths(cred)) {
     const probeRel = `${dir === '/' ? '' : dir}/xiangqi-probe-${Date.now() % 10000}.txt`
     const probeUrl = `${backupOrigin(cred)}${probeRel}`
     try {
-      const mk = await wdRaw(cred, 'MKCOL', backupOrigin(cred) + (dir === '/' ? '/' : dir))
-      const put = await wdRaw(cred, 'PUT', probeUrl, 'probe')
+      // MKCOL：能探测就带上备注；被拒/异常都不影响后续 PUT
+      let mkDetail = ''
+      try {
+        const mk = await wdRaw(cred, 'MKCOL', backupOrigin(cred) + (dir === '/' ? '/' : dir))
+        mkDetail = mk.status === 405 ? ' · 目录已存在' : mk.ok ? ' · 已自动创建' : ` · MKCOL HTTP ${mk.status}`
+      } catch {
+        mkDetail = ' · 服务器不支持 MKCOL（已忽略）'
+      }
+      let put: WdResponse
+      try {
+        put = await wdRaw(cred, 'PUT', probeUrl, 'probe')
+      } catch (e) {
+        push(`写入探测 ${dir}`, false, readable(e).message)
+        continue
+      }
       if (put.ok) {
         await wdRaw(cred, 'DELETE', probeUrl).catch(() => undefined)
-        push(`写入探测 ${dir}`, true, `PUT HTTP ${put.status}${mk.status === 405 ? ' · 目录已存在' : mk.ok ? ' · 已自动创建' : ''}`)
+        push(`写入探测 ${dir}`, true, `PUT HTTP ${put.status}${mkDetail}`)
         workingPath = dir
         break
       }
-      push(`写入探测 ${dir}`, false, `PUT HTTP ${put.status}`)
+      push(`写入探测 ${dir}`, false, `PUT HTTP ${put.status}${put.text ? `：${put.text.slice(0, 80)}` : ''}`)
     } catch (e) {
       push(`写入探测 ${dir}`, false, readable(e).message)
     }
