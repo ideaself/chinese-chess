@@ -86,6 +86,10 @@ export interface AppState {
   engine: PikafishEngine | null
   engineReady: boolean
   isThinking: boolean
+  /** 引擎被后台任务（如评估条快评）占用。与 isThinking 分离：
+   * isThinking 是 AI 思考的 UI 状态（会禁用悔棋等操作），
+   * engineOccupied 仅用于 AI 走棋调度等待引擎空闲，不影响用户操作。 */
+  engineOccupied: boolean
   engineDepth: number
   analysis: AnalysisInfo | null
   hintInfo: HintInfo | null

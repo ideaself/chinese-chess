@@ -39,7 +39,7 @@ function pickSkillMove(cands: EngineInfo[], difficulty: Difficulty): string | nu
   }
   return cands[0].move
 }
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL } from '../constants'
+import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL, DIFFICULTY_MOVE_TIME, QUICK_EVAL_MOVE_TIME } from '../constants'
 import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
 import {
   pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
@@ -55,15 +55,26 @@ import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playM
 /** 整盘分析取消标记 */
 let analysisCancelFlag = false
 
+/** 等待后台任务（快评等）释放引擎，超时返回 false */
+async function waitForEngineIdle(get: StoreGet, maxMs = 10000): Promise<boolean> {
+  for (let waited = 0; waited < maxMs; waited += 250) {
+    if (!get().engineOccupied) return true
+    await new Promise(r => setTimeout(r, 250))
+  }
+  return !get().engineOccupied
+}
+
 
 export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'engine' | 'engineReady' | 'isThinking' | 'engineDepth' | 'analysis' | 'hintInfo' | 'analysisProgress' | 'evalBar' | 'setDifficulty' | 'init' | 'aiMove' | 'aiHint' | 'quickEval' | 'analyzePosition' | 'analyzeCurrentGame' | 'cancelAnalysis'> {
+    'engine' | 'engineReady' | 'isThinking' | 'engineOccupied' | 'engineDepth' | 'analysis' | 'hintInfo' | 'analysisProgress' | 'evalBar' | 'setDifficulty' | 'init' | 'aiMove' | 'aiHint' | 'quickEval' | 'analyzePosition' | 'analyzeCurrentGame' | 'cancelAnalysis'> {
   return {
     engine: null,
 
     engineReady: false,
 
     isThinking: false,
+
+    engineOccupied: false,
 
     engineDepth: 10,
 
@@ -109,6 +120,8 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const { game, engine, engineDepth, difficulty, mode } = get()
     if (!engine || !engine.isReady || get().isThinking) return
     if (mode !== 'play') return
+    // 引擎被后台任务占用时等待其结束，而非静默放弃（否则该回合无人重试，AI 停走）
+    if (!(await waitForEngineIdle(get))) return
 
     const currentBoard = boardFromGame(game, game.plies.length)
     if (get().sideControl[currentBoard.turn] !== 'ai') return
@@ -116,8 +129,10 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({ isThinking: true })
 
     try {
-      const fen = boardToFen(currentBoard)
+      const engineFen = game.startFen
       const moveList = game.plies.map(p => p.move)
+      // 对局改用时间预算驱动，避免长时间搜索卡死 UI（尤其高级别单线程 WASM）
+      const moveTime = DIFFICULTY_MOVE_TIME[difficulty]
 
       // 开局库优先（计划外增强: 提升开局质量与多样性）
       let bestUci: string | null = null
@@ -135,17 +150,25 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         const skill = DIFFICULTY_SKILL[difficulty]
         if (skill.p > 0) {
           // 拟人降强：弱级用 MultiPV 取前 topN 候选，按概率走次优着法（模拟 Skill Level）
-          const cands = await engine.analyzeLines(fen, moveList, Math.min(engineDepth, 12), skill.topN)
+          const cands = await engine.analyzeLines(engineFen, moveList, Math.min(engineDepth, 12), skill.topN, undefined, moveTime)
           bestUci = pickSkillMove(cands, difficulty)
         } else {
-          bestUci = await engine.go(fen, moveList, engineDepth)
+          bestUci = await engine.go(engineFen, moveList, engineDepth, moveTime)
         }
       }
 
       if (bestUci && bestUci !== '(none)' && bestUci.length >= 4) {
         const from = { col: bestUci.charCodeAt(0) - 97, row: parseInt(bestUci[1]) }
         const to = { col: bestUci.charCodeAt(2) - 97, row: parseInt(bestUci[3]) }
-        get().tryMove(from, to)
+        // 兜底校验：所走之子必须属于当前行棋方（防止并发串扰/异常时 AI 动对方子）
+        const piece = currentBoard.board[from.col]?.[from.row]
+        const isRedPiece = piece !== '.' && piece === piece.toUpperCase()
+        const sideOk = currentBoard.turn === 'w' ? isRedPiece : piece !== '.' && !isRedPiece
+        if (sideOk) {
+          get().tryMove(from, to)
+        } else {
+          console.error('AI 收到非法着法（与行棋方不符），已丢弃:', bestUci)
+        }
       }
     } catch (e) {
       console.error('AI 走棋失败:', e)
@@ -162,7 +185,8 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     aiHint: async () => {
     const { game, engine, engineDepth } = get()
-    if (!engine || !engine.isReady) return
+    if (!engine || !engine.isReady || get().isThinking) return
+    if (!(await waitForEngineIdle(get))) return
 
     const currentBoard = boardFromGame(game, game.plies.length)
     const fen = boardToFen(currentBoard)
@@ -172,7 +196,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     try {
       // 引擎可能在最佳着法后补发一条无 pv 的 info，故本地保留最长 pv 的结果
       const holder: { latest: EngineInfo | null } = { latest: null }
-      await engine.analyze(fen, moveList, Math.min(engineDepth, 14), (info) => {
+      await engine.analyze(game.startFen, moveList, Math.min(engineDepth, 14), (info) => {
         if (!holder.latest || info.pv.length >= (holder.latest.pv?.length ?? 0)) holder.latest = info
         set({
           analysis: {
@@ -183,7 +207,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
             fen,
           },
         })
-      })
+      }, QUICK_EVAL_MOVE_TIME * 2)
       const latest = holder.latest
       if (latest && latest.move.length >= 4) {
         const lineUci = latest.pv.slice(0, 3) // pv[0] 即最佳着法，其后为对手应法与我方续着
@@ -206,14 +230,19 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     quickEval: async () => {
     const s = get()
-    if (!s.engine?.isReady || s.isThinking) return
+    if (!s.engine?.isReady || s.isThinking || s.engineOccupied) return
     if (s.mode !== 'play' || s.openingTraining || s.game.result !== '*') return
     const board = boardFromGame(s.game, s.game.plies.length)
 
     const fen = boardToFen(board)
+    // 快评同样占用引擎：必须登记占用，否则 AI 回合的调度会在快评未结束时
+    // 并发下发 go，旧搜索的 bestmove 会被误当成 AI 着法（曾致 AI 走对方子）。
+    // 不复用 isThinking：那会禁用悔棋等用户操作。
+    set({ engineOccupied: true })
     try {
-      // 顶部评分条深度跟随 AI 难度（难度即引擎搜索深度），封顶 16 以免移动端卡顿
-      await s.engine.analyze(fen, s.game.plies.map(p => p.move), Math.min(s.engineDepth, 16), (info) => {
+      // 顶部评分条深度跟随 AI 难度（难度即引擎搜索深度），封顶 16 以免移动端卡顿；
+      // 另加时间上限，保证尽快归还引擎
+      await s.engine.analyze(s.game.startFen, s.game.plies.map(p => p.move), Math.min(s.engineDepth, 16), (info) => {
         set({
           analysis: {
             depth: info.depth,
@@ -224,8 +253,10 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           },
           evalBar: { score: info.score, fen, depth: info.depth, nodes: info.nodes, nps: info.nps },
         })
-      })
-    } catch {}
+      }, QUICK_EVAL_MOVE_TIME)
+    } catch {} finally {
+      set({ engineOccupied: false })
+    }
   },
 
     analyzePosition: async () => {
@@ -238,7 +269,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({ isThinking: true })
     try {
       // 单局面分析用设置的分析深度（比整盘更深，只搜一个局面）
-      await engine.analyze(fen, game.plies.slice(0, currentPlyIndex).map(p => p.move), getSettings().analysisDepth + 4, (info) => {
+      await engine.analyze(game.startFen, game.plies.slice(0, currentPlyIndex).map(p => p.move), getSettings().analysisDepth + 4, (info) => {
         set({
           analysis: {
             depth: info.depth,
@@ -285,7 +316,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         const fen = boardToFen(board)
         const moveList = game.plies.slice(0, i).map(p => p.move)
 
-        await engine.analyze(fen, moveList, depth, (info) => {
+        await engine.analyze(game.startFen, moveList, depth, (info) => {
           set({
             analysis: {
               depth: info.depth,

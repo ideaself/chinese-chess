@@ -147,18 +147,19 @@ export class PikafishEngine {
       : `position fen ${fen}`)
   }
 
-  async go(fen: string, moves: string[] = [], depth?: number): Promise<string> {
+  async go(fen: string, moves: string[] = [], depth?: number, ms?: number): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     const d = depth ?? this.depth
     this.status = 'thinking'
     return new Promise<string>((resolve) => {
       this.onBestMoveCallback = (move) => { this.status = 'idle'; resolve(move) }
       this.setPosition(fen, moves)
-      this.sendCommand(`go depth ${d}`)
+      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
+      this.sendCommand(ms ? `go movetime ${ms}` : `go depth ${d}`)
     })
   }
 
-  analyze(fen: string, moves: string[] = [], depth?: number, onInfo?: (info: EngineInfo) => void): Promise<string> {
+  analyze(fen: string, moves: string[] = [], depth?: number, onInfo?: (info: EngineInfo) => void, ms?: number): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     const d = depth ?? this.depth
     this.status = 'thinking'
@@ -166,7 +167,8 @@ export class PikafishEngine {
     return new Promise<string>((resolve) => {
       this.onBestMoveCallback = (move) => { this.status = 'idle'; resolve(move) }
       this.setPosition(fen, moves)
-      this.sendCommand(`go depth ${d}`)
+      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
+      this.sendCommand(ms ? `go movetime ${ms}` : `go depth ${d}`)
     })
   }
 
@@ -180,6 +182,7 @@ export class PikafishEngine {
     depth: number,
     multiPV: number,
     onUpdate?: (lines: EngineInfo[]) => void,
+    timeMs?: number,
   ): Promise<EngineInfo[]> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     const sortLines = (m: Map<number, EngineInfo>) =>
@@ -205,7 +208,8 @@ export class PikafishEngine {
         resolve(sortLines(lines))
       }
       this.setPosition(fen, moves)
-      this.sendCommand(`go depth ${depth}`)
+      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
+      this.sendCommand(timeMs ? `go movetime ${timeMs}` : `go depth ${depth}`)
     })
   }
 

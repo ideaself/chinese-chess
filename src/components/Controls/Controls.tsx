@@ -123,8 +123,8 @@ export const Controls: React.FC = () => {
           <div className="newgame-panel">
             <div className="ctrl-title">对局角色</div>
             <div className="action-grid cols-2">
-              <button className="btn" onClick={() => startRole('red')}>🔴 人机·执红</button>
-              <button className="btn" onClick={() => startRole('black')}>⚫ 人机·执黑</button>
+              <button className="btn" onClick={() => startRole('red')}>🔴 我执红（AI 执黑）</button>
+              <button className="btn" onClick={() => startRole('black')}>⚫ 我执黑（AI 执红）</button>
               <button className="btn" onClick={() => startRole('random')}>🎲 随机执子</button>
               <button className="btn" onClick={() => startRole('hotseat')}>👥 双人对战</button>
               <button className="btn" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}>🤖 AI 对弈演示（红 vs 黑）</button>

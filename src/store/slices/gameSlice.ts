@@ -47,7 +47,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         const s = get()
         if (s.mode !== 'play') return
         if (s.sideControl[s.board.turn] !== 'ai') return
-        if (s.isThinking || !s.engineReady || !s.engine) { setTimeout(step, 250); return }
+        if (s.isThinking || s.engineOccupied || !s.engineReady || !s.engine) { setTimeout(step, 250); return }
         get().aiMove()
       }
       step()

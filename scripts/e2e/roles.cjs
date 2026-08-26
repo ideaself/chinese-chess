@@ -62,6 +62,87 @@ async function run(ctx) {
   check('难度联动搜索深度', dBeginner === 2 && dGM === 28, `beginner=${dBeginner}, gm=${dGM}`)
   await evalJs(`window.__store.getState().setDifficulty('medium')`)
 
+  // 回归：AI 必须走自己一方的子。曾因引擎「当前局面 FEN + 全部走法」被重复应用，
+  // 导致引擎搜索到超前局面、AI 走了对方的子（用户实战第13手走了黑卒）。
+  // 这里用真实对局前 12 手还原「红方轮走」局面，触发 AI(红) 走棋，校验所走之子确为红子。
+  {
+    const moves = [['h2','e2'],['b9','c7'],['h0','g2'],['h7','e7'],['c3','c4'],['h9','g7'],
+      ['b2','c2'],['i9','h9'],['c4','c5'],['c6','c5'],['c2','c7'],['e7','e3']]
+    await evalJs(`(function(){
+      const st = window.__store.getState();
+      st.startNewGame('beginner','w',{ w:'human', b:'human' });
+      const mv = ${JSON.stringify(moves)};
+      for (const m of mv) st.tryMove(
+        { col: m[0].charCodeAt(0)-97, row: +m[0][1] },
+        { col: m[1].charCodeAt(0)-97, row: +m[1][1] });
+      window.__store.setState({ sideControl: { w:'ai', b:'human' }, mode: 'play', isThinking: false });
+      st.aiMove();
+    })()`)
+    let aiColor = 'pending'
+    for (let i = 0; i < 40; i++) {
+      await sleep(250)
+      aiColor = await evalJs(`(function(){
+        const st = window.__store.getState();
+        if (st.game.plies.length < 13 || st.isThinking) return 'pending';
+        const ply = st.game.plies[12];
+        const seg = ply.fenBefore.split(' ')[0].split('/')[9 - (+ply.move[1])];
+        let exp = ''; for (const c of seg) exp += isNaN(+c) ? c : '1'.repeat(+c);
+        const pc = exp[ply.move.charCodeAt(0)-97];
+        const isRed = pc === pc.toUpperCase() && pc !== pc.toLowerCase();
+        return (ply.turn === 'w' && isRed) ? 'red-ok' : ('WRONG:' + ply.turn + ':' + pc);
+      })()`)
+      if (aiColor !== 'pending') break
+    }
+    check('AI 只走自己一方的子（不误走对方子）', aiColor === 'red-ok', aiColor)
+
+  // 回归：快评与 AI 搜索的并发串扰。曾因 quickEval 不标记 isThinking、且无时间上限，
+  // 高级别下快评占住引擎数秒，玩家快速回手后 AI 并发下发 go，旧搜索的 bestmove
+  // 被误当 AI 着法应用（AI 走对方子）。仅高级别复现（低级别快评瞬间结束）。
+  {
+    const moves = [['h2','e2'],['b9','c7'],['h0','g2'],['h7','e7'],['c3','c4'],['h9','g7'],
+      ['b2','c2'],['i9','h9'],['c4','c5'],['c6','c5'],['c2','c7'],['e7','e3']]
+    await evalJs(`window.__store.getState().setDifficulty('grandmaster')`)
+    await evalJs(`(function(){
+      const st = window.__store.getState();
+      st.startNewGame('grandmaster','w',{ w:'human', b:'human' });
+      const mv = ${JSON.stringify(moves)};
+      for (const m of mv) st.tryMove(
+        { col: m[0].charCodeAt(0)-97, row: +m[0][1] },
+        { col: m[1].charCodeAt(0)-97, row: +m[1][1] });
+      window.__store.setState({ sideControl: { w:'ai', b:'human' }, mode: 'play', isThinking: false });
+    })()`)
+    // 先触发快评（特级大师深度 16），等它真正结束后再触发 AI 走棋
+    await evalJs(`window.__store.getState().quickEval()`)
+    let qeDone = false
+    for (let i = 0; i < 40 && !qeDone; i++) { await sleep(250); qeDone = await evalJs(`!window.__store.getState().engineOccupied`) }
+    check('高级别快评限时归还引擎（≤8s）', qeDone, String(qeDone))
+    await evalJs(`window.__store.getState().aiMove()`)
+    let aiColor2 = 'pending'
+    for (let i = 0; i < 40; i++) {
+      await sleep(250)
+      aiColor2 = await evalJs(`(function(){
+        const st = window.__store.getState();
+        if (st.game.plies.length < 13 || st.isThinking) return 'pending';
+        const ply = st.game.plies[12];
+        const seg = ply.fenBefore.split(' ')[0].split('/')[9 - (+ply.move[1])];
+        let exp = ''; for (const c of seg) exp += isNaN(+c) ? c : '1'.repeat(+c);
+        const pc = exp[ply.move.charCodeAt(0)-97];
+        const isRed = pc === pc.toUpperCase() && pc !== pc.toLowerCase();
+        return (ply.turn === 'w' && isRed) ? 'red-ok' : ('WRONG:' + ply.turn + ':' + pc);
+      })()`)
+      if (aiColor2 !== 'pending') break
+    }
+    check('快评后 AI 仍只走自己一方的子', aiColor2 === 'red-ok', aiColor2)
+    // 等引擎彻底空闲（AI 落子后的自动快评可能仍在占用），避免影响后续用例
+    for (let i = 0; i < 40; i++) {
+      const busy = await evalJs(`window.__store.getState().engineOccupied || window.__store.getState().isThinking`)
+      if (!busy) break
+      await sleep(250)
+    }
+    await evalJs(`window.__store.getState().setDifficulty('medium')`)
+  }
+  }
+
   // 提示：天天象棋风格 — 棋盘上画带序号的三步箭头，不占用布局
   await evalJs(`window.__store.getState().startNewGame('medium', 'w')`)
   for (let i = 0; i < 40; i++) {
