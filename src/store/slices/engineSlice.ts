@@ -288,12 +288,13 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     }
   },
 
-    analyzeCurrentGame: async () => {
+    analyzeCurrentGame: async (depthOverride?: number) => {
     const { game, engine } = get()
     if (!engine || !engine.isReady || game.plies.length === 0) return
+    if (get().analysisProgress) return // 已有整盘分析在进行
 
-    // 整盘分析深度取设置档位（计划9.1: 快速/标准/深度）
-    const depth = Math.min(getSettings().analysisDepth, 16)
+    // 深度：曲线区手动选择优先，否则取设置档位；封顶 16（移动端单线程）
+    const depth = Math.min(depthOverride ?? getSettings().analysisDepth, 16)
     const total = game.plies.length + 1
     analysisCancelFlag = false
     set({ isThinking: true, analysisProgress: { current: 0, total } })

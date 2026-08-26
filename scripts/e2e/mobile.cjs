@@ -72,6 +72,26 @@ async function run(ctx) {
   check('局势图渲染（空态或曲线）', await evalJs(`!!document.querySelector('.eval-curve-empty') || !!document.querySelector('.eval-curve-svg')`))
   const replayTitle = await evalJs(`document.querySelector('.replay-title')?.textContent || ''`)
   check('复盘标题含进度 (n/总)', /\(\d+\/\d+\)/.test(replayTitle), replayTitle)
+
+  // 局势图区：手动整盘分析控制行（深度选择 + 按钮）
+  check('曲线区显示分析控制行（深度+按钮）', await evalJs(`!!document.querySelector('.curve-analyze-row') && !!document.querySelector('.curve-depth')`))
+
+  // 棋谱 Tab：复盘进行中先开列表，再点回到复盘页（不丢位置）
+  await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)
+  await sleep(400)
+  check('复盘页点棋谱Tab打开列表', await evalJs(`!!document.querySelector('.mobile-overlay')`))
+  await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)
+  await sleep(400)
+  check('再点棋谱Tab回到复盘页', await evalJs(`!document.querySelector('.mobile-overlay') && window.__store.getState().mode === 'replay'`))
+  // 菜单里的棋谱库入口同样可达，且返回仍回复盘
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '菜单')?.click()`)
+  await sleep(250)
+  await evalJs(`[...document.querySelectorAll('.mpb-pop-menu button')].find(b => b.textContent.includes('棋谱库'))?.click()`)
+  await sleep(400)
+  check('菜单打开棋谱库', await evalJs(`!!document.querySelector('.mobile-overlay')`))
+  await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)
+  await sleep(400)
+  check('棋谱Tab回到复盘页', await evalJs(`!document.querySelector('.mobile-overlay') && window.__store.getState().mode === 'replay'`))
   await evalJs(`[...document.querySelectorAll('.replay-tab')].find(b => b.textContent === '报告')?.click()`)
   await sleep(250)
   check('报告 Tab 渲染（空态按钮或报告体）', await evalJs(`!!document.querySelector('.report-panel') || !!document.querySelector('.report-accuracy') || !!document.querySelector('.eval-curve-empty')`))

@@ -212,7 +212,7 @@ export interface AppState {
   goToPly: (index: number) => void
 
   // ── AI 分析 ──
-  analyzeCurrentGame: () => Promise<void>
+  analyzeCurrentGame: (depthOverride?: number) => Promise<void>
   analyzePosition: () => Promise<void>
   /** 取消整盘分析（当前局面完成后停止） */
   cancelAnalysis: () => void

@@ -18,11 +18,6 @@ import type { MasterAnalysisRecord } from '../../game/storage'
 import { PikafishEngine } from '../../engine/pikafish'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
 import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
-import {
-  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
-  applyCachedAnalysis, warmupGame, cancelWarmup,
-  acquireEngineSlot, releaseEngineSlot,
-} from '../../game/masterPreanalysis'
 import { getBookMove, loadOpeningBook } from '../../game/book'
 import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
@@ -414,15 +409,9 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       sheetTab: null,
     })
 
-    // 大师局：预分析缓存点亮复盘视图 + 后台预热缺失关键点（随分析进度逐步显现）
+    // 大师局：应用已缓存的预分析点亮复盘视图（整盘分析改为曲线区手动触发）
     if (game.id.startsWith('dpxq_')) {
       void enrichMasterGame(get, set, game.id)
-      warmupGame(game, {
-        getEngine: () => get().engine,
-        isEngineBusy: () => get().isThinking,
-      }, () => { void enrichMasterGame(get, set, game.id) })
-    } else {
-      cancelWarmup() // 切到非大师局时停止预热
     }
   },
 

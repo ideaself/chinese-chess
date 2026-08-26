@@ -127,6 +127,7 @@ export const MobilePlayBar: React.FC = () => {
                 s.setSheetTab(BOARD_HOME)
               }}>↩ 退出复盘</button>
               <button onClick={() => { setMenuOpen(false); flipBoard() }}>⇅ 翻转</button>
+              <button onClick={() => { setMenuOpen(false); const s = useStore.getState(); s.setTab('games'); s.setSheetTab('games') }}>📚 棋谱库</button>
               <button onClick={() => { setMenuOpen(false); startReplayVariation() }}>🌿 试走变化</button>
               <button onClick={() => {
                 setMenuOpen(false)

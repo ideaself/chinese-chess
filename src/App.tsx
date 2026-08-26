@@ -282,19 +282,34 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 底部 Tab 栏 */}
+          {/* 底部 Tab 栏（移动端无独立「分析」页：分析在复盘页的局势图/分析/报告 Tab 区内） */}
           <nav className="bottom-bar">
-            {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
-              <button key={t}
-                className={`bottom-tab ${(t === 'play' ? sheetTab === null || sheetTab === BOARD_HOME : sheetTab === t) ? 'bottom-tab-active' : ''}`}
-                onClick={() => {
-                  // 复盘模式点「对战」：退出复盘回到可下棋的对局（否则 mode 仍 replay，永远回不去）
-                  if (t === 'play' && useStore.getState().mode === 'replay') { exitReplay(); return }
-                  setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t)
-                }}>
-                {label}
-              </button>
-            ))}
+            {([['play', '对战'], ['games', '棋谱'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => {
+              const replaying = mode === 'replay'
+              // 复盘属于「棋谱」上下文：复盘进行中高亮棋谱
+              const active = t === 'games'
+                ? (replaying || sheetTab === 'games')
+                : t === 'play'
+                  ? (!replaying && (sheetTab === null || sheetTab === BOARD_HOME))
+                  : sheetTab === t
+              return (
+                <button key={t} className={`bottom-tab ${active ? 'bottom-tab-active' : ''}`}
+                  onClick={() => {
+                    if (t === 'play' && useStore.getState().mode === 'replay') { exitReplay(); return }
+                    if (t === 'games' && useStore.getState().mode === 'replay') {
+                      // 有复盘进行中：棋谱 Tab = 回到复盘页（之前的位置）；
+                      // 已在复盘页则打开棋谱库列表换局
+                      const st = useStore.getState()
+                      if (st.sheetTab === null || st.sheetTab === BOARD_HOME) { st.setTab('games'); st.setSheetTab('games') }
+                      else { st.setTab('play'); st.setSheetTab(BOARD_HOME) }
+                      return
+                    }
+                    setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t)
+                  }}>
+                  {label}
+                </button>
+              )
+            })}
           </nav>
         </>
       ) : (

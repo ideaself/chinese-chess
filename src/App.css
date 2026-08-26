@@ -1774,3 +1774,14 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 /* 复盘 5 键底栏 */
 .mpb-five .mpb-btn { flex: 1; font-size: 12px; padding: 8px 2px; }
 .mpb-analyze { color: var(--accent, #c0392b); font-weight: bold; }
+
+/* 局势图手动整盘分析控制行 */
+.curve-analyze-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 2px;
+}
+.curve-analyze-row .curve-depth { flex: 0 0 auto; font-size: 12px; padding: 4px 6px; }
+.curve-analyze-row .btn { flex: 1; }
+.curve-progress { flex: 1; font-size: 13px; color: var(--text-2); }
