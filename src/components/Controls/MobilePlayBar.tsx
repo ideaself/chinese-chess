@@ -13,6 +13,7 @@ import type { SideControl } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportPGN } from '../../game/pgn'
 import { boardToFen } from '../../game/board'
+import { BOARD_HOME } from '../../store/constants'
 import { TriRight } from '../ui/icons'
 
 export const MobilePlayBar: React.FC = () => {
@@ -118,7 +119,13 @@ export const MobilePlayBar: React.FC = () => {
           <>
             <div className="mpb-pop-backdrop" onClick={() => setMenuOpen(false)} />
             <div className="mpb-pop-menu">
-              <button onClick={() => { setMenuOpen(false); const s = useStore.getState(); s.setTab('games'); s.setSheetTab('games') }}>↩ 退出复盘</button>
+              <button onClick={() => {
+                setMenuOpen(false)
+                const s = useStore.getState()
+                s.restart()
+                s.setTab('play')
+                s.setSheetTab(BOARD_HOME)
+              }}>↩ 退出复盘</button>
               <button onClick={() => { setMenuOpen(false); flipBoard() }}>⇅ 翻转</button>
               <button onClick={() => { setMenuOpen(false); startReplayVariation() }}>🌿 试走变化</button>
               <button onClick={() => {

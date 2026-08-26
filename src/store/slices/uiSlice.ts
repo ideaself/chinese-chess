@@ -100,8 +100,13 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (st.openingTraining) { get().exitOpeningTraining(); return }
     // 4) 打开的覆盖层面板 → 回纯棋盘主页
     if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
-    // 4.5) 复盘模式 → 退出回棋谱列表
-    if (st.mode === 'replay') { get().setTab('games'); get().setSheetTab('games'); return }
+    // 4.5) 复盘模式 → 退出复盘，回到可下棋的对战棋盘
+    if (st.mode === 'replay') {
+      get().restart()
+      get().setTab('play')
+      get().setSheetTab(BOARD_HOME)
+      return
+    }
     // 5) 非「对战」标签 → 棋盘主页
     if (st.activeTab !== 'play') { get().setTab('play'); get().setSheetTab(BOARD_HOME); return }
     // 6) 根层：2 秒内再按一次才退出

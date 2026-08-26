@@ -179,10 +179,12 @@ export const App: React.FC = () => {
   const replayTitle = mode === 'replay'
     ? `${truncName(game.header.Red)} ${game.result === '1-0' ? '先胜' : game.result === '0-1' ? '先负' : game.result === '1/2-1/2' ? '和棋' : '对局中'} ${truncName(game.header.Black)}(${currentPlyIndex}/${game.plies.length})`
     : ''
+  // 退出复盘 → 回到可下棋的对战棋盘（复盘已替换对局内容，重开一局）
   const exitReplay = () => {
     const s = useStore.getState()
-    s.setTab('games')
-    s.setSheetTab('games')
+    s.restart()
+    s.setTab('play')
+    s.setSheetTab(BOARD_HOME)
   }
 
   return (
@@ -285,7 +287,11 @@ export const App: React.FC = () => {
             {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
               <button key={t}
                 className={`bottom-tab ${(t === 'play' ? sheetTab === null || sheetTab === BOARD_HOME : sheetTab === t) ? 'bottom-tab-active' : ''}`}
-                onClick={() => { setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t) }}>
+                onClick={() => {
+                  // 复盘模式点「对战」：退出复盘回到可下棋的对局（否则 mode 仍 replay，永远回不去）
+                  if (t === 'play' && useStore.getState().mode === 'replay') { exitReplay(); return }
+                  setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t)
+                }}>
                 {label}
               </button>
             ))}

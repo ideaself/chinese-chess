@@ -166,6 +166,32 @@ async function run(ctx) {
     await sleep(300)
   }
 
+  // 复盘退出路径回归：曾被困在「复盘 ↔ 棋谱库」循环（mode 仍 replay，回不到对战）。
+  // ← / 菜单退出 / 返回手势 / 底部「对战」Tab 四条路都必须回到可下棋的对战。
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '菜单')?.click()`)
+  await sleep(250)
+  await evalJs(`[...document.querySelectorAll('.mpb-pop-menu button')].find(b => b.textContent.includes('退出复盘'))?.click()`)
+  await sleep(500)
+  check('菜单退出复盘回到对战棋盘', await evalJs(`window.__store.getState().mode === 'play' && window.__store.getState().activeTab === 'play' && !document.querySelector('.mobile-overlay')`))
+  // 返回手势
+  await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
+  await sleep(300)
+  await evalJs(`window.__store.getState().navigateBack()`)
+  await sleep(400)
+  check('返回手势退出复盘回对战', await evalJs(`window.__store.getState().mode === 'play'`))
+  // 底部「对战」Tab
+  await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
+  await sleep(300)
+  await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '对战')?.click()`)
+  await sleep(400)
+  check('对战 Tab 退出复盘回对战', await evalJs(`window.__store.getState().mode === 'play' && !document.querySelector('.mobile-overlay')`))
+  // 页头 ←
+  await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
+  await sleep(300)
+  await evalJs(`document.querySelector('.replay-back')?.click()`)
+  await sleep(400)
+  check('页头 ← 退出复盘回对战', await evalJs(`window.__store.getState().mode === 'play'`))
+
   // 还原桌面视口，避免影响后续套件
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false })
   await sleep(400)
