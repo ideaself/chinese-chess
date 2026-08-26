@@ -21,6 +21,7 @@ import {
   startPreanalysis, cancelPreanalysis, isPreanalysisRunning,
 } from '../../game/masterPreanalysis'
 import type { PreanalysisProgress } from '../../game/masterPreanalysis'
+import { registerBackHandler } from '../../game/backNav'
 import { getAllMasterAnalysisIds } from '../../game/storage'
 
 const PAGE_SIZE = 80
@@ -57,6 +58,12 @@ export const MasterLibrary: React.FC = () => {
     getAllMasterAnalysisIds().then(ids => { if (alive) setCachedCount(ids.size) })
     return () => { alive = false }
   }, [])
+
+  // 棋手页纳入返回栈：按返回先关棋手页回列表
+  useEffect(() => {
+    if (!playerOpen) return
+    return registerBackHandler(() => { setPlayerOpen(false); return true })
+  }, [playerOpen])
 
   /** 启动/停止批量预分析 */
   const togglePreanalysis = () => {

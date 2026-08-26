@@ -186,6 +186,8 @@ export interface AppState {
   flipBoard: () => void
   setDifficulty: (d: Difficulty) => void
   setTab: (tab: TabType) => void
+  /** 层级返回：安卓返回手势/按键、页头「←」统一入口（逐层弹出，根层双击退出） */
+  navigateBack: () => void
   aiMove: () => Promise<void>
   aiHint: () => Promise<void>
   resign: () => void

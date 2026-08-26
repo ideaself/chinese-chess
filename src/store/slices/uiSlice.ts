@@ -27,14 +27,19 @@ import { getBookMove, loadOpeningBook } from '../../game/book'
 import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+import { BOARD_HOME } from '../constants'
+import { consumeTopBackHandler, ensurePlaceholder, exitAppNative } from '../../game/backNav'
 
 
 /** toast 自动消失定时器 */
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
+/** 根层最近一次按返回的时间（双击再退出） */
+let lastRootBackAt = 0
+
 
 export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab'> {
+    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack'> {
   return {
     activeTab: 'play',
 
@@ -69,5 +74,34 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   // ── 错误重走 ──
 
     setTab: (tab) => set({ activeTab: tab }),
+
+  // ── 层级返回（安卓返回手势/按键、页头「←」统一入口）──
+
+    navigateBack: () => {
+    const st = get()
+    // 1) 面板内子级页（棋手页/筛选等自注册层）优先消费
+    if (consumeTopBackHandler()) {
+      const layered = (st.sheetTab !== null && st.sheetTab !== BOARD_HOME)
+        || st.mode === 'setup' || st.mode === 'puzzle'
+        || st.masterQuiz !== null || st.openingTraining !== null || st.variation !== null
+      ensurePlaceholder(layered)
+      return
+    }
+    // 2) 分支推演
+    if (st.variation) { get().exitVariation(); get().setSheetTab(BOARD_HOME); return }
+    // 3) 特殊模式层：摆棋 / 错题 / 拆解 / 开局训练
+    if (st.mode === 'setup') { get().exitSetup(); return }
+    if (st.mode === 'puzzle') { get().exitPuzzle(); return }
+    if (st.masterQuiz) { get().exitMasterQuiz(); return }
+    if (st.openingTraining) { get().exitOpeningTraining(); return }
+    // 4) 打开的覆盖层面板 → 回纯棋盘主页
+    if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
+    // 5) 非「对战」标签 → 棋盘主页
+    if (st.activeTab !== 'play') { get().setTab('play'); get().setSheetTab(BOARD_HOME); return }
+    // 6) 根层：2 秒内再按一次才退出
+    const now = Date.now()
+    if (now - lastRootBackAt < 2000) { exitAppNative() }
+    else { lastRootBackAt = now; get().showToast('再按一次退出') }
+  },
   }
 }

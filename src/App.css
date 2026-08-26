@@ -1372,6 +1372,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     font-size: 14px;
     cursor: pointer;
   }
+  .mobile-overlay-back {
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1;
+    padding: 2px 8px 4px;
+    cursor: pointer;
+  }
   .mobile-overlay-body {
     flex: 1;
     min-height: 0;

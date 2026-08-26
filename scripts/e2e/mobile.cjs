@@ -37,6 +37,33 @@ async function run(ctx) {
   const overlayClosed = await evalJs(`!document.querySelector('.mobile-overlay')`)
   check('关闭覆盖层回到棋盘', overlayClosed)
 
+  // ── 层级导航：页头「←」/ 浏览器返回逐层弹出，根层双击退出提示 ──
+  await evalJs(`(() => { const s = window.__store.getState(); s.setTab('games'); s.setSheetTab('games'); s.setGamesSubTab('mistakes'); })()`)
+  await sleep(500)
+  check('打开错题本子页', await evalJs(`window.__store.getState().gamesSubTab`) === 'mistakes')
+  await evalJs(`document.querySelector('.mobile-overlay-back')?.click()`)
+  await sleep(300)
+  check('「←」先回子级父层（棋谱列表）', await evalJs(`window.__store.getState().gamesSubTab`) === 'list')
+  // 子级被消费但面板仍在：占位记录应已补回，浏览器返回此时应关面板
+  await evalJs(`history.back()`)
+  await sleep(500)
+  check('浏览器返回关闭覆盖层（右滑等价）', !(await evalJs(`!!document.querySelector('.mobile-overlay')`)))
+  // 再来一遍：直接从面板层用浏览器返回
+  await evalJs(`(() => { const s = window.__store.getState(); s.setSheetTab('games'); })()`)
+  await sleep(500)
+  await evalJs(`history.back()`)
+  await sleep(500)
+  check('再次浏览器返回关闭覆盖层', !(await evalJs(`!!document.querySelector('.mobile-overlay')`)))
+  // 根层：先回「对战」Tab，再按才提示双击退出
+  await evalJs(`window.__store.getState().navigateBack()`)
+  await sleep(300)
+  check('非对战 Tab 返回回棋盘主页', await evalJs(`window.__store.getState().activeTab`) === 'play')
+  await evalJs(`window.__store.getState().navigateBack()`)
+  await sleep(300)
+  const rootToast = await evalJs(`document.querySelector('.toast')?.textContent || ''`)
+  check('根层返回提示「再按一次退出」', rootToast.includes('再按一次退出'), rootToast)
+  await sleep(2300) // 等双击窗口过期，避免影响后续用例
+
   // 复盘模式：操作条应显示运输条
   await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
   await sleep(400)

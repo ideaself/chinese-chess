@@ -30,6 +30,8 @@ import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
 import { MobilePlayBar } from './components/Controls/MobilePlayBar'
 import { BOARD_HOME } from './store/constants'
+import { initBackNav, syncLayers } from './game/backNav'
+import { Capacitor } from '@capacitor/core'
 import './App.css'
 
 type Tab = 'play' | 'games' | 'analysis' | 'settings'
@@ -117,6 +119,20 @@ export const App: React.FC = () => {
     : openingTraining ? 'opening'
     : null
   const mobileSheet = sheetTab === BOARD_HOME ? null : (sheetTab ?? specialSheet)
+
+  // ── 层级导航：安卓返回手势/按键、浏览器右滑、页头「←」统一走 navigateBack ──
+  useEffect(() => {
+    initBackNav(() => useStore.getState().navigateBack())
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/app').then(({ App }) => {
+        void App.addListener('backButton', () => useStore.getState().navigateBack())
+      }).catch(() => {})
+    }
+  }, [])
+
+  // 顶层覆盖层数（推演 / 特殊模式 / 面板，specialSheet 已并入 mobileSheet）变化时同步历史占位
+  const layerCount = (variation ? 1 : 0) + (mobileSheet ? 1 : 0)
+  useEffect(() => { syncLayers(layerCount) }, [layerCount])
 
   const renderPanelContent = (key: string | null) => {
     switch (key) {
@@ -214,6 +230,8 @@ export const App: React.FC = () => {
           {mobileSheet && (
             <div className="mobile-overlay">
               <div className="mobile-overlay-header">
+                <button className="mobile-overlay-back" aria-label="返回"
+                  onClick={() => useStore.getState().navigateBack()}>←</button>
                 <span>{SHEET_TITLES[mobileSheet] ?? '面板'}</span>
                 <button className="mobile-overlay-close" aria-label="关闭"
                   onClick={() => setSheetTab(BOARD_HOME)}>✕</button>
