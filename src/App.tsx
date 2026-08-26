@@ -29,6 +29,8 @@ import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
 import { MobilePlayBar } from './components/Controls/MobilePlayBar'
+import { ReplayTabs } from './components/Analysis/ReplayTabs'
+import { SelfAnalysisBanner } from './components/Analysis/SelfAnalysisBanner'
 import { BOARD_HOME } from './store/constants'
 import { initBackNav, syncLayers } from './game/backNav'
 import { Capacitor } from '@capacitor/core'
@@ -56,6 +58,7 @@ export const App: React.FC = () => {
   const theme = useStore(s => s.settings.theme)
   const sheetTab = useStore(s => s.sheetTab)
   const setSheetTab = useStore(s => s.setSheetTab)
+  const selfAnalysis = useStore(s => s.selfAnalysis)
   const isMobile = useMediaQuery(MOBILE_QUERY)
 
   useEffect(() => {
@@ -156,6 +159,20 @@ export const App: React.FC = () => {
     newgame: '新对局',
   }
 
+  // 复盘页标题（仿天天象棋）：「红名 先负 黑名（12/184）」
+  const truncName = (s: string | undefined) => {
+    const n = s || '玩家'
+    return n.length > 6 ? `${n.slice(0, 6)}...` : n
+  }
+  const replayTitle = mode === 'replay'
+    ? `${truncName(game.header.Red)} ${game.result === '1-0' ? '先胜' : game.result === '0-1' ? '先负' : game.result === '1/2-1/2' ? '和棋' : '对局中'} ${truncName(game.header.Black)}(${currentPlyIndex}/${game.plies.length})`
+    : ''
+  const exitReplay = () => {
+    const s = useStore.getState()
+    s.setTab('games')
+    s.setSheetTab('games')
+  }
+
   return (
     <div className="app">
       {updateReady && (
@@ -167,7 +184,14 @@ export const App: React.FC = () => {
       )}
       {/* 顶部导航（移动端仅标题，Tab 移至底部） */}
       <header className="app-header">
-        <h1 className="app-title">♟ 中国象棋</h1>
+        {isMobile && mode === 'replay' && !variation ? (
+          <div className="replay-header">
+            <button className="replay-back" aria-label="退出复盘" onClick={exitReplay}>←</button>
+            <span className="replay-title">{replayTitle}</span>
+          </div>
+        ) : (
+          <h1 className="app-title">♟ 中国象棋</h1>
+        )}
         {!isMobile && (
           <nav className="tab-nav">
             {([['play', '对战'], ['games', '棋谱'], ['analysis', '分析'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => (
@@ -220,9 +244,11 @@ export const App: React.FC = () => {
         <>
           {/* 移动端：棋盘常驻满屏，面板以全屏覆盖层呈现 */}
           <main className="app-main">
+            {variation && selfAnalysis && <SelfAnalysisBanner />}
             <div className="board-area">
               <Board />
             </div>
+            {mode === 'replay' && !variation && <ReplayTabs />}
           </main>
 
           {!mobileSheet && <MobilePlayBar />}

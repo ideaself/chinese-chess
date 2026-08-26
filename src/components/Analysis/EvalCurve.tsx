@@ -1,130 +1,169 @@
 /**
- * 优势曲线 - 计划第13节
+ * 局势图（仿天天象棋复盘）
  *
- * 横轴: 回合（Ply）
- * 纵轴: 局面评价（红方视角，厘兵）
- * 点击曲线: 棋盘跳到对应回合
+ * - 0 轴中线，红/黑分段着色（红方优势红、黑方优势黑）
+ * - Y 轴刻度 ±900/±333/0（厘兵）
+ * - 阶段分界竖线「N(中局)」「N(残局)」（子力启发式）
+ * - 当前手指示点 + 顶部气泡「N-黑优49分」
+ * - 点按/拖动曲线联动棋盘跳转
+ * - 红优/黑优 角标
  */
-
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { useStore } from '../../store/useStore'
+import { phaseBounds } from '../../game/analysis'
 
-const W = 320
-const H = 96
-const PAD = 6
-const MAX_CP = 600 // 显示范围 ±6 兵
+const W = 360
+const H = 200
+const PAD_L = 36
+const PAD_R = 8
+const PAD_T = 26
+const PAD_B = 10
+const MAX_CP = 900
 
 function y(v: number): number {
   const clamped = Math.max(-MAX_CP, Math.min(MAX_CP, v))
-  return H / 2 - (clamped / MAX_CP) * (H / 2 - PAD)
+  return H / 2 - (clamped / MAX_CP) * (H / 2 - PAD_T)
+}
+
+function xOf(i: number, n: number): number {
+  return PAD_L + (i / Math.max(1, n)) * (W - PAD_L - PAD_R)
 }
 
 export const EvalCurve: React.FC = () => {
   const game = useStore(s => s.game)
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const goToPly = useStore(s => s.goToPly)
+  const analysisProgress = useStore(s => s.analysisProgress)
+  const analyzeCurrentGame = useStore(s => s.analyzeCurrentGame)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [dragging, setDragging] = useState(false)
 
-  // 每个 Ply 的红方视角评估
-  const points = useMemo(() => {
-    return game.plies.map((ply, i) => {
+  // 每个 Ply 的红方视角评估（analysis 为该手之前局面的评估）
+  const points = useMemo(() => (
+    game.plies.map((ply) => {
       if (!ply.analysis) return null
-      const raw = ply.turn === 'w' ? ply.analysis.score : -ply.analysis.score
-      return { x: i + 1, v: raw }
+      return ply.turn === 'w' ? ply.analysis.score : -ply.analysis.score
     })
-  }, [game.plies])
+  ), [game.plies]) as (number | null)[]
 
+  const n = game.plies.length
   const analyzedCount = points.filter(p => p !== null).length
 
-  if (game.plies.length === 0 || analyzedCount === 0) {
+  const phases = useMemo(() => phaseBounds(game), [game])
+
+  // 折线段（跳过未分析的点）
+  const segments = useMemo(() => {
+    const segs: string[] = []
+    let cur: string[] = []
+    points.forEach((p, i) => {
+      if (p !== null) cur.push(`${xOf(i + 1, n).toFixed(1)},${y(p).toFixed(1)}`)
+      else if (cur.length > 1) { segs.push(cur.join(' ')); cur = [] }
+      else cur = []
+    })
+    if (cur.length > 1) segs.push(cur.join(' '))
+    return segs
+  }, [points, n])
+
+  if (n === 0 || analyzedCount === 0) {
     return (
       <div className="eval-curve-empty">
-        整盘分析后显示优势曲线
+        {analysisProgress
+          ? `整盘分析中 ${analysisProgress.current}/${analysisProgress.total}…`
+          : <button className="btn btn-sm btn-primary" onClick={() => analyzeCurrentGame()}>开始整盘分析</button>}
       </div>
     )
   }
 
-  const n = game.plies.length
-  const xOf = (i: number) => PAD + (i / Math.max(1, n)) * (W - PAD * 2)
+  // 当前手：指示点与气泡（取该手之前局面的评估）
+  const curIdx = Math.min(currentPlyIndex, n)
+  const curVal = curIdx > 0 ? points[curIdx - 1] : null
+  const bubbleText = curVal !== null
+    ? `${curIdx}-${curVal >= 0 ? '红优' : '黑优'}${Math.abs(curVal)}分`
+    : `${curIdx}`
 
-  // 折线路径（跳过未分析的点）
-  const segments: string[] = []
-  let current: string[] = []
-  points.forEach((p, i) => {
-    if (p) {
-      current.push(`${xOf(i + 1).toFixed(1)},${y(p.v).toFixed(1)}`)
-    } else if (current.length > 0) {
-      segments.push(current.join(' '))
-      current = []
-    }
-  })
-  if (current.length > 0) segments.push(current.join(' '))
-
-  // 面积填充（首段）
-  const firstIdx = points.findIndex(p => p !== null)
-  let areaPath = ''
-  if (firstIdx >= 0) {
-    const lastIdx = (() => {
-      for (let i = points.length - 1; i >= 0; i--) if (points[i]) return i
-      return -1
-    })()
-    const pts: string[] = []
-    for (let i = firstIdx; i <= lastIdx; i++) {
-      const p = points[i]
-      if (p) pts.push(`${xOf(i + 1).toFixed(1)},${y(p.v).toFixed(1)}`)
-    }
-    if (pts.length >= 2) {
-      areaPath =
-        `M ${xOf(firstIdx + 1).toFixed(1)},${(H / 2).toFixed(1)} ` +
-        pts.map(pt => `L ${pt}`).join(' ') +
-        ` L ${xOf(lastIdx + 1).toFixed(1)},${(H / 2).toFixed(1)} Z`
-    }
+  const plyFromEvent = (e: React.PointerEvent) => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const p = pt.matrixTransform(ctm.inverse())
+    const idx = Math.round(((p.x - PAD_L) / (W - PAD_L - PAD_R)) * n)
+    return Math.max(0, Math.min(n, idx))
   }
 
-  const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
-    const ply = Math.max(1, Math.min(n, Math.round(ratio * n)))
-    goToPly(ply)
+  // 阶段分界竖线
+  const phaseLines: React.ReactNode[] = []
+  if (phases.mid > 0) {
+    phaseLines.push(
+      <g key="mid">
+        <line x1={xOf(phases.mid, n)} y1={PAD_T - 8} x2={xOf(phases.mid, n)} y2={H - PAD_B} stroke="#e67e22" strokeWidth="1.5" opacity="0.85" />
+        <text x={xOf(phases.mid, n) + 4} y={PAD_T + 4} fontSize="11" fill="#e67e22">{phases.mid}(中局)</text>
+      </g>
+    )
+  }
+  if (phases.end > 0) {
+    phaseLines.push(
+      <g key="end">
+        <line x1={xOf(phases.end, n)} y1={PAD_T - 8} x2={xOf(phases.end, n)} y2={H - PAD_B} stroke="#2980b9" strokeWidth="1.5" opacity="0.85" />
+        <text x={xOf(phases.end, n) + 4} y={PAD_T + 20} fontSize="11" fill="#2980b9">{phases.end}(残局)</text>
+      </g>
+    )
   }
 
-  // 当前查看位置标记
-  const marker =
-    currentPlyIndex >= 1 && points[currentPlyIndex - 1]
-      ? { x: xOf(currentPlyIndex), v: points[currentPlyIndex - 1]!.v }
-      : null
+  // 气泡位置（防溢出）
+  const bubbleX = Math.max(PAD_L + 40, Math.min(W - PAD_R - 40, xOf(curIdx, n)))
 
   return (
     <div className="eval-curve">
-      <div className="info-label" style={{ marginBottom: 4 }}>
-        优势曲线{analyzedCount < n ? `（分析中 ${analyzedCount}/${n}）` : ''}
-      </div>
-      <svg
-        className="eval-curve-svg"
-        viewBox={`0 0 ${W} ${H}`}
-        onClick={handleClick}
-        preserveAspectRatio="none"
-      >
-        {/* 半场底色 */}
-        <rect x={0} y={PAD} width={W} height={H / 2 - PAD} fill="rgba(230,80,80,0.06)" />
-        <rect x={0} y={H / 2} width={W} height={H / 2 - PAD} fill="rgba(80,80,90,0.10)" />
-        {/* 零轴 */}
-        <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#555" strokeWidth={1} strokeDasharray="4 3" />
-        {/* 面积 */}
-        {areaPath && <path d={areaPath} fill="rgba(230,85,85,0.18)" />}
-        {/* 折线 */}
-        {segments.map((seg, i) => (
-          <polyline key={i} points={seg} fill="none" stroke="#e05555" strokeWidth={1.8} strokeLinejoin="round" />
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="eval-curve-svg"
+        onPointerDown={(e) => { setDragging(true); const idx = plyFromEvent(e); if (idx !== null) goToPly(idx) }}
+        onPointerMove={(e) => { if (dragging) { const idx = plyFromEvent(e); if (idx !== null) goToPly(idx) } }}
+        onPointerUp={() => setDragging(false)}
+        onPointerLeave={() => setDragging(false)}
+        style={{ touchAction: 'none' }}>
+        {/* 网格与刻度 */}
+        {[900, 333, 0, -333, -900].map(v => (
+          <g key={v}>
+            <line x1={PAD_L} y1={y(v)} x2={W - PAD_R} y2={y(v)}
+              stroke={v === 0 ? '#8a8a8a' : '#d8d2c4'} strokeWidth={v === 0 ? 1 : 0.6}
+              strokeDasharray={v === 0 ? 'none' : '3 3'} />
+            <text x={PAD_L - 4} y={y(v) + 3.5} textAnchor="end" fontSize="10" fill="#8a8a8a">{v > 0 ? v : v}</text>
+          </g>
         ))}
-        {/* 当前位置标记 */}
-        {marker && (
-          <circle cx={marker.x} cy={y(marker.v)} r={3.5} fill="#fff" stroke="#e05555" strokeWidth={2} />
+        {phaseLines}
+        {/* 曲线：0 轴上下分别裁剪为红/黑 */}
+        <defs>
+          <clipPath id="ec-red"><rect x="0" y="0" width={W} height={H / 2} /></clipPath>
+          <clipPath id="ec-black"><rect x="0" y={H / 2} width={W} height={H / 2} /></clipPath>
+        </defs>
+        {segments.map((seg, i) => (
+          <g key={i}>
+            <polyline points={seg} fill="none" stroke="#c0392b" strokeWidth="2" clipPath="url(#ec-red)" />
+            <polyline points={seg} fill="none" stroke="#2c2c2c" strokeWidth="2" clipPath="url(#ec-black)" />
+          </g>
+        ))}
+        {/* 当前手指示点 */}
+        {curVal !== null && (
+          <g>
+            <circle cx={xOf(curIdx, n)} cy={y(curVal)} r="5" fill="#fff" stroke="#27ae60" strokeWidth="2.5" />
+          </g>
         )}
+        {/* 气泡 */}
+        <g>
+          <rect x={bubbleX - 52} y="2" width="104" height="18" rx="3" fill="#2c2c2c" opacity="0.92" />
+          <text x={bubbleX} y="15" textAnchor="middle" fontSize="11" fill="#fff">{bubbleText}</text>
+        </g>
+        {/* 红优/黑优角标 */}
+        <g>
+          <rect x={PAD_L + 2} y={PAD_T + 2} width="34" height="15" rx="2" fill="#c0392b" opacity="0.9" />
+          <text x={PAD_L + 19} y={PAD_T + 13} textAnchor="middle" fontSize="10" fill="#fff">红优</text>
+          <rect x={PAD_L + 2} y={H - PAD_B - 17} width="34" height="15" rx="2" fill="#2c2c2c" opacity="0.9" />
+          <text x={PAD_L + 19} y={H - PAD_B - 6} textAnchor="middle" fontSize="10" fill="#fff">黑优</text>
+        </g>
       </svg>
-      <div className="eval-curve-axis">
-        <span>黑优</span>
-        <span>{Math.ceil(n / 2)} 回合</span>
-        <span>红优</span>
-      </div>
     </div>
   )
 }

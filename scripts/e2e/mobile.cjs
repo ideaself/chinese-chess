@@ -64,15 +64,25 @@ async function run(ctx) {
   check('根层返回提示「再按一次退出」', rootToast.includes('再按一次退出'), rootToast)
   await sleep(2300) // 等双击窗口过期，避免影响后续用例
 
-  // 复盘模式：操作条应显示运输条
+  // 复盘模式：5 键操作条 + 局势图/分析/报告 Tab 区 + 标题进度
   await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
   await sleep(400)
-  const hasTransport = await evalJs(`!!document.querySelector('.mpb-transport')`)
-  check('复盘模式显示运输条', hasTransport)
+  check('复盘模式显示 5 键操作条', await evalJs(`!!document.querySelector('.mpb-five')`))
+  check('复盘页显示 Tab 区（局势图/分析/报告）', await evalJs(`!!document.querySelector('.replay-tabs')`))
+  check('局势图渲染（空态或曲线）', await evalJs(`!!document.querySelector('.eval-curve-empty') || !!document.querySelector('.eval-curve-svg')`))
+  const replayTitle = await evalJs(`document.querySelector('.replay-title')?.textContent || ''`)
+  check('复盘标题含进度 (n/总)', /\(\d+\/\d+\)/.test(replayTitle), replayTitle)
+  await evalJs(`[...document.querySelectorAll('.replay-tab')].find(b => b.textContent === '报告')?.click()`)
+  await sleep(250)
+  check('报告 Tab 渲染（空态按钮或报告体）', await evalJs(`!!document.querySelector('.report-panel') || !!document.querySelector('.report-accuracy') || !!document.querySelector('.eval-curve-empty')`))
+  await evalJs(`[...document.querySelectorAll('.replay-tab')].find(b => b.textContent === '局势图')?.click()`)
+  await sleep(200)
 
   // 分支推演（试走变化）回归：曾因 Hooks 顺序问题（useEffect 位于 early return 之后）导致白屏，
-  // 这里确认点击后棋盘仍可见且出现推演操作条。
-  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '试走变化')?.click()`)
+  // 入口在「菜单」弹层。确认点击后棋盘仍可见且出现推演操作条。
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '菜单')?.click()`)
+  await sleep(250)
+  await evalJs(`[...document.querySelectorAll('.mpb-pop-menu button')].find(b => b.textContent.includes('试走变化'))?.click()`)
   await sleep(400)
   const boardAfterVariation = await evalJs(`!!document.querySelector('.board-container svg')`)
   check('试走变化后棋盘仍可见（无白屏回归）', boardAfterVariation)
@@ -81,8 +91,23 @@ async function run(ctx) {
   // 退出推演回到复盘操作条
   await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出推演'))?.click()`)
   await sleep(300)
-  const backToReplay = await evalJs(`!!document.querySelector('.mpb-transport')`)
+  const backToReplay = await evalJs(`!!document.querySelector('.mpb-five')`)
   check('退出推演回到复盘操作条', backToReplay)
+
+  // 自我分析：引擎横幅 + 实时出分 + 退出
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '自我分析')?.click()`)
+  await sleep(500)
+  check('自我分析横幅出现', await evalJs(`!!document.querySelector('.self-banner')`))
+  check('自我分析进入推演操作条', await evalJs(`!!document.querySelector('.mpb-transport')`))
+  let engineScored = false
+  for (let i = 0; i < 16; i++) {
+    await sleep(400)
+    if (await evalJs(`/深度\\d/.test(document.querySelector('.self-meta')?.textContent || '')`)) { engineScored = true; break }
+  }
+  check('自我分析引擎实时出分（深度/广度/速度）', engineScored)
+  await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出自我分析'))?.click()`)
+  await sleep(300)
+  check('退出自我分析回复盘操作条', await evalJs(`!!document.querySelector('.mpb-five') && !document.querySelector('.self-banner')`))
 
   // 大师库对局：黑方/红方应显示对战棋手名；试走变化不得白屏
   await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)
@@ -98,7 +123,9 @@ async function run(ctx) {
     await sleep(500)
     const names = await evalJs(`[...document.querySelectorAll('.player-name')].map(e => e.textContent).join(' | ')`)
     check('大师库对局显示棋手名（含角色标注）', names.includes('（'), names)
-    await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '试走变化')?.click()`)
+    await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '菜单')?.click()`)
+    await sleep(250)
+    await evalJs(`[...document.querySelectorAll('.mpb-pop-menu button')].find(b => b.textContent.includes('试走变化'))?.click()`)
     await sleep(400)
     check('大师库试走变化后棋盘仍可见', await evalJs(`!!document.querySelector('.board-container svg')`))
     await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.textContent.includes('退出推演'))?.click()`)

@@ -142,6 +142,9 @@ export interface AppState {
   /** 重放自动播放（提升到 store 以支持键盘快捷键） */
   autoPlaying: boolean
   setAutoPlaying: (v: boolean) => void
+  /** 自我分析模式（仿天天象棋）：推演走子 + 实时引擎横幅 */
+  selfAnalysis: boolean
+  setSelfAnalysis: (v: boolean) => void
 
   // ── 错误重走 (计划第17节) ──
   /** 正在重走的 Ply 序号（0-based，决策局面 = 该步之前） */
