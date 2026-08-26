@@ -12,6 +12,7 @@ import { useStore } from '../../store/useStore'
 import type { Pos } from '../../game/board'
 import { isRed } from '../../game/board'
 import { isInCheck, findKing } from '../../game/rules'
+import { useMediaQuery, MOBILE_QUERY } from '../../utils/useMediaQuery'
 import { EvalBar } from './EvalBar'
 
 const CELL = 60
@@ -72,14 +73,11 @@ export const Board: React.FC = () => {
   const game = useStore(s => s.game)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
-  const currentPlyIndex = useStore(s => s.currentPlyIndex)
+  const isMobile = useMediaQuery(MOBILE_QUERY)
 
-  // 非对局模式（复盘/推演）：玩家信息合并为一行，顶部分数与局势图气泡同源
+  // 非对局模式（复盘/推演）：桌面端在棋盘上方显示合并玩家栏；
+  // 移动端复盘的双方信息已在页头后退一栏，不再重复显示
   const isPlay = mode === 'play'
-  const curPly = currentPlyIndex > 0 ? game.plies[currentPlyIndex - 1] : null
-  const replayScore = curPly?.analysis
-    ? (curPly.turn === 'w' ? curPly.analysis.score : -curPly.analysis.score)
-    : null
 
   // 棋手标注：复盘/分析/推演显示实际棋手名；实时对战显示 玩家/AI
   const redName = game?.header?.Red
@@ -270,24 +268,19 @@ export const Board: React.FC = () => {
             <span className="timer">{formatTime(blackTime)}</span>
           </div>
         </>
-      ) : (
+      ) : !isMobile ? (
         <div className="player-bar">
           <span className="player-side">
             <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
             <span className="timer">{formatTime(blackTime)}</span>
           </span>
-          {mode === 'replay' && replayScore !== null && (
-            <span className={`player-score ${replayScore >= 0 ? 'red' : 'black'}`}>
-              {replayScore >= 0 ? '红优' : '黑优'}{Math.abs(replayScore)}分
-            </span>
-          )}
           <span className="vs">vs</span>
           <span className="player-side">
             <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
             <span className="timer">{formatTime(redTime)}</span>
           </span>
         </div>
-      )}
+      ) : null}
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
         onPointerDown={handlePointer}
         style={{ touchAction: 'none', cursor: 'pointer' }}>

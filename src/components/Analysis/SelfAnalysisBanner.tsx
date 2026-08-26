@@ -74,7 +74,9 @@ export const SelfAnalysisBanner: React.FC = () => {
 
   if (!variation) return null
 
-  const score = evalBar?.fen === fen ? evalBar.score : (analysis?.fen === fen ? analysis.score : null)
+  // 引擎分数为行棋方视角 → 统一转红方视角展示（与局势图口径一致）
+  const raw = evalBar?.fen === fen ? evalBar.score : (analysis?.fen === fen ? analysis.score : null)
+  const score = raw === null ? null : (board.turn === 'w' ? raw : -raw)
   const best = analysis?.fen === fen ? analysis.bestMove : ''
   const bestCn = best ? chineseFromFen(fen, best) : ''
   const fmt = (n?: number) => {

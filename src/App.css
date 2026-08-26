@@ -1801,12 +1801,12 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .player-bar .player-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-bar .timer { font-size: 12px; color: var(--text-2); }
 .player-bar .vs { color: var(--text-2); font-size: 11px; flex-shrink: 0; }
-.player-score {
+
+/* 复盘页头：双方用时（与标题同栏，右侧对齐） */
+.replay-players {
+  margin-left: auto;
   flex-shrink: 0;
   font-size: 12px;
-  font-weight: bold;
-  padding: 1px 8px;
-  border-radius: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
 }
-.player-score.red { color: #c0392b; background: rgba(192,57,43,0.1); }
-.player-score.black { color: #eee; background: rgba(44,44,44,0.75); }

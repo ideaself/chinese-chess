@@ -179,6 +179,10 @@ export const App: React.FC = () => {
   const replayTitle = mode === 'replay'
     ? `${truncName(game.header.Red)} ${game.result === '1-0' ? '先胜' : game.result === '0-1' ? '先负' : game.result === '1/2-1/2' ? '和棋' : '对局中'} ${truncName(game.header.Black)}(${currentPlyIndex}/${game.plies.length})`
     : ''
+  const fmtTime = (ms: number) => {
+    const t = Math.floor(ms / 1000)
+    return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+  }
   // 退出复盘 → 回到可下棋的对战棋盘（复盘已替换对局内容，重开一局）
   const exitReplay = () => {
     const s = useStore.getState()
@@ -202,6 +206,7 @@ export const App: React.FC = () => {
           <div className="replay-header">
             <button className="replay-back" aria-label="退出复盘" onClick={exitReplay}>←</button>
             <span className="replay-title">{replayTitle}</span>
+            <span className="replay-players">黑 {fmtTime(blackTime)} vs 红 {fmtTime(redTime)}</span>
           </div>
         ) : (
           <h1 className="app-title">♟ 中国象棋</h1>

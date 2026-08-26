@@ -60,11 +60,12 @@ export const EvalBar: React.FC = () => {
   // 转红方视角: 行棋方为黑时取负
   const scoreRed = src === null ? 0 : (board.turn === 'w' ? src.score : -src.score)
   const redPct = evalToRedPct(scoreRed)
+  // 分数口径与局势图一致：整数厘兵，「红优/黑优 N 分」
   const label = src === null
     ? '—'
     : Math.abs(scoreRed) >= 100000
       ? (scoreRed >= 0 ? '红杀' : '黑杀')
-      : `${scoreRed >= 0 ? '+' : '−'}${Math.abs(scoreRed / 100).toFixed(1)}`
+      : `${scoreRed >= 0 ? '红优' : '黑优'}${Math.abs(Math.round(scoreRed))}分`
 
   return (
     <div className="eval-bar" title="局面评估（点击可刷新分析）">

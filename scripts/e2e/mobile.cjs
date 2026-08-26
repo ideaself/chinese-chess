@@ -175,8 +175,15 @@ async function run(ctx) {
   if (loaded) {
     await evalJs(`document.querySelector('.game-item')?.click()`)
     await sleep(500)
-    const names = await evalJs(`[...document.querySelectorAll('.player-name')].map(e => e.textContent).join(' | ')`)
-    check('大师库对局显示棋手名（含角色标注）', names.includes('（'), names)
+    const headerInfo = JSON.parse(await evalJs(`JSON.stringify((() => {
+      const s = window.__store.getState();
+      return { title: document.querySelector('.replay-title')?.textContent || '',
+        players: document.querySelector('.replay-players')?.textContent || '',
+        red: s.game.header.Red, black: s.game.header.Black }
+    })())`))
+    check('大师库对局显示棋手名（标题含双方+用时栏）',
+      headerInfo.title.includes(headerInfo.red.slice(0, 6)) && headerInfo.title.includes(headerInfo.black.slice(0, 6)) && /vs/.test(headerInfo.players),
+      JSON.stringify(headerInfo))
     await evalJs(`[...document.querySelectorAll('.mpb-btn')].find(b => b.title === '菜单')?.click()`)
     await sleep(250)
     await evalJs(`[...document.querySelectorAll('.mpb-pop-menu button')].find(b => b.textContent.includes('试走变化'))?.click()`)
