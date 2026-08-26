@@ -5,7 +5,7 @@
  *   对战 | 棋谱 | 分析 | 设置
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useStore, DIFFICULTY_LABELS } from './store/useStore'
 import type { Difficulty } from './store/useStore'
 import { Board } from './components/Board/Board'
@@ -171,14 +171,26 @@ export const App: React.FC = () => {
     newgame: '新对局',
   }
 
-  // 复盘页标题（仿天天象棋）：「红名 先负 黑名（12/184）」
-  const truncName = (s: string | undefined) => {
-    const n = s || '玩家'
-    return n.length > 6 ? `${n.slice(0, 6)}...` : n
-  }
+  // 复盘页标题（仿天天象棋）：「红名 先负 黑名（12/184）」，超宽时滚动显示
+  const titleRef = useRef<HTMLSpanElement>(null)
+  const [titleScroll, setTitleScroll] = useState<{ dist: number; dur: number } | null>(null)
   const replayTitle = mode === 'replay'
-    ? `${truncName(game.header.Red)} ${game.result === '1-0' ? '先胜' : game.result === '0-1' ? '先负' : game.result === '1/2-1/2' ? '和棋' : '对局中'} ${truncName(game.header.Black)}(${currentPlyIndex}/${game.plies.length})`
+    ? `${game.header.Red || '玩家'} ${game.result === '1-0' ? '先胜' : game.result === '0-1' ? '先负' : game.result === '1/2-1/2' ? '和棋' : '对局中'} ${game.header.Black || '玩家'}(${currentPlyIndex}/${game.plies.length})`
     : ''
+  useEffect(() => {
+    if (mode !== 'replay' || !isMobile) { setTitleScroll(null); return }
+    const measure = () => {
+      const el = titleRef.current
+      const inner = el?.firstChild as HTMLElement | null
+      if (!el || !inner) return
+      const overflow = inner.scrollWidth - el.clientWidth
+      setTitleScroll(overflow > 4 ? { dist: overflow, dur: Math.max(6, overflow / 16) } : null)
+    }
+    measure()
+    const t = setTimeout(measure, 350) // 字体/布局稳定后复测
+    window.addEventListener('resize', measure)
+    return () => { clearTimeout(t); window.removeEventListener('resize', measure) }
+  }, [replayTitle, mode, isMobile])
   const fmtTime = (ms: number) => {
     const t = Math.floor(ms / 1000)
     return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
@@ -204,8 +216,12 @@ export const App: React.FC = () => {
       <header className="app-header">
         {isMobile && mode === 'replay' && !variation ? (
           <div className="replay-header">
-            <button className="replay-back" aria-label="退出复盘" onClick={exitReplay}>←</button>
-            <span className="replay-title">{replayTitle}</span>
+            <span className="replay-title" ref={titleRef}>
+              <span className={`replay-title-inner ${titleScroll ? 'scrolling' : ''}`}
+                style={titleScroll ? ({ '--marquee-dist': `${titleScroll.dist}px`, '--marquee-dur': `${titleScroll.dur}s` } as React.CSSProperties) : undefined}>
+                {replayTitle}
+              </span>
+            </span>
             <span className="replay-players">黑 {fmtTime(blackTime)} vs 红 {fmtTime(redTime)}</span>
           </div>
         ) : (

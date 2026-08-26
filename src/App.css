@@ -1578,23 +1578,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   min-width: 0;
   flex: 1;
 }
-.replay-back {
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 20px;
-  line-height: 1;
-  padding: 2px 6px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
 .replay-title {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: bold;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
+}
+.replay-title-inner { display: inline-block; white-space: nowrap; }
+.replay-title-inner.scrolling {
+  animation: title-marquee var(--marquee-dur, 8s) linear infinite alternate;
+}
+@keyframes title-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-1 * var(--marquee-dist, 0px))); }
 }
 
 /* Tab 区 */

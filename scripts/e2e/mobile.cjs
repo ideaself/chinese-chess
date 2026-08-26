@@ -212,12 +212,7 @@ async function run(ctx) {
   await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '对战')?.click()`)
   await sleep(400)
   check('对战 Tab 退出复盘回对战', await evalJs(`window.__store.getState().mode === 'play' && !document.querySelector('.mobile-overlay')`))
-  // 页头 ←
-  await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
-  await sleep(300)
-  await evalJs(`document.querySelector('.replay-back')?.click()`)
-  await sleep(400)
-  check('页头 ← 退出复盘回对战', await evalJs(`window.__store.getState().mode === 'play'`))
+  // 页头 ← 已移除：边缘滑动/返回手势即后退（返回手势路径已在上面覆盖）
 
   // 还原桌面视口，避免影响后续套件
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false })

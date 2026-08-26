@@ -286,8 +286,8 @@ export const Board: React.FC = () => {
         style={{ touchAction: 'none', cursor: 'pointer' }}>
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         <defs>
-          <marker id="hintArrow" markerWidth="12" markerHeight="12" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,0 L9,4 L0,8 Z" fill="#f59e0b" />
+          <marker id="hintArrow" markerWidth="24" markerHeight="20" refX="18" refY="9" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L20,9 L0,18 Z" fill="#16a34a" />
           </marker>
         </defs>
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
@@ -298,8 +298,8 @@ export const Board: React.FC = () => {
             {hintArrows.map((a, i) => (
               <g key={i}>
                 <line x1={a.from.x} y1={a.from.y} x2={a.ex} y2={a.ey}
-                  stroke="#f59e0b" strokeWidth="4.5" strokeLinecap="round" markerEnd="url(#hintArrow)" opacity="0.95" />
-                <circle cx={a.from.x} cy={a.from.y} r="11" fill="#f59e0b" stroke="#fff" strokeWidth="1.5" />
+                  stroke="#16a34a" strokeWidth="9" strokeLinecap="round" markerEnd="url(#hintArrow)" opacity="0.9" />
+                <circle cx={a.from.x} cy={a.from.y} r="13" fill="#16a34a" stroke="#fff" strokeWidth="2" />
                 <text x={a.from.x} y={a.from.y + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
               </g>
             ))}
