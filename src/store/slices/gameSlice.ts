@@ -23,7 +23,32 @@ import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckVoice, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+
+/** 复盘/棋谱走子音效：前进时按吃子判定，后退时轻响 */
+function playReplayStep(game: Game, plyIndex: number, forward: boolean) {
+  const settings = getSettings()
+  if (!settings.soundReplay) return
+  const ply = game.plies[plyIndex]
+  if (!ply) {
+    if (!forward) playMoveSound(settings.soundMove)
+    return
+  }
+  if (forward) {
+    const before = boardFromGame(game, plyIndex)
+    const toCol = ply.move.charCodeAt(2) - 97
+    const toRow = Number(ply.move[3])
+    const captured = before.board[toCol][toRow] !== '.'
+    if (captured) {
+      playCaptureSound(settings.soundCapture)
+      playCaptureVoice(settings.soundCaptureVoice)
+    } else {
+      playMoveSound(settings.soundMove)
+    }
+  } else {
+    playMoveSound(settings.soundMove)
+  }
+}
 
 
 
@@ -246,11 +271,13 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const captured = board.board[to.col][to.row] !== '.'
     if (captured) {
       playCaptureSound(settings.soundCapture)
+      playCaptureVoice(settings.soundCaptureVoice)
     } else {
       playMoveSound(settings.soundMove)
     }
     if (status.inCheck) {
       playCheckSound(settings.soundCheck)
+      playCheckVoice(settings.soundCheckVoice)
       playCheckHaptic(settings.hapticEnabled)
     } else {
       playMoveHaptic(settings.hapticEnabled)
@@ -448,72 +475,76 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   },
 
     goToStart: () => {
-    const { game } = get()
-    set({
-      currentPlyIndex: 0,
-      board: boardFromGame(game, 0),
-      selected: null,
-      legalTargets: [],
-      lastMove: null,
-    })
-  },
+      const { game } = get()
+      set({
+        currentPlyIndex: 0,
+        board: boardFromGame(game, 0),
+        selected: null,
+        legalTargets: [],
+        lastMove: null,
+      })
+    },
 
     goToEnd: () => {
-    const { game } = get()
-    const idx = game.plies.length
-    set({
-      currentPlyIndex: idx,
-      board: boardFromGame(game, idx),
-      selected: null,
-      legalTargets: [],
-      lastMove: idx > 0
-        ? parseMoveFromUci(game.plies[idx - 1].move, game.plies[idx - 1].turn)
-        : null,
-    })
-  },
+      const { game } = get()
+      const idx = game.plies.length
+      set({
+        currentPlyIndex: idx,
+        board: boardFromGame(game, idx),
+        selected: null,
+        legalTargets: [],
+        lastMove: idx > 0
+          ? parseMoveFromUci(game.plies[idx - 1].move, game.plies[idx - 1].turn)
+          : null,
+      })
+      if (idx > 0) playReplayStep(game, idx - 1, true)
+    },
 
     goBack: () => {
-    const { currentPlyIndex, game } = get()
-    if (currentPlyIndex <= 0) return
-    const newIdx = currentPlyIndex - 1
-    set({
-      currentPlyIndex: newIdx,
-      board: boardFromGame(game, newIdx),
-      selected: null,
-      legalTargets: [],
-      lastMove: newIdx > 0
-        ? parseMoveFromUci(game.plies[newIdx - 1].move, game.plies[newIdx - 1].turn)
-        : null,
-    })
-  },
+      const { currentPlyIndex, game } = get()
+      if (currentPlyIndex <= 0) return
+      const newIdx = currentPlyIndex - 1
+      set({
+        currentPlyIndex: newIdx,
+        board: boardFromGame(game, newIdx),
+        selected: null,
+        legalTargets: [],
+        lastMove: newIdx > 0
+          ? parseMoveFromUci(game.plies[newIdx - 1].move, game.plies[newIdx - 1].turn)
+          : null,
+      })
+      playReplayStep(game, currentPlyIndex - 1, false)
+    },
 
     goForward: () => {
-    const { currentPlyIndex, game } = get()
-    if (currentPlyIndex >= game.plies.length) return
-    const ply = game.plies[currentPlyIndex]
-    const newIdx = currentPlyIndex + 1
-    set({
-      currentPlyIndex: newIdx,
-      board: boardFromGame(game, newIdx),
-      selected: null,
-      legalTargets: [],
-      lastMove: parseMoveFromUci(ply.move, ply.turn),
-    })
-  },
+      const { currentPlyIndex, game } = get()
+      if (currentPlyIndex >= game.plies.length) return
+      const ply = game.plies[currentPlyIndex]
+      const newIdx = currentPlyIndex + 1
+      set({
+        currentPlyIndex: newIdx,
+        board: boardFromGame(game, newIdx),
+        selected: null,
+        legalTargets: [],
+        lastMove: parseMoveFromUci(ply.move, ply.turn),
+      })
+      playReplayStep(game, currentPlyIndex, true)
+    },
 
     goToPly: (index) => {
-    const { game } = get()
-    const clamped = Math.max(0, Math.min(index, game.plies.length))
-    set({
-      currentPlyIndex: clamped,
-      board: boardFromGame(game, clamped),
-      selected: null,
-      legalTargets: [],
-      lastMove: clamped > 0
-        ? parseMoveFromUci(game.plies[clamped - 1].move, game.plies[clamped - 1].turn)
-        : null,
-    })
-  },
+      const { game, currentPlyIndex: prevIdx } = get()
+      const clamped = Math.max(0, Math.min(index, game.plies.length))
+      set({
+        currentPlyIndex: clamped,
+        board: boardFromGame(game, clamped),
+        selected: null,
+        legalTargets: [],
+        lastMove: clamped > 0
+          ? parseMoveFromUci(game.plies[clamped - 1].move, game.plies[clamped - 1].turn)
+          : null,
+      })
+      if (clamped > 0) playReplayStep(game, clamped - 1, clamped >= prevIdx)
+    },
 
 
   /** 快速评估当前局面（对局中自动触发，供评估条显示） */

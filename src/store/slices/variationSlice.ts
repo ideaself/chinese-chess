@@ -26,7 +26,7 @@ import {
 import { getBookMove, loadOpeningBook } from '../../game/book'
 import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
 
 const MAIN_ID = 'main'
 
@@ -54,8 +54,12 @@ function buildMainLine(game: Game, basePly: number): BranchLine {
 function playMoveFeedback(to: Pos, board: BoardState) {
   const settings = getSettings()
   const captured = board.board[to.col][to.row] !== '.'
-  if (captured) playCaptureSound(settings.soundCapture)
-  else playMoveSound(settings.soundMove)
+  if (captured) {
+    playCaptureSound(settings.soundCapture)
+    playCaptureVoice(settings.soundCaptureVoice)
+  } else {
+    playMoveSound(settings.soundMove)
+  }
 }
 
 export function createVariationSlice(set: StoreSet, get: StoreGet): Pick<AppState,

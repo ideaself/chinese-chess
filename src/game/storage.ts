@@ -561,6 +561,12 @@ export interface AppSettings {
   soundMove: boolean
   soundCapture: boolean
   soundCheck: boolean
+  /** 吃子语音「吃」（浏览器语音合成） */
+  soundCaptureVoice: boolean
+  /** 将军语音「将军」（浏览器语音合成） */
+  soundCheckVoice: boolean
+  /** 复盘走子音效 */
+  soundReplay: boolean
   /** 落子/将军震动反馈（移动端） */
   hapticEnabled: boolean
   // 对局
@@ -598,6 +604,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundMove: true,
   soundCapture: true,
   soundCheck: true,
+  soundCaptureVoice: true,
+  soundCheckVoice: true,
+  soundReplay: true,
   hapticEnabled: true,
   defaultSide: 'w',
   defaultDifficulty: 'medium',

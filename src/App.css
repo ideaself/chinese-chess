@@ -307,6 +307,16 @@ html[data-theme='light'] .eval-bar-meta .eval-score.label-black { color: #35608f
 .piece-anim {
   animation: piece-move 0.18s ease-out forwards;
   pointer-events: none;
+  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.35));
+}
+
+/* 选中棋子：轻微抬起 + 放大 + 投影（天天象棋风格） */
+.piece-lift {
+  transform: translateY(-4px) scale(1.1);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.12s ease-out;
+  filter: drop-shadow(0 6px 5px rgba(0, 0, 0, 0.4));
 }
 
 .side-panel {

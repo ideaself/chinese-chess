@@ -16,6 +16,27 @@ function getAudioCtx(): AudioContext {
   return audioCtx
 }
 
+/** 真实音效资源（CC0，freesound.org）：落子 / 吃子 */
+const SFX_MOVE_URL = '/sounds/move.mp3'
+const SFX_CAPTURE_URL = '/sounds/capture.mp3'
+/** 人声音效（神经网络中文语音生成，离线播放）：吃 / 将军 */
+const SFX_VOICE_CHI_URL = '/sounds/voice_chi.mp3'
+const SFX_VOICE_JIANGJUN_URL = '/sounds/voice_jiangjun.mp3'
+
+/** 播放音频文件；加载/播放失败则回退到合成音 */
+function playSfxFile(url: string, volume: number, fallback?: () => void) {
+  try {
+    const a = new Audio(url)
+    a.volume = volume
+    const p = a.play()
+    if (p && typeof (p as Promise<void>).catch === 'function') {
+      (p as Promise<void>).catch(() => fallback?.())
+    }
+  } catch {
+    fallback?.()
+  }
+}
+
 /** 生成木质敲击音 */
 function playTap(volume: number = 0.5, freq: number = 800) {
   const ctx = getAudioCtx()
@@ -83,17 +104,44 @@ function playAlert(volume: number = 0.5) {
 
 export function playMoveSound(enabled: boolean = true) {
   if (!enabled) return
-  try { playTap(0.45, 800 + Math.random() * 200) } catch {}
+  playSfxFile(SFX_MOVE_URL, 0.7, () => { try { playTap(0.45, 800 + Math.random() * 200) } catch {} })
 }
 
 export function playCaptureSound(enabled: boolean = true) {
   if (!enabled) return
-  try { playImpact(0.55) } catch {}
+  playSfxFile(SFX_CAPTURE_URL, 0.85, () => { try { playImpact(0.55) } catch {} })
 }
 
 export function playCheckSound(enabled: boolean = true) {
   if (!enabled) return
   try { playAlert(0.5) } catch {}
+}
+
+/** 吃子语音「吃」：优先播放真人录音，缺失时回退浏览器 TTS */
+export function playCaptureVoice(enabled: boolean = true) {
+  if (!enabled) return
+  playSfxFile(SFX_VOICE_CHI_URL, 1, () => speakFallback('吃'))
+}
+
+/** 将军语音「将军」：优先播放真人录音，缺失时回退浏览器 TTS */
+export function playCheckVoice(enabled: boolean = true) {
+  if (!enabled) return
+  playSfxFile(SFX_VOICE_JIANGJUN_URL, 1, () => speakFallback('将军'))
+}
+
+/** 浏览器语音合成兜底（部分环境无真人音频资源时） */
+function speakFallback(text: string) {
+  try {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const synth = window.speechSynthesis
+    if (synth.speaking) synth.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'zh-CN'
+    u.rate = 1.2
+    u.pitch = 1.1
+    u.volume = 1
+    synth.speak(u)
+  } catch {}
 }
 
 /** 恢复被浏览器暂停的 AudioContext */

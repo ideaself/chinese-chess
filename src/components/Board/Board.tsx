@@ -189,7 +189,7 @@ export const Board: React.FC = () => {
         const color = isRed(piece) ? 'red' : 'black'
         const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(piece)}.webp` : null
         nodes.push(
-          <g key={`p${c}${r}`}>
+          <g key={`p${c}${r}`} className={isSel ? 'piece-lift' : undefined}>
             {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 6} fill="none" stroke="#e74c3c" strokeWidth="3" opacity="0.8">
               <animate attributeName="r" values={`${PIECE_RADIUS + 4};${PIECE_RADIUS + 8};${PIECE_RADIUS + 4}`} dur="1s" repeatCount="indefinite" />
             </circle>}

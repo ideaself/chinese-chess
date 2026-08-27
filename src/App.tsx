@@ -553,9 +553,24 @@ const SettingsPanel: React.FC = () => {
               onChange={e => { resumeAudio(); update({ soundCapture: e.target.checked }) }} />
           </div>
           <div className="settings-row">
+            <span>吃子语音「吃」</span>
+            <input type="checkbox" checked={settings.soundCaptureVoice}
+              onChange={e => { resumeAudio(); update({ soundCaptureVoice: e.target.checked }) }} />
+          </div>
+          <div className="settings-row">
+            <span>复盘走子音效</span>
+            <input type="checkbox" checked={settings.soundReplay}
+              onChange={e => { resumeAudio(); update({ soundReplay: e.target.checked }) }} />
+          </div>
+          <div className="settings-row">
             <span>将军音效</span>
             <input type="checkbox" checked={settings.soundCheck}
               onChange={e => { resumeAudio(); update({ soundCheck: e.target.checked }) }} />
+          </div>
+          <div className="settings-row">
+            <span>将军语音「将军」</span>
+            <input type="checkbox" checked={settings.soundCheckVoice}
+              onChange={e => { resumeAudio(); update({ soundCheckVoice: e.target.checked }) }} />
           </div>
         </div>
         <div className="settings-group">
