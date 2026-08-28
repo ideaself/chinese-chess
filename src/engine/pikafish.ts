@@ -147,10 +147,11 @@ export class PikafishEngine {
       : `position fen ${fen}`)
   }
 
-  async go(fen: string, moves: string[] = [], depth?: number, ms?: number): Promise<string> {
+  async go(fen: string, moves: string[] = [], depth?: number, ms?: number, onInfo?: (info: EngineInfo) => void): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     const d = depth ?? this.depth
     this.status = 'thinking'
+    this.onInfoCallback = onInfo ?? null
     return new Promise<string>((resolve) => {
       this.onBestMoveCallback = (move) => { this.status = 'idle'; resolve(move) }
       this.setPosition(fen, moves)

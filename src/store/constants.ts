@@ -46,7 +46,7 @@ export const DIFFICULTY_MOVE_TIME: Record<Difficulty, number> = {
   medium: 1200,
   hard: 2000,
   master: 3000,
-  grandmaster: 4000,
+  grandmaster: 18000,
 }
 
 /** 顶部评估条快评的时间上限（毫秒）。单线程引擎同一时刻只能跑一次搜索，

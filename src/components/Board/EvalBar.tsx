@@ -6,7 +6,7 @@
  * 顶部同时显示 评分 / 深度 / 广度(节点) / 速度(节点每秒)。
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef } from 'react'
 import { useStore } from '../../store/useStore'
 import { boardToFen } from '../../game/board'
 
@@ -44,6 +44,9 @@ export const EvalBar: React.FC = () => {
     try { return boardToFen(board).split(' ').slice(0, 2).join(' ') } catch { return '' }
   }, [board])
 
+  // 保留上一次有效评估，用于局面切换时避免分数条归零（保持连贯）
+  const last = useRef<{ scoreRed: number; redPct: number; label: string; depth?: number; nodes?: number; nps?: number } | null>(null)
+
   // 数据源: evalBar 优先（对战自动评估），其次单局面分析
   const src = useMemo(() => {
     if (evalBar && evalBar.fen.split(' ').slice(0, 2).join(' ') === curFen) {
@@ -58,14 +61,22 @@ export const EvalBar: React.FC = () => {
   if (mode !== 'play' && mode !== 'replay') return null
 
   // 转红方视角: 行棋方为黑时取负
-  const scoreRed = src === null ? 0 : (board.turn === 'w' ? src.score : -src.score)
-  const redPct = evalToRedPct(scoreRed)
-  // 分数口径与局势图一致：整数厘兵，「红优/黑优 N 分」
-  const label = src === null
-    ? '—'
-    : Math.abs(scoreRed) >= 100000
-      ? (scoreRed >= 0 ? '红杀' : '黑杀')
-      : `${scoreRed >= 0 ? '红优' : '黑优'}${Math.abs(Math.round(scoreRed))}分`
+  const live = src !== null
+  const rawScoreRed = live ? (board.turn === 'w' ? src!.score : -src!.score) : (last.current?.scoreRed ?? 0)
+  const redPct = live ? evalToRedPct(rawScoreRed) : (last.current?.redPct ?? 50)
+  const label = live
+    ? (Math.abs(rawScoreRed) >= 100000
+        ? (rawScoreRed >= 0 ? '红杀' : '黑杀')
+        : `${rawScoreRed >= 0 ? '红优' : '黑优'}${Math.abs(Math.round(rawScoreRed))}分`)
+    : (last.current?.label ?? '—')
+  const depth = live ? src!.depth : last.current?.depth
+  const nodes = live ? src!.nodes : last.current?.nodes
+  const nps = live ? src!.nps : last.current?.nps
+
+  // 评分切换时保留上一次的显示值，避免局面变化时分数条归零造成的不连贯
+  if (live) {
+    last.current = { scoreRed: rawScoreRed, redPct, label, depth, nodes, nps }
+  }
 
   return (
     <div className="eval-bar" title="局面评估（点击可刷新分析）">
@@ -75,10 +86,10 @@ export const EvalBar: React.FC = () => {
         <div className="eval-bar-notch" />
       </div>
       <div className="eval-bar-meta">
-        <span className={`eval-score ${scoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
-        <span className="eval-meta">深度 {src?.depth ?? '—'}</span>
-        <span className="eval-meta">广度 {fmtNodes(src?.nodes)}</span>
-        <span className="eval-meta">速度 {fmtNps(src?.nps)}</span>
+        <span className={`eval-score ${rawScoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
+        <span className="eval-meta">深度 {depth ?? '—'}</span>
+        <span className="eval-meta">广度 {fmtNodes(nodes)}</span>
+        <span className="eval-meta">速度 {fmtNps(nps)}</span>
       </div>
     </div>
   )

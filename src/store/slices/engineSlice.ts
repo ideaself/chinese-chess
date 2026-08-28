@@ -150,10 +150,19 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         const skill = DIFFICULTY_SKILL[difficulty]
         if (skill.p > 0) {
           // 拟人降强：弱级用 MultiPV 取前 topN 候选，按概率走次优着法（模拟 Skill Level）
-          const cands = await engine.analyzeLines(engineFen, moveList, Math.min(engineDepth, 12), skill.topN, undefined, moveTime)
+          const posFen = boardToFen(currentBoard)
+          const cands = await engine.analyzeLines(engineFen, moveList, Math.min(engineDepth, 12), skill.topN, (lines) => {
+            const top = lines[0]
+            if (top) set({ evalBar: { score: top.score, fen: posFen, depth: top.depth, nodes: top.nodes, nps: top.nps } })
+          }, moveTime)
           bestUci = pickSkillMove(cands, difficulty)
         } else {
-          bestUci = await engine.go(engineFen, moveList, engineDepth, moveTime)
+          // AI 搜索的同时把当前局面评估实时灌进评估条，避免人走完后分数条归零、
+          // 直到 AI 落子才更新（对战连贯性）。当前局面即「人走完后的局面」。
+          const posFen = boardToFen(currentBoard)
+          bestUci = await engine.go(engineFen, moveList, engineDepth, moveTime, (info) => {
+            set({ evalBar: { score: info.score, fen: posFen, depth: info.depth, nodes: info.nodes, nps: info.nps } })
+          })
         }
       }
 

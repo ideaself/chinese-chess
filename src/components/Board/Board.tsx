@@ -291,8 +291,10 @@ export const Board: React.FC = () => {
           </marker>
         </defs>
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
-        <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="16" style={{ userSelect: 'none' }}>楚河 汉界</text>
-        {gridLines}{lastMoveMarks}{targetMarks}{pieces}
+        {/* 棋盘皮肤已自带网格与「楚河 汉界」，仅在经典（无皮肤）样式下叠加绘制 SVG 网格，
+           否则会与皮肤网格重叠产生「双线」且因 slice 裁切导致越偏越大 */}
+        {!boardSkin && <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="18" style={{ userSelect: 'none' }}>楚河 汉界</text>}
+        {!boardSkin && gridLines}{lastMoveMarks}{targetMarks}{pieces}
         {hintArrows && (
           <g className="hint-arrows" pointerEvents="none">
             {hintArrows.map((a, i) => (
