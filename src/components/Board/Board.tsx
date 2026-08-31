@@ -7,13 +7,14 @@
  *   3. 点击其他位置 → 取消选择
  */
 
-import React, { useCallback, useRef, useState, useEffect } from 'react'
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Pos } from '../../game/board'
 import { isRed } from '../../game/board'
 import { isInCheck, findKing } from '../../game/rules'
 import { useMediaQuery, MOBILE_QUERY } from '../../utils/useMediaQuery'
 import { EvalBar } from './EvalBar'
+import { boardSkinGrids, DEFAULT_BOARD_GRID, type BoardGrid } from '../../game/boardSkinGrids'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -32,16 +33,16 @@ interface AnimState {
   dy: number
 }
 
-function posToSvg(pos: Pos, flipped: boolean): { x: number; y: number } {
+function posToSvg(pos: Pos, flipped: boolean, grid: BoardGrid): { x: number; y: number } {
   const col = flipped ? (BOARD_COLS - 1 - pos.col) : pos.col
   // row 0 = 红方底线 = SVG 底部 (y 最大)
   const row = flipped ? pos.row : (BOARD_ROWS - 1 - pos.row)
-  return { x: BOARD_PADDING + col * CELL, y: BOARD_PADDING + row * CELL }
+  return { x: grid.x0 + col * grid.xstep, y: grid.y0 + row * grid.ystep }
 }
 
-function svgToPos(x: number, y: number, flipped: boolean): Pos {
-  let col = Math.round((x - BOARD_PADDING) / CELL)
-  let svgRow = Math.round((y - BOARD_PADDING) / CELL)
+function svgToPos(x: number, y: number, flipped: boolean, grid: BoardGrid): Pos {
+  let col = Math.round((x - grid.x0) / grid.xstep)
+  let svgRow = Math.round((y - grid.y0) / grid.ystep)
   // svgRow 0 = 顶部 = row 9, svgRow 9 = 底部 = row 0
   let row = flipped ? svgRow : (BOARD_ROWS - 1 - svgRow)
   if (flipped) col = BOARD_COLS - 1 - col
@@ -101,14 +102,22 @@ export const Board: React.FC = () => {
   const boardSkin = settings.boardStyle !== 'classic' ? `/skins/boards/${settings.boardStyle}.webp` : null
   const pieceSkin = useSkin ? `/skins/pieces/${settings.pieceStyle}` : null
 
+  // 棋盘网格几何：经典用固定 BOARD_PADDING/CELL；皮肤按图像实际网格比例对齐，
+  // 避免硬编码坐标与皮肤自带网格错位（越偏越大）。
+  const grid: BoardGrid = useMemo(() => {
+    if (!boardSkin) return { x0: BOARD_PADDING, xstep: CELL, y0: BOARD_PADDING, ystep: CELL }
+    const g = boardSkinGrids[settings.boardStyle] ?? DEFAULT_BOARD_GRID
+    return { x0: g.x0 * BOARD_WIDTH, xstep: g.xstep * BOARD_WIDTH, y0: g.y0 * BOARD_HEIGHT, ystep: g.ystep * BOARD_HEIGHT }
+  }, [boardSkin, settings.boardStyle])
+
   // 走子动画：挂载即从起点播放 keyframes 到终点，结束后由 onAnimationEnd 清除
   useEffect(() => {
     if (!lastMove || mode !== 'play') { prevBoardRef.current = board.board.map(c => c.join('')).join(''); return }
     const prev = prevBoardRef.current
     const curr = board.board.map(c => c.join('')).join('')
     if (prev && prev !== curr) {
-      const from = posToSvg(lastMove.from, boardFlipped)
-      const to = posToSvg(lastMove.to, boardFlipped)
+      const from = posToSvg(lastMove.from, boardFlipped, grid)
+      const to = posToSvg(lastMove.to, boardFlipped, grid)
       const piece = board.board[lastMove.to.col][lastMove.to.row]
       setAnim({
         piece,
@@ -123,7 +132,7 @@ export const Board: React.FC = () => {
       return () => clearTimeout(t)
     }
     prevBoardRef.current = curr
-  }, [board, lastMove, boardFlipped, mode])
+  }, [board, lastMove, boardFlipped, mode, grid])
 
   const getSvgCoords = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current
@@ -146,14 +155,14 @@ export const Board: React.FC = () => {
     if (isThinking) return
     const coords = getSvgCoords(e.clientX, e.clientY)
     if (!coords) return
-    const pos = svgToPos(coords.x, coords.y, boardFlipped)
+    const pos = svgToPos(coords.x, coords.y, boardFlipped, grid)
     if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
     if (mode === 'setup') { setupClick(pos); return }
     // 推演/自我分析：允许点选双方棋子试走（selectPiece 内部路由到 variationTryMove）
     if (mode === 'replay' && variation) { selectPiece(pos); return }
     if (mode !== 'play') return
     selectPiece(pos)
-  }, [getSvgCoords])
+  }, [getSvgCoords, grid])
 
   // ── 棋盘网格 ──
   const gridLines = React.useMemo(() => {
@@ -183,7 +192,7 @@ export const Board: React.FC = () => {
         if (piece === '.') continue
         // 动画期间隐藏目标位置的静态棋子
         if (anim && lastMove && c === lastMove.to.col && r === lastMove.to.row) continue
-        const { x, y } = posToSvg({ col: c, row: r }, boardFlipped)
+        const { x, y } = posToSvg({ col: c, row: r }, boardFlipped, grid)
         const isSel = selected?.col === c && selected?.row === r
         const isCheck = kingPos?.col === c && kingPos?.row === r
         const color = isRed(piece) ? 'red' : 'black'
@@ -211,13 +220,13 @@ export const Board: React.FC = () => {
       }
     }
     return nodes
-  }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin])
+  }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin, grid])
 
   // ── 上一手标记：起点虚线圈（空格也可见）+ 落点棋子高亮环 ──
   const lastMoveMarks = React.useMemo(() => {
     if (!lastMove) return null
-    const from = posToSvg(lastMove.from, boardFlipped)
-    const to = posToSvg(lastMove.to, boardFlipped)
+    const from = posToSvg(lastMove.from, boardFlipped, grid)
+    const to = posToSvg(lastMove.to, boardFlipped, grid)
     return (
       <g>
         <circle cx={from.x} cy={from.y} r={PIECE_RADIUS - 6} fill="none"
@@ -226,19 +235,19 @@ export const Board: React.FC = () => {
           stroke="#16a34a" strokeWidth="3" />
       </g>
     )
-  }, [lastMove, boardFlipped])
+  }, [lastMove, boardFlipped, grid])
 
   // ── 合法走法标记 ──
   const targetMarks = React.useMemo(() =>
     settings.showLegalMoves ? legalTargets.map((pos, i) => {
-      const { x, y } = posToSvg(pos, boardFlipped)
+      const { x, y } = posToSvg(pos, boardFlipped, grid)
       return board.board[pos.col][pos.row] !== '.' ? (
         <circle key={i} cx={x} cy={y} r={PIECE_RADIUS + 4} fill="none" stroke="#e74c3c" strokeWidth="2.5" strokeDasharray="6 3" />
       ) : (
         <circle key={i} cx={x} cy={y} r="9" fill="rgba(76,175,80,0.4)" />
       )
     }) : []
-  , [legalTargets, board, boardFlipped, settings.showLegalMoves])
+  , [legalTargets, board, boardFlipped, settings.showLegalMoves, grid])
 
    // ── 提示箭头（天天象棋风格：带序号的三步变化线）──
    const hintArrows = React.useMemo(() => {
@@ -247,8 +256,8 @@ export const Board: React.FC = () => {
      return moves.map((uci, i) => {
        const fromPos = { col: uci.charCodeAt(0) - 97, row: Number(uci[1]) }
        const toPos = { col: uci.charCodeAt(2) - 97, row: Number(uci[3]) }
-       const from = posToSvg(fromPos, boardFlipped)
-       const to = posToSvg(toPos, boardFlipped)
+        const from = posToSvg(fromPos, boardFlipped, grid)
+        const to = posToSvg(toPos, boardFlipped, grid)
        const dx = to.x - from.x
        const dy = to.y - from.y
        const len = Math.hypot(dx, dy) || 1
@@ -256,7 +265,7 @@ export const Board: React.FC = () => {
        const ey = to.y - (dy / len) * (PIECE_RADIUS + 2)
        return { from, ex, ey, n: i + 1 }
      })
-   }, [hintInfo, boardFlipped])
+    }, [hintInfo, boardFlipped, grid])
 
   return (
     <div className="board-container">
@@ -290,7 +299,7 @@ export const Board: React.FC = () => {
             <path d="M0,0 L20,9 L0,18 Z" fill="#16a34a" />
           </marker>
         </defs>
-        {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: 'none' }} />}
+        {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="none" style={{ pointerEvents: 'none' }} />}
         {/* 棋盘皮肤已自带网格与「楚河 汉界」，仅在经典（无皮肤）样式下叠加绘制 SVG 网格，
            否则会与皮肤网格重叠产生「双线」且因 slice 裁切导致越偏越大 */}
         {!boardSkin && <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="18" style={{ userSelect: 'none' }}>楚河 汉界</text>}

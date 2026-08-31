@@ -1,15 +1,30 @@
 /**
- * Pikafish WASM 引擎封装（Worker 版）
+ * Pikafish 引擎封装。
  *
- * 引擎运行在专用 Web Worker 中（public/wasm/EngineHelperWorker.js），
- * 主线程通过 postMessage 收发 UCI 命令，深度分析不再阻塞 UI。
+ * - Web：引擎运行在专用 Web Worker 中（public/wasm/EngineHelperWorker.js，WASM 单线程）。
+ * - Android：优先调用原生多线程二进制（Capacitor 插件 NativePikafish，独立进程），
+ *   否则回退到 WASM。两者共用同一套 UCI 行协议，上层无感切换。
  */
+import { Capacitor } from '@capacitor/core'
+
+/** 取原生引擎插件（Web/未注册时为 undefined，自动回退 WASM） */
+function getNativePlugin(): any {
+  return (Capacitor as any).Plugins?.NativePikafish
+}
+
+/** Android 原生引擎使用的线程数：取设备核心数，封顶 8 以兼顾发热 */
+function nativeThreadCount(): number {
+  const cores = (navigator as any).hardwareConcurrency || 4
+  return Math.max(1, Math.min(cores, 8))
+}
 
 export interface EngineOptions {
   depth?: number
   threads?: number
   hash?: number
   wasmPath?: string
+  /** 原生引擎不可用、回退 WASM 时回调（用于提示用户） */
+  fallbackNotice?: (msg: string) => void
 }
 
 export interface EngineInfo {
@@ -39,6 +54,13 @@ export class PikafishEngine {
   private uciOkResolve: (() => void) | null = null
   /** init 进行中的 Promise（防止 StrictMode 双挂载重复起引擎） */
   private initPromise: Promise<void> | null = null
+  private useNative = false
+  private nativeListener: { remove: () => void } | null = null
+  private readyokResolve: (() => void) | null = null
+  /** 原生引擎曾失败，后续直接走 WASM，避免每次初始化都挂起十几秒 */
+  private nativeFailed = false
+  /** 原生引擎的 NNUE 权重路径（插件 start 时解压后返回） */
+  private nativeNetPath = ''
 
   constructor(options: EngineOptions = {}) {
     this.depth = options.depth ?? 16
@@ -54,19 +76,54 @@ export class PikafishEngine {
     // wasmPath 形如 '/wasm/single'，取最后一段作为 wasm_type
     const wasmType = (options.wasmPath ?? '/wasm/single').split('/').filter(Boolean).pop() ?? 'single'
 
+    // 优先尝试原生引擎（仅 Android 且插件已注册）；失败则回退 WASM，保证可用
+    if (Capacitor.isNativePlatform() && !!getNativePlugin() && !this.nativeFailed) {
+      try {
+        await this.spawnNative()
+        // sendCommand 依赖 useNative 选择路由（native plugin vs WASM worker），
+        // 必须在握手前设为 true，否则 uci/setoption/isready 全部发往 null worker → 静默丢弃
+        this.useNative = true
+        // 先握手（uci→uciok）再设权重：setoption EvalFile 会同步加载 53MB NNUE，
+        // 若放在 uci 之前，慢设备上 uciok 会被拖到超时
+        this.sendCommand('uci')
+        await this.waitForUciOk(30000)
+        this.sendCommand(`setoption name Threads value ${nativeThreadCount()}`)
+        this.sendCommand('setoption name Hash value 256')
+        if (this.nativeNetPath) {
+          this.sendCommand(`setoption name EvalFile value ${this.nativeNetPath}`)
+        }
+        // setoption EvalFile 会同步加载 NNUE（51MB ZSTD→63MB 解压 + 内存初始化），
+        // 慢设备上可能需要 30~60 秒，isready 须等到 readyok 才能继续
+        this.sendCommand('isready')
+        await this.waitForReadyOk(60000)
+        await this.sleep(200)
+
+        this.isInitialized = true
+        this.status = 'ready'
+        console.log('[Pikafish] 引擎就绪 (Native)')
+        return
+      } catch (e) {
+        console.error('[Pikafish] 原生引擎初始化失败，回退 WASM:', e)
+        await this.teardownNative()
+        this.nativeFailed = true
+        const reason = e instanceof Error ? e.message : String(e)
+        options.fallbackNotice?.('原生引擎不可用，已回退内置(WASM)引擎：' + reason)
+        // 继续走下方 WASM 回退
+      }
+    }
+
+    // WASM（Web 或原生回退）
+    this.useNative = false
     try {
       await this.spawnWorker(wasmType)
-
-      // UCI 握手（等待 uciok，而非盲等）
       this.sendCommand('uci')
       await this.waitForUciOk(8000)
       this.sendCommand(`setoption name Threads value ${options.threads ?? 1}`)
       this.sendCommand(`setoption name Hash value ${options.hash ?? 128}`)
       await this.sleep(200)
-
       this.isInitialized = true
       this.status = 'ready'
-      console.log('[Pikafish] 引擎就绪 (Worker)')
+      console.log('[Pikafish] 引擎就绪 (Worker/WASM)')
     } catch (e) {
       console.error('[Pikafish] 初始化失败:', e)
       this.worker?.terminate()
@@ -120,11 +177,55 @@ export class PikafishEngine {
     })
   }
 
-  /** 等待引擎返回 uciok */
-  private waitForUciOk(timeoutMs: number): Promise<void> {
+  /** 启动原生 Android 引擎（独立进程），等待其 stdout 监听就绪 */
+  private spawnNative(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const plugin = getNativePlugin()
+      if (!plugin) {
+        reject(new Error('NativePikafish 插件不可用'))
+        return
+      }
+      const timer = setTimeout(() => reject(new Error('启动原生引擎超时')), 30000)
+      plugin.start({}).then(async (data: any) => {
+        try {
+          this.nativeNetPath = (data as any)?.netPath ?? ''
+          // 必须在发送任何 UCI 命令前完成监听注册，避免漏掉首行 uciok
+          this.nativeListener = await plugin.addListener('stdout', (e: { line: string }) => this.handleOutput(e.line))
+          clearTimeout(timer)
+          resolve()
+        } catch (err) {
+          clearTimeout(timer)
+          reject(new Error(String((err as any)?.message ?? err)))
+        }
+      }).catch((err: any) => {
+        clearTimeout(timer)
+        reject(new Error(String(err?.message ?? err)))
+      })
+    })
+  }
+
+  /** 清理原生引擎进程与监听（用于回退或退出） */
+  private async teardownNative() {
+    try { this.nativeListener?.remove() } catch { /* noop */ }
+    this.nativeListener = null
+    try { await getNativePlugin()?.quit() } catch { /* noop */ }
+  }
+
+  /** 等待引擎返回 uciok */
+  private waitForUciOk(timeoutMs: number): Promise<void> {    return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('UCI 握手超时')), timeoutMs)
       this.uciOkResolve = () => {
+        clearTimeout(timer)
+        resolve()
+      }
+    })
+  }
+
+  /** 等待引擎返回 readyok（原生引擎预热 NNUE 权重后） */
+  private waitForReadyOk(timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('引擎预热超时')), timeoutMs)
+      this.readyokResolve = () => {
         clearTimeout(timer)
         resolve()
       }
@@ -138,6 +239,10 @@ export class PikafishEngine {
   setDepth(depth: number) { this.depth = depth }
 
   sendCommand(cmd: string) {
+    if (this.useNative) {
+      getNativePlugin()?.send({ command: cmd })
+      return
+    }
     this.worker?.postMessage({ command: cmd })
   }
 
@@ -216,6 +321,15 @@ export class PikafishEngine {
 
   stop() { this.sendCommand('stop'); this.status = 'idle' }
   quit() {
+    if (this.useNative) {
+      getNativePlugin()?.quit()
+      this.nativeListener?.remove()
+      this.nativeListener = null
+      this.useNative = false
+      this.isInitialized = false
+      this.status = 'idle'
+      return
+    }
     this.worker?.terminate()
     this.worker = null
     this.isInitialized = false
@@ -230,6 +344,10 @@ export class PikafishEngine {
       if (!t) continue
       if (t === 'uciok' && this.uciOkResolve) {
         this.uciOkResolve()
+        continue
+      }
+      if (t === 'readyok' && this.readyokResolve) {
+        this.readyokResolve()
         continue
       }
       this.handleLine(t)

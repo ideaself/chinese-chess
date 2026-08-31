@@ -10,3 +10,6 @@ android/key.properties
 # 本地截图/备份（不入库）
 /*.jpg
 /xiangqi_backup_*.json
+
+# 原生引擎二进制（通过 jniLibs + assets 分发，不在仓库中跟踪）
+public/engine/

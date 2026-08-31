@@ -156,6 +156,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       lastMove: null,
       analysis: null,
       hintInfo: null,
+      evalBar: null,
       lastRatingChange: null,
       redTime: 0,
       blackTime: 0,
@@ -171,7 +172,6 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const interval = setInterval(() => {
       const { mode, board, redTime, blackTime } = get()
       if (mode !== 'play') return
-      
       if (board.turn === 'w') {
         set({ redTime: redTime + 100 })
       } else {
@@ -183,6 +183,12 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     // AI 先手时自动走棋（红方先手）
     if (sideControl.w === 'ai') {
       scheduleAiMove(500)
+    }
+
+    // 新开局立即重算初始局面评分，避免顶部评分条残留上一局（走一步才刷新的问题）
+    // 人类先手时此处先评；AI 先手时 aiMove 的 onInfo 也会更新，二者不冲突
+    if (get().engine?.isReady) {
+      setTimeout(() => { if (get().mode === 'play') get().quickEval() }, 250)
     }
   },
 

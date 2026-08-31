@@ -109,7 +109,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     loadOpeningBook()
     const engine = new PikafishEngine({ depth: DIFFICULTY_DEPTH.medium })
     try {
-      await engine.init()
+      await engine.init({ fallbackNotice: (msg) => get().showToast(msg) })
       set({ engine, engineReady: true })
     } catch (e) {
       console.error('引擎初始化失败:', e)
