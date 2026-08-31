@@ -12,7 +12,9 @@
     "e2e": "node scripts/e2e/run.cjs",
     "icons": "node scripts/gen-icons.cjs",
     "dpxq": "node scripts/dpxq-convert.mjs",
-    "book": "node scripts/book-gen.mjs"
+    "book": "node scripts/book-gen.mjs",
+    "server": "node server/pikafish-server.mjs",
+    "server:dev": "npx concurrently -n vite,ws \"npm run dev\" \"npm run server\""
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -21,6 +23,7 @@
     "@capacitor/core": "^6.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "ws": "^8.21.3",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

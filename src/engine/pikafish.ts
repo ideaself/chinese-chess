@@ -4,6 +4,8 @@
  * - Web：引擎运行在专用 Web Worker 中（public/wasm/EngineHelperWorker.js，WASM 单线程）。
  * - Android：优先调用原生多线程二进制（Capacitor 插件 NativePikafish，独立进程），
  *   否则回退到 WASM。两者共用同一套 UCI 行协议，上层无感切换。
+ * - Desktop Web：优先尝试本地 WebSocket 桥接（node server/pikafish-server.mjs），
+ *   使用原生多线程 Pikafish；不可用则回退 WASM。
  */
 import { Capacitor } from '@capacitor/core'
 
@@ -61,6 +63,10 @@ export class PikafishEngine {
   private nativeFailed = false
   /** 原生引擎的 NNUE 权重路径（插件 start 时解压后返回） */
   private nativeNetPath = ''
+  /** 本地 WebSocket 桥接（Desktop 原生 Pikafish 多线程引擎） */
+  private ws: WebSocket | null = null
+  private useWebSocket = false
+  private wsFailed = false
 
   constructor(options: EngineOptions = {}) {
     this.depth = options.depth ?? 16
@@ -109,6 +115,32 @@ export class PikafishEngine {
         const reason = e instanceof Error ? e.message : String(e)
         options.fallbackNotice?.('原生引擎不可用，已回退内置(WASM)引擎：' + reason)
         // 继续走下方 WASM 回退
+      }
+    }
+
+    // WebSocket 桥接（Desktop 原生 Pikafish 多线程引擎）
+    if (!Capacitor.isNativePlatform() && !this.wsFailed) {
+      try {
+        await this.spawnWebSocket()
+        this.useWebSocket = true
+        this.sendCommand('uci')
+        await this.waitForUciOk(5000)
+        const cores = (navigator as any).hardwareConcurrency || 4
+        this.sendCommand(`setoption name Threads value ${Math.max(1, Math.min(cores, 8))}`)
+        this.sendCommand('setoption name Hash value 256')
+        this.sendCommand('isready')
+        await this.waitForReadyOk(5000)
+        await this.sleep(200)
+        this.isInitialized = true
+        this.status = 'ready'
+        console.log('[Pikafish] 引擎就绪 (Native/WebSocket)')
+        return
+      } catch (e) {
+        console.log('[Pikafish] WebSocket 桥接不可用，回退 WASM:', (e as Error).message)
+        this.wsFailed = true
+        this.ws?.close()
+        this.ws = null
+        // 继续走 WASM 回退
       }
     }
 
@@ -211,6 +243,41 @@ export class PikafishEngine {
     try { await getNativePlugin()?.quit() } catch { /* noop */ }
   }
 
+  /** 尝试连接本地 WebSocket 桥接服务器（node server/pikafish-server.mjs） */
+  private spawnWebSocket(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const port = 3001
+      let settled = false
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; reject(new Error('WebSocket 连接超时')) }
+      }, 3000)
+
+      try {
+        const ws = new WebSocket(`ws://localhost:${port}`)
+        this.ws = ws
+
+        ws.onopen = () => {
+          if (!settled) { settled = true; clearTimeout(timer); resolve() }
+        }
+        ws.onmessage = (e: MessageEvent) => {
+          try {
+            const msg = JSON.parse(String(e.data))
+            if (msg?.line) this.handleOutput(msg.line)
+          } catch { /* noop */ }
+        }
+        ws.onerror = () => {
+          if (!settled) { settled = true; clearTimeout(timer); reject(new Error('WebSocket 连接失败')) }
+        }
+        ws.onclose = () => {
+          if (!settled) { settled = true; clearTimeout(timer); reject(new Error('WebSocket 已关闭')) }
+          this.ws = null
+        }
+      } catch (e) {
+        if (!settled) { settled = true; clearTimeout(timer); reject(e) }
+      }
+    })
+  }
+
   /** 等待引擎返回 uciok */
   private waitForUciOk(timeoutMs: number): Promise<void> {    return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('UCI 握手超时')), timeoutMs)
@@ -239,6 +306,10 @@ export class PikafishEngine {
   setDepth(depth: number) { this.depth = depth }
 
   sendCommand(cmd: string) {
+    if (this.useWebSocket && this.ws) {
+      this.ws.send(JSON.stringify({ command: cmd }))
+      return
+    }
     if (this.useNative) {
       getNativePlugin()?.send({ command: cmd })
       return
@@ -321,6 +392,14 @@ export class PikafishEngine {
 
   stop() { this.sendCommand('stop'); this.status = 'idle' }
   quit() {
+    if (this.useWebSocket) {
+      this.ws?.close()
+      this.ws = null
+      this.useWebSocket = false
+      this.isInitialized = false
+      this.status = 'idle'
+      return
+    }
     if (this.useNative) {
       getNativePlugin()?.quit()
       this.nativeListener?.remove()
