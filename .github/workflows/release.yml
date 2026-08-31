@@ -34,10 +34,11 @@ jobs:
       - name: Web 构建
         run: npm run build
 
-      # android/ 目录可能随 build.gradle 入库（cap add 已不需要），
-      # 只需 cap sync 同步 web 产物 + 插件注册即可
-      - name: 同步 Android 工程
-        run: npx cap sync android
+      # CI 中 android/ 目录不存在或不完整，先 add（已存在则跳过）再 sync
+      - name: 生成 Android 工程
+        run: |
+          npx cap add android 2>/dev/null || true
+          npx cap sync android
 
       # 允许明文 HTTP（自建 WebDAV 服务器常为 http://，Android 9+ 默认禁止）
       - name: 放行明文 HTTP
