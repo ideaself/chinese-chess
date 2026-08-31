@@ -66,7 +66,7 @@ export const EvalBar: React.FC = () => {
   const redPct = live ? evalToRedPct(rawScoreRed) : (last.current?.redPct ?? 50)
   const label = live
     ? (Math.abs(rawScoreRed) >= 100000
-        ? (rawScoreRed >= 0 ? '红杀' : '黑杀')
+        ? (rawScoreRed >= 0 ? `红杀 ${rawScoreRed - 100000} 步` : `黑杀 ${-rawScoreRed - 100000} 步`)
         : `${rawScoreRed >= 0 ? '红优' : '黑优'}${Math.abs(Math.round(rawScoreRed))}分`)
     : (last.current?.label ?? '—')
   const depth = live ? src!.depth : last.current?.depth
