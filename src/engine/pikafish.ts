@@ -128,8 +128,10 @@ export class PikafishEngine {
         const cores = (navigator as any).hardwareConcurrency || 4
         this.sendCommand(`setoption name Threads value ${Math.max(1, Math.min(cores, 8))}`)
         this.sendCommand('setoption name Hash value 256')
+        // 指定 NNUE 权重文件名（引擎在 CWD 中查找，与 pikafish.exe 同目录即可）
+        this.sendCommand('setoption name EvalFile value pikafish.nnue')
         this.sendCommand('isready')
-        await this.waitForReadyOk(5000)
+        await this.waitForReadyOk(10000)
         await this.sleep(200)
         this.isInitialized = true
         this.status = 'ready'

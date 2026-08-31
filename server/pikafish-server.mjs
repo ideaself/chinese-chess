@@ -90,8 +90,10 @@ const httpServer = createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
   // 健康检查
   if (req.url === '/health') {
+    const nnuePath = resolve(dirname(binPath), 'pikafish.nnue')
+    const hasNnue = existsSync(nnuePath)
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', binary: binPath, threads: THREADS }))
+    res.end(JSON.stringify({ status: 'ok', binary: binPath, threads: THREADS, nnue: hasNnue }))
     return
   }
   res.writeHead(404)
