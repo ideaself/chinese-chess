@@ -34,11 +34,8 @@ jobs:
       - name: Web 构建
         run: npm run build
 
-      # CI 中 android/ 目录不存在或不完整，先 add（已存在则跳过）再 sync
       - name: 生成 Android 工程
-        run: |
-          npx cap add android 2>/dev/null || true
-          npx cap sync android
+        run: npx cap add android && npx cap sync android
 
       # 允许明文 HTTP（自建 WebDAV 服务器常为 http://，Android 9+ 默认禁止）
       - name: 放行明文 HTTP
