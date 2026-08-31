@@ -76,6 +76,24 @@ if (!binPath) {
   process.exit(1)
 }
 
+// 验证二进制是否为有效的可执行文件（读取 ELF/MZ 头）
+const binMagic = Buffer.alloc(4)
+try {
+  const fd = readFileSync(binPath)
+  fd.copy(binMagic, 0, 0, 4)
+  const magic = binMagic.toString('hex')
+  const isPE = magic.slice(0, 2) === '4d5a'        // MZ — Windows PE
+  const isELF = magic.slice(0, 4) === '7f454c46'   // .ELF — Linux
+  const isWasm = magic.slice(0, 4) === '0061736d'   // \0asm — WebAssembly
+  if (!isPE && !isELF && !isWasm) {
+    console.error(`⚠️  二进制文件头不识别 (magic=${magic})，可能不是有效的引擎文件`)
+  } else {
+    console.log(`   格式: ${isPE ? 'Windows PE' : isELF ? 'Linux ELF' : 'WebAssembly'}`)
+  }
+} catch (e) {
+  console.error(`⚠️  无法读取二进制: ${e.message}`)
+}
+
 const THREADS = cfg.threads || Math.max(1, Math.min(os.cpus().length, 8))
 const HASH = cfg.hash
 
@@ -114,12 +132,15 @@ wss.on('connection', (ws, req) => {
 
   let alive = true
 
-  // 引擎 stdout → WebSocket
+  // 引擎 stdout → WebSocket（逐块日志 + 逐行转发）
   let stdoutBuf = ''
   proc.stdout.on('data', (chunk) => {
-    stdoutBuf += chunk.toString()
+    const text = chunk.toString()
+    // 原始输出日志（方便排查启动失败）
+    console.log(`[engine stdout] ${text.replace(/\n$/, '')}`)
+    stdoutBuf += text
     const lines = stdoutBuf.split('\n')
-    stdoutBuf = lines.pop() // 最后一个不完整行留在缓冲区
+    stdoutBuf = lines.pop()
     for (const line of lines) {
       if (line.trim() && ws.readyState === 1) {
         ws.send(JSON.stringify({ line: line.trim() }))
@@ -127,18 +148,22 @@ wss.on('connection', (ws, req) => {
     }
   })
 
-  // 引擎 stderr（通常为空，Pikafish 不输出 stderr）
+  // 引擎 stderr
   let stderrBuf = ''
   proc.stderr.on('data', (chunk) => {
-    stderrBuf += chunk.toString()
-    const lines = stderrBuf.split('\n')
-    stderrBuf = lines.pop()
-    for (const line of lines) {
-      if (line.trim()) console.log(`[engine] ${line.trim()}`)
-    }
+    const text = chunk.toString()
+    console.log(`[engine stderr] ${text.replace(/\n$/, '')}`)
+    stderrBuf += text
   })
 
   proc.on('exit', (code) => {
+    // 进程退出时清空残余缓冲
+    if (stdoutBuf.trim() && ws.readyState === 1) {
+      ws.send(JSON.stringify({ line: stdoutBuf.trim() }))
+      console.log(`[engine stdout flush] ${stdoutBuf.trim()}`)
+    }
+    stdoutBuf = ''
+    stderrBuf = ''
     console.log(`[-] 引擎退出 code=${code} (客户端 ${clientIP})`)
     alive = false
     if (ws.readyState === 1) ws.close()
