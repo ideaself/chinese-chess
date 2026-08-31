@@ -13,3 +13,5 @@ android/key.properties
 
 # 原生引擎二进制（通过 jniLibs + assets 分发，不在仓库中跟踪）
 public/engine/
+pikafish.exe
+pikafish.nnue
