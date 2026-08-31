@@ -34,10 +34,10 @@ jobs:
       - name: Web 构建
         run: npm run build
 
-      # android/ 不入库（.gitignore），CI 内按 Capacitor 模板生成
-      # 注意: Capacitor 6 的 cap add 没有 --skip-app 选项（传了会直接报错退出）
-      - name: 生成 Android 工程
-        run: npx cap add android && npx cap sync android
+      # android/ 目录可能随 build.gradle 入库（cap add 已不需要），
+      # 只需 cap sync 同步 web 产物 + 插件注册即可
+      - name: 同步 Android 工程
+        run: npx cap sync android
 
       # 允许明文 HTTP（自建 WebDAV 服务器常为 http://，Android 9+ 默认禁止）
       - name: 放行明文 HTTP
@@ -70,17 +70,9 @@ jobs:
           fi
 
       - name: 整理产物
-        # 优先用仓库 releases/ 内本地构建的正式签名 APK（图标/签名与已验证版本一致）；
-        # CI 构建仅作编译与测试验证，缺失时才回退 CI 产物（debug 签名）。
-        # 注意: 资产名保持 ASCII（action-gh-release 会丢弃非 ASCII 文件名）
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if [ -f "releases/中国象棋-v${VERSION}.apk" ]; then
-            rm -f apk-out/app.apk   # 避免通配符把中间产物也上传
-            cp "releases/中国象棋-v${VERSION}.apk" "apk-out/chinese-chess-v${VERSION}.apk"
-          else
-            mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
-          fi
+          mv apk-out/app.apk "apk-out/chinese-chess-v${VERSION}.apk"
 
       - name: 创建 GitHub Release 并上传 APK
         if: startsWith(github.ref, 'refs/tags/v')
