@@ -82,9 +82,9 @@ try {
   const fd = readFileSync(binPath)
   fd.copy(binMagic, 0, 0, 4)
   const magic = binMagic.toString('hex')
-  const isPE = magic.slice(0, 2) === '4d5a'        // MZ — Windows PE
-  const isELF = magic.slice(0, 4) === '7f454c46'   // .ELF — Linux
-  const isWasm = magic.slice(0, 4) === '0061736d'   // \0asm — WebAssembly
+  const isPE = magic.startsWith('4d5a')              // MZ — Windows PE（含 UPX 压缩等变体）
+  const isELF = magic.startsWith('7f454c46')         // .ELF — Linux
+  const isWasm = magic.startsWith('0061736d')        // \0asm — WebAssembly
   if (!isPE && !isELF && !isWasm) {
     console.error(`⚠️  二进制文件头不识别 (magic=${magic})，可能不是有效的引擎文件`)
   } else {
