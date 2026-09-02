@@ -19,6 +19,7 @@ import { getSettings, saveSettings } from '../../game/storage'
 import { acquireEngineSlot, releaseEngineSlot } from '../../game/masterPreanalysis'
 import { EvalCurve } from './EvalCurve'
 import { KeyMoments } from './KeyMoments'
+import { SimilarPanel } from './SimilarPanel'
 
 function formatScore(score: number): string {
   if (score >= 100000) return `胜势 (${score - 100000}步杀)`
@@ -268,7 +269,7 @@ export const AnalysisPanel: React.FC = () => {
         {/* 关键时刻 - 计划第12/14节 */}
         <KeyMoments />
 
-        {/* 棋谱走法列表 */}
+        {/* 走法记录 */}
         {game.plies.length > 0 && (
           <div className="move-list" style={{ marginTop: 12 }}>
             <div className="info-label" style={{ marginBottom: 4 }}>走法记录</div>
@@ -287,6 +288,12 @@ export const AnalysisPanel: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* 大师参考 - 相似局面检索 */}
+        <SimilarPanel
+          fen={analysis?.fen ?? boardToFen(getStateAtPly(game.startFen, game.plies, currentPlyIndex))}
+          moves={game.plies.slice(0, currentPlyIndex).map(p => p.move)}
+        />
       </div>
     </div>
   )

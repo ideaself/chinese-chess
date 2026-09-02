@@ -67,10 +67,12 @@ async function main() {
 
   // 1. preview server
   console.log('[e2e] 启动 preview server…')
-  procs.push(spawn('npm', ['run', 'preview', '--', '--port', String(PREVIEW_PORT)], {
+  const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+  procs.push(spawn(npmBin, ['run', 'preview', '--', '--port', String(PREVIEW_PORT)], {
     cwd: path.join(__dirname, '..', '..'),
     stdio: 'ignore',
     detached: true,
+    shell: process.platform === 'win32',
   }))
   await waitHttp(`http://localhost:${PREVIEW_PORT}/`)
 

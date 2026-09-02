@@ -152,6 +152,15 @@ export interface AppState {
   puzzleAttempts: number
   puzzleResult: 'waiting' | 'correct' | 'wrong'
   puzzleRevealed: boolean
+  /** 精选题库来源信息（null = 来自棋谱重走） */
+  puzzleSource: {
+    type: string
+    title: string
+    red: string
+    black: string
+    mover: 'w' | 'b'
+    drop: number
+  } | null
 
   // ── 变化推演（多分支树 + 引擎评分对比）──
   variation: VariationState | null
@@ -229,6 +238,8 @@ export interface AppState {
 
   // ── 错误重走 (计划第17节) ──
   startPuzzle: (plyIndex: number) => void
+  /** 精选题库入口：从题库题目进入重走模式 */
+  startLibraryPuzzle: (p: import('../game/puzzles').PuzzleItem) => void
   exitPuzzle: () => void
   puzzleTryMove: (from: Pos, to: Pos) => boolean
   revealPuzzleAnswer: () => void

@@ -15,3 +15,6 @@ android/key.properties
 public/engine/
 pikafish.exe
 pikafish.nnue
+
+# 本地日志（preview/e2e 等）
+logs/

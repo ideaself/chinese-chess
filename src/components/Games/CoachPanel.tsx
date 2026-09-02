@@ -114,6 +114,7 @@ export const CoachPanel: React.FC = () => {
           ? game.startFen || START_FEN
           : boardToFen(getStateAtPly(game.startFen, game.plies, currentPlyIndex)),
         movesCn,
+        moves: game.plies.slice(0, currentPlyIndex).map(p => p.move),
         red: game.header.Red,
         black: game.header.Black,
         openingName: opening?.name,

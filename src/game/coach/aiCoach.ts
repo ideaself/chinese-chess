@@ -7,6 +7,8 @@
  */
 
 import { getSettings } from '../storage'
+import { loadSimilarShard, querySimilar, moveScore } from '../similar'
+import { chineseFromFen } from '../rules'
 
 export interface CoachConfig {
   apiKey: string
@@ -32,6 +34,8 @@ export interface CoachContext {
   fen: string
   /** 中文着法序列（如 "1. 炮二平五 马8进7 ..."） */
   movesCn: string
+  /** 已走着法 UCI 序列（供大师参考检索） */
+  moves?: string[]
   /** 红黑双方 */
   red?: string
   black?: string
@@ -70,9 +74,10 @@ export async function askCoach(
 
   const isReasoner = cfg.model.includes('reasoner')
   // deepseek-reasoner 不接受 system 消息：把人设并入首条用户消息
+  const facts = await buildFacts(ctx)
   const userContent = isReasoner
-    ? `${SYSTEM_PROMPT}\n\n${buildFacts(ctx)}\n\n学生的问题: ${question}`
-    : `${buildFacts(ctx)}\n\n学生的问题: ${question}`
+    ? `${SYSTEM_PROMPT}\n\n${facts}\n\n学生的问题: ${question}`
+    : `${facts}\n\n学生的问题: ${question}`
   const messages: Array<{ role: string; content: string }> = [
     ...(!isReasoner ? [{ role: 'system', content: SYSTEM_PROMPT }] : []),
     ...history.slice(-6),
@@ -185,7 +190,7 @@ export async function askCoach(
   }
 }
 
-function buildFacts(ctx: CoachContext): string {
+async function buildFacts(ctx: CoachContext): Promise<string> {
   const facts: string[] = []
   facts.push(`当前局面 FEN: ${ctx.fen}`)
   if (ctx.openingName) facts.push(`开局体系: ${ctx.openingName}`)
@@ -196,6 +201,24 @@ function buildFacts(ctx: CoachContext): string {
   }
   if (ctx.bestMoveCn) facts.push(`引擎推荐着法: ${ctx.bestMoveCn}`)
   if (ctx.movesCn) facts.push(`对局着法:\n${ctx.movesCn}`)
+
+  // 大师参考（RAG）：当前局面大师实战着法分布
+  if (ctx.moves && ctx.moves.length > 0 && ctx.moves.length <= 6) {
+    try {
+      const ok = await loadSimilarShard(ctx.moves[0])
+      if (ok) {
+        const entries = querySimilar(ctx.moves)
+        if (entries && entries.length > 0) {
+          const top = entries.slice(0, 3).map(e => {
+            const { n, redScore } = moveScore(e)
+            const cn = e.move.length >= 4 ? chineseFromFen(ctx.fen, e.move) : e.move
+            return `${cn}（${n} 局，红方得分率 ${Math.round(redScore * 100)}%）`
+          })
+          facts.push(`大师实战参考（141k 局棋谱统计）: ${top.join('；')}`)
+        }
+      }
+    } catch { /* 参考数据失败不影响教练回答 */ }
+  }
   return facts.join('\n')
 }
 

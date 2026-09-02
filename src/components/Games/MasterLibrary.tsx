@@ -18,11 +18,14 @@ import {
 import type { LibraryGame } from '../../game/masterLibrary'
 import type { OpeningFamily } from '../../game/masterLibrary'
 import {
-  startPreanalysis, cancelPreanalysis, isPreanalysisRunning,
+  startPreanalysis, cancelPreanalysis, isPreanalysisRunning, applyCachedAnalysis,
 } from '../../game/masterPreanalysis'
+import { loadStaticAnalysis } from '../../game/staticAnalysis'
 import type { PreanalysisProgress } from '../../game/masterPreanalysis'
 import { registerBackHandler } from '../../game/backNav'
 import { getAllMasterAnalysisIds } from '../../game/storage'
+import { InsightsPanel } from './InsightsPanel'
+import { loadInsights, getInsights } from '../../game/insights'
 
 const PAGE_SIZE = 80
 
@@ -49,6 +52,19 @@ export const MasterLibrary: React.FC = () => {
   const [preRunning, setPreRunning] = useState(isPreanalysisRunning())
   const [preProgress, setPreProgress] = useState<PreanalysisProgress | null>(null)
   const [cachedCount, setCachedCount] = useState<number | null>(null)
+  const [insightsOpen, setInsightsOpen] = useState(false)
+  const [playerInsight, setPlayerInsight] = useState<{ mistakeRate: number; blunderRate: number } | null>(null)
+
+  // 加载洞察数据（棋手失误率显示用）
+  useEffect(() => {
+    loadInsights().then(() => {
+      const d = getInsights()
+      if (d) {
+        const p = d.stats.players.find(p => p.name === player)
+        setPlayerInsight(p ? { mistakeRate: p.mistakeRate, blunderRate: p.blunderRate } : null)
+      }
+    })
+  }, [player])
 
   useEffect(() => {
     let alive = true
@@ -146,9 +162,17 @@ export const MasterLibrary: React.FC = () => {
     )
   }, [games, category, family, query, player, result])
 
-  const openGame = (rec: LibraryGame) => {
+  const openGame = async (rec: LibraryGame) => {
     const game = recordToGame(rec)
     if (!game) { showToast('⚠ 该棋谱数据有误，无法打开'); return }
+    // 静态关键点分析（离线导出）：命中则直接物化，无需引擎
+    try {
+      const rec2 = await loadStaticAnalysis(rec.id)
+      if (rec2) {
+        const plies = applyCachedAnalysis(game.plies, rec2)
+        if (plies !== game.plies) game.plies = plies
+      }
+    } catch { /* 静态分析失败不影响打开 */ }
     loadGameObject(game)
     setTab('play')
     setSheetTab(BOARD_HOME)
@@ -195,8 +219,15 @@ export const MasterLibrary: React.FC = () => {
             onClick={() => useStore.getState().startMasterQuiz()}>
             🎯 名局拆解
           </button>
+          <button className={`btn btn-sm ${insightsOpen ? 'btn-active' : ''}`}
+            title="141k 局棋谱统计分析：开局体系/棋手稳健度/失误集锦"
+            onClick={() => setInsightsOpen(v => !v)}>
+            📊 数据洞察
+          </button>
         </div>
       </div>
+
+      {insightsOpen && <InsightsPanel />}
 
       {/* 预分析进度 */}
       {preRunning && preProgress && (
@@ -364,6 +395,14 @@ export const MasterLibrary: React.FC = () => {
               {profile.topOpenings.map(o => (
                 <span key={o.name} className="pp-opening">{o.name} {o.count}</span>
               ))}
+            </div>
+          )}
+          {playerInsight && (
+            <div className="player-profile-insight">
+              <span className="pp-side-label">稳健度（141k 局统计）</span>
+              <span className="pp-insight">
+                失误率 {playerInsight.mistakeRate}% · 严重失误 {playerInsight.blunderRate}%
+              </span>
             </div>
           )}
         </div>

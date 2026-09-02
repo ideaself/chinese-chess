@@ -27,11 +27,13 @@ import { getBookMove, loadOpeningBook } from '../../game/book'
 import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+import type { PuzzleItem } from '../../game/puzzles'
+import { recordPuzzleCorrect, recordPuzzleWrong } from '../../game/puzzles'
 
 
 
 export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'startPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleAnswer' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'replayQuizMistake'> {
+    'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'puzzleSource' | 'startPuzzle' | 'startLibraryPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleAnswer' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'replayQuizMistake'> {
   return {
     puzzlePlyIndex: null,
 
@@ -40,6 +42,8 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     puzzleResult: 'waiting',
 
     puzzleRevealed: false,
+
+    puzzleSource: null,
 
   // ── 变化推演 ──
 
@@ -67,6 +71,66 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     })
   },
 
+    /** 精选题库: 构造单步棋谱复用重走判定（杀局/失误题/残局题） */
+
+    startLibraryPuzzle: (p: PuzzleItem) => {
+    const { timerInterval } = get()
+    if (timerInterval) clearInterval(timerInterval)
+
+    const turn = p.fen.split(' ')[1] === 'b' ? 'b' : 'w'
+    const game = createEmptyGame()
+    game.startFen = p.fen
+    game.header.Event = p.event || p.type
+    game.header.Red = p.red
+    game.header.Black = p.black
+    game.header.Result = p.result
+    const bestMoveCn = p.best_move.length >= 4 ? chineseFromFen(p.fen, p.best_move) : undefined
+    game.plies = [{
+      plyIndex: 1,
+      turn,
+      move: p.move_uci,
+      moveCn: p.move_uci.length >= 4 ? chineseFromFen(p.fen, p.move_uci) : '',
+      fenBefore: p.fen,
+      fenAfter: p.fen,
+      inCheck: false,
+      isCapture: false,
+      analysis: {
+        score: p.score_before ?? 0,
+        depth: 12,
+        bestMove: p.best_move,
+        bestMoveCn,
+        pv: [p.best_move],
+        moveLoss: Math.max(0, p.score_drop ?? 0),
+        classification: 'blunder',
+        analyzedAt: Date.now(),
+      },
+    }]
+
+    set({
+      mode: 'puzzle',
+      modeBeforeSetup: 'replay',
+      timerInterval: null,
+      game,
+      board: boardFromFen(p.fen),
+      puzzlePlyIndex: 0,
+      puzzleAttempts: 0,
+      puzzleResult: 'waiting',
+      puzzleRevealed: false,
+      puzzleSource: {
+        type: p.type,
+        title: p.event || '',
+        red: p.red,
+        black: p.black,
+        mover: turn,
+        drop: p.score_drop ?? 0,
+      },
+      currentPlyIndex: 0,
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+    })
+  },
+
     exitPuzzle: () => {
     const { game, currentPlyIndex } = get()
     set({
@@ -75,6 +139,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       puzzlePlyIndex: null,
       puzzleResult: 'waiting',
       puzzleRevealed: false,
+      puzzleSource: null,
       selected: null,
       legalTargets: [],
     })
@@ -101,8 +166,10 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         board: newState,
         lastMove: { from, to, turn: st.turn },
       })
+      recordPuzzleCorrect()
     } else {
       set({ puzzleResult: 'wrong', puzzleAttempts: puzzleAttempts + 1 })
+      recordPuzzleWrong()
     }
     return true
   },
