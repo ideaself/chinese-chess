@@ -206,8 +206,11 @@ export const App: React.FC = () => {
     s.restart()
     s.setTab('play')
     s.setSheetTab(BOARD_HOME)
-    // 移动端：退出复盘回到对战页
-    if (isMobile) s.setMobilePage('play')
+    // 移动端：从棋谱页进的复盘 → 回棋谱列表；其他 → 回对战页
+    if (isMobile) {
+      const backTo = s.mobilePage === 'games' ? 'games' : 'play'
+      s.setMobilePage(backTo)
+    }
   }
 
   return (

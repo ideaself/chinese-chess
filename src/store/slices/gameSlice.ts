@@ -435,6 +435,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     loadGameObject: (game) => {
     const board = boardFromGame(game, game.plies.length)
+    // 棋谱页加载棋谱时不切换页面（保持 mobilePage:'games'，左滑返回棋谱列表）
+    const currentPage = get().mobilePage
     set({
       mode: 'replay',
       game,
@@ -451,8 +453,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       activeTab: 'play',
       // 移动端：从棋谱库点开对局回到纯棋盘主页（关闭覆盖层）
       sheetTab: null,
-      // 移动端多层导航：加载棋谱后切换到对战页
-      mobilePage: 'play' as const,
+      // 移动端：从棋谱页加载时不切换页面；其他场景切到对战页
+      ...(currentPage !== 'games' ? { mobilePage: 'play' as const } : {}),
     })
 
     // 大师局：应用已缓存的预分析点亮复盘视图（整盘分析改为曲线区手动触发）

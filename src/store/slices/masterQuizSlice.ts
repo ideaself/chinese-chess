@@ -196,6 +196,8 @@ export function createMasterQuizSlice(set: StoreSet, get: StoreGet): Pick<AppSta
       const game = recordToGame(rec)
       if (!game || game.plies.length < 40) continue
       get().loadGameObject(game)
+      // 拆解模式需要棋盘 → 切到对战页（loadGameObject 在棋谱页不会自动切）
+      set({ mobilePage: 'play' as const })
       // 预取该局预分析缓存，关键手优先问"大师与引擎分歧最大"处
       quizAnalysisRec = { id: game.id, rec: await getMasterAnalysis(game.id) }
       // 关键手模式从第一个高价值关键点开始；全程模式从第 0 手开始

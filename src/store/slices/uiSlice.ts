@@ -106,10 +106,12 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       if (st.openingTraining) { get().exitOpeningTraining(); return }
       // 4) 打开的覆盖层面板 → 回纯棋盘主页
       if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
-      // 4.5) 复盘模式 → 退出复盘，回到可下棋的对战棋盘
+      // 4.5) 复盘模式 → 退出复盘
       if (st.mode === 'replay') {
         get().restart()
-        set({ mobilePage: 'play', sheetTab: BOARD_HOME })
+        // 从棋谱页进的复盘 → 回到棋谱列表；其他场景 → 回对战页
+        const backTo = st.mobilePage === 'games' ? 'games' : 'play'
+        set({ mobilePage: backTo, sheetTab: BOARD_HOME })
         return
       }
       // 5) 非首页 → 回首页
