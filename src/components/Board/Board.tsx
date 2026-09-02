@@ -249,7 +249,7 @@ export const Board: React.FC = () => {
     }) : []
   , [legalTargets, board, boardFlipped, settings.showLegalMoves, grid])
 
-   // ── 提示箭头（天天象棋风格：带序号的三步变化线）──
+   // ── 提示箭头（天天象棋风格：尾细头粗渐变箭头）──
    const hintArrows = React.useMemo(() => {
      const moves = hintInfo?.movesUci
      if (!moves || moves.length === 0) return null
@@ -261,9 +261,39 @@ export const Board: React.FC = () => {
        const dx = to.x - from.x
        const dy = to.y - from.y
        const len = Math.hypot(dx, dy) || 1
-       const ex = to.x - (dx / len) * (PIECE_RADIUS + 2)
-       const ey = to.y - (dy / len) * (PIECE_RADIUS + 2)
-       return { from, ex, ey, n: i + 1 }
+       // 单位法线（垂直于行进方向）
+       const nx = -dy / len
+       const ny = dx / len
+       // 箭头尖端（缩进棋子半径）
+       const tipX = to.x - (dx / len) * (PIECE_RADIUS + 2)
+       const tipY = to.y - (dy / len) * (PIECE_RADIUS + 2)
+       // 箭头根部（尖端后方 ARROW_LEN 处）
+       const ARROW_LEN = len * 0.55
+       const baseX = tipX - (dx / len) * ARROW_LEN
+       const baseY = tipY - (dy / len) * ARROW_LEN
+       // 尾宽 → 头宽
+       const TAIL_W = 3
+       const HEAD_W = 16
+       // 四个关键点：尾左、尾右、头左、头右
+       const tailLx = from.x + nx * TAIL_W
+       const tailLy = from.y + ny * TAIL_W
+       const tailRx = from.x - nx * TAIL_W
+       const tailRy = from.y - ny * TAIL_W
+       const headLx = tipX + nx * HEAD_W
+       const headLy = tipY + ny * HEAD_W
+       const headRx = tipX - nx * HEAD_W
+       const headRy = tipY - ny * HEAD_W
+       // 箭身拐点（从尾过渡到头的最宽处，约 60% 位置）
+       const BODY_W = 6
+       const bodyX = baseX + (dx / len) * ARROW_LEN * 0.6
+       const bodyY = baseY + (dy / len) * ARROW_LEN * 0.6
+       const bodyLx = bodyX + nx * BODY_W
+       const bodyLy = bodyY + ny * BODY_W
+       const bodyRx = bodyX - nx * BODY_W
+       const bodyRy = bodyY - ny * BODY_W
+       // 构建箭头路径：尾左 → 拐点左 → 头左 → 尖端 → 头右 → 拐点右 → 尾右
+       const path = `M${tailLx},${tailLy} L${bodyLx},${bodyLy} L${headLx},${headLy} L${tipX},${tipY} L${headRx},${headRy} L${bodyRx},${bodyRy} L${tailRx},${tailRy} Z`
+       return { path, n: i + 1, cx: from.x, cy: from.y }
      })
     }, [hintInfo, boardFlipped, grid])
 
@@ -295,9 +325,9 @@ export const Board: React.FC = () => {
         style={{ touchAction: 'none', cursor: 'pointer' }}>
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         <defs>
-          <marker id="hintArrow" markerWidth="24" markerHeight="20" refX="18" refY="9" orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,0 L20,9 L0,18 Z" fill="#16a34a" />
-          </marker>
+          <filter id="arrowShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.35" />
+          </filter>
         </defs>
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="none" style={{ pointerEvents: 'none' }} />}
         {/* 棋盘皮肤已自带网格与「楚河 汉界」，仅在经典（无皮肤）样式下叠加绘制 SVG 网格，
@@ -308,10 +338,9 @@ export const Board: React.FC = () => {
           <g className="hint-arrows" pointerEvents="none">
             {hintArrows.map((a, i) => (
               <g key={i}>
-                <line x1={a.from.x} y1={a.from.y} x2={a.ex} y2={a.ey}
-                  stroke="#16a34a" strokeWidth="9" strokeLinecap="round" markerEnd="url(#hintArrow)" opacity="0.9" />
-                <circle cx={a.from.x} cy={a.from.y} r="13" fill="#16a34a" stroke="#fff" strokeWidth="2" />
-                <text x={a.from.x} y={a.from.y + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
+                <path d={a.path} fill="#16a34a" opacity="0.88" filter="url(#arrowShadow)" />
+                <circle cx={a.cx} cy={a.cy} r="13" fill="#16a34a" stroke="#fff" strokeWidth="2" />
+                <text x={a.cx} y={a.cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
               </g>
             ))}
           </g>
