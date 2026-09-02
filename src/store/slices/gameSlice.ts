@@ -239,6 +239,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     // 变化推演中: 落子写入分支
     if (get().variation) return get().variationTryMove(from, to)
     if (mode !== 'play') return false
+    if (game.result !== '*') return false
     const piece = board.board[from.col][from.row]
 
     const legalMoves = getLegalMoves(board, from.col, from.row)
@@ -380,6 +381,11 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const result = humanSide === 'w' ? '0-1' : '1-0'
     const updatedGame = { ...game, result, updatedAt: Date.now() }
     set({ game: updatedGame, timerInterval: null })
+    // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
+    if (updatedGame.plies.length > 0) {
+      const change = settleRating(updatedGame)
+      if (change) set({ lastRatingChange: change })
+    }
     get().saveCurrentGame()
   },
 
@@ -391,6 +397,11 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (timerInterval) clearInterval(timerInterval)
     const updatedGame = { ...game, result: '1/2-1/2', updatedAt: Date.now() }
     set({ game: updatedGame, timerInterval: null })
+    // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
+    if (updatedGame.plies.length > 0) {
+      const change = settleRating(updatedGame)
+      if (change) set({ lastRatingChange: change })
+    }
     get().saveCurrentGame()
   },
 

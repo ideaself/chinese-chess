@@ -52,8 +52,11 @@ export const SimilarPanel: React.FC<Props> = ({ fen, moves }) => {
   }, [moves.join(' ')])
 
   const openGame = async (gameId: number) => {
-    await loadLibrary().catch(() => undefined)
-    const lib = getCachedLibrary()
+    let lib = getCachedLibrary()
+    if (!lib) {
+      await loadLibrary().catch(() => undefined)
+      lib = getCachedLibrary()
+    }
     const rec = lib?.find(g => g.id === gameId)
     if (!rec) {
       showToast('该对局未收录，仅可查看信息')

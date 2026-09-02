@@ -7,12 +7,14 @@
  *   - 失误集锦: 精选严重失误，点击进入题目训练
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import {
   loadInsights, getInsights,
   type InsightsData, type MistakeCollection,
 } from '../../game/insights'
+
+const PAGE_SIZE = 40
 
 export const InsightsPanel: React.FC = () => {
   const startLibraryPuzzle = useStore(s => s.startLibraryPuzzle)
@@ -20,7 +22,7 @@ export const InsightsPanel: React.FC = () => {
   const setTab = useStore(s => s.setTab)
   const [data, setData] = useState<InsightsData | null>(null)
   const [error, setError] = useState('')
-  const [showAll, setShowAll] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   useEffect(() => {
     loadInsights()
@@ -47,6 +49,10 @@ export const InsightsPanel: React.FC = () => {
     setTab('play')
     setSheetTab('puzzle')
   }
+
+  const loadMore = useCallback(() => {
+    setVisibleCount(prev => prev + PAGE_SIZE)
+  }, [])
 
   if (error) {
     return <div className="panel-hint" style={{ padding: 24 }}>{error}</div>
@@ -109,7 +115,7 @@ export const InsightsPanel: React.FC = () => {
         💥 大师失误集锦（点击挑战找最佳着）
       </div>
       <div className="training-list">
-        {mistakeCollection.slice(0, showAll ? undefined : 40).map((m, i) => (
+        {mistakeCollection.slice(0, visibleCount).map((m, i) => (
           <div key={i} className="training-item">
             <div className="training-info">
               <div className="training-name">
@@ -127,10 +133,10 @@ export const InsightsPanel: React.FC = () => {
           </div>
         ))}
       </div>
-      {mistakeCollection.length > 40 && !showAll && (
+      {visibleCount < mistakeCollection.length && (
         <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
-          onClick={() => setShowAll(true)}>
-          加载更多（共 {mistakeCollection.length} 条）
+          onClick={loadMore}>
+          加载更多（{visibleCount}/{mistakeCollection.length}）
         </button>
       )}
     </div>
