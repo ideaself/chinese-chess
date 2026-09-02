@@ -38,10 +38,16 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 let lastRootBackAt = 0
 
 
+export type MobilePage = 'home' | 'play' | 'games' | 'settings'
+
 export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis'> {
+    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis' | 'mobilePage' | 'setMobilePage'> {
   return {
     activeTab: 'play',
+
+    mobilePage: 'home',
+
+    setMobilePage: (p) => set({ mobilePage: p }),
 
     sheetTab: null,
 
@@ -83,6 +89,42 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     navigateBack: () => {
     const st = get()
+
+    // ── 移动端层级导航 ──
+    if (st.mobilePage !== undefined) {
+      // 1) 面板内子级页（棋手页/筛选等自注册层）优先消费
+      if (consumeTopBackHandler()) {
+        ensurePlaceholder(true)
+        return
+      }
+      // 2) 分支推演
+      if (st.variation) { get().exitVariation(); return }
+      // 3) 特殊模式层：摆棋 / 错题 / 拆解 / 开局训练
+      if (st.mode === 'setup') { get().exitSetup(); return }
+      if (st.mode === 'puzzle') { get().exitPuzzle(); return }
+      if (st.masterQuiz) { get().exitMasterQuiz(); return }
+      if (st.openingTraining) { get().exitOpeningTraining(); return }
+      // 4) 打开的覆盖层面板 → 回纯棋盘主页
+      if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
+      // 4.5) 复盘模式 → 退出复盘，回到可下棋的对战棋盘
+      if (st.mode === 'replay') {
+        get().restart()
+        set({ mobilePage: 'play', sheetTab: BOARD_HOME })
+        return
+      }
+      // 5) 非首页 → 回首页
+      if (st.mobilePage !== 'home') {
+        set({ mobilePage: 'home' })
+        return
+      }
+      // 6) 根层：2 秒内再按一次才退出
+      const now = Date.now()
+      if (now - lastRootBackAt < 2000) { exitAppNative() }
+      else { lastRootBackAt = now; get().showToast('再按一次退出') }
+      return
+    }
+
+    // ── 桌面端层级导航（保持原逻辑） ──
     // 1) 面板内子级页（棋手页/筛选等自注册层）优先消费
     if (consumeTopBackHandler()) {
       const layered = (st.sheetTab !== null && st.sheetTab !== BOARD_HOME)

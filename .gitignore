@@ -18,3 +18,4 @@ pikafish.nnue
 
 # 本地日志（preview/e2e 等）
 logs/
+releases/

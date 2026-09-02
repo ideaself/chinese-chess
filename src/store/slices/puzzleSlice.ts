@@ -187,6 +187,8 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       game: g,
       mode: 'replay',
       currentPlyIndex: plyIndex,
+      // 移动端多层导航：从错题本进入时切换到对战页
+      mobilePage: 'play' as const,
     })
     get().startPuzzle(plyIndex)
   },
@@ -217,6 +219,8 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       redTime: 0,
       blackTime: 0,
       puzzlePlyIndex: null,
+      // 移动端多层导航：残局训练切换到对战页
+      mobilePage: 'play' as const,
     })
 
     const interval = setInterval(() => {

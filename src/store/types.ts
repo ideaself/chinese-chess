@@ -6,6 +6,7 @@ import type { Game } from '../game/model'
 import type { AppSettings } from '../game/storage'
 import type { RatingChange } from '../game/rating'
 import type { PikafishEngine } from '../engine/pikafish'
+import type { MobilePage } from './slices/uiSlice'
 
 export type LastRatingChange = RatingChange
 
@@ -167,6 +168,9 @@ export interface AppState {
 
   // ── UI 状态 ──
   activeTab: TabType
+  /** 移动端页面导航（多层结构：home → play/games/settings） */
+  mobilePage: MobilePage
+  setMobilePage: (page: MobilePage) => void
   /** 移动端覆盖层（全屏面板）key：底部 Tab 或特殊模式（setup/puzzle/quiz/opening/variation/controls）；null 时为纯棋盘主页 */
   sheetTab: string | null
   setSheetTab: (tab: string | null) => void

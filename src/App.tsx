@@ -31,6 +31,7 @@ import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
 import { MobilePlayBar } from './components/Controls/MobilePlayBar'
+import { MobileHome } from './components/Controls/MobileHome'
 import { ReplayTabs } from './components/Analysis/ReplayTabs'
 import { SelfAnalysisBanner } from './components/Analysis/SelfAnalysisBanner'
 import { BOARD_HOME } from './store/constants'
@@ -61,6 +62,8 @@ export const App: React.FC = () => {
   const sheetTab = useStore(s => s.sheetTab)
   const setSheetTab = useStore(s => s.setSheetTab)
   const selfAnalysis = useStore(s => s.selfAnalysis)
+  const mobilePage = useStore(s => s.mobilePage)
+  const setMobilePage = useStore(s => s.setMobilePage)
   const isMobile = useMediaQuery(MOBILE_QUERY)
 
   useEffect(() => {
@@ -203,6 +206,8 @@ export const App: React.FC = () => {
     s.restart()
     s.setTab('play')
     s.setSheetTab(BOARD_HOME)
+    // 移动端：退出复盘回到对战页
+    if (isMobile) s.setMobilePage('play')
   }
 
   return (
@@ -281,61 +286,67 @@ export const App: React.FC = () => {
 
       {isMobile ? (
         <>
-          {/* 移动端：棋盘常驻满屏，面板以全屏覆盖层呈现 */}
-          <main className="app-main">
-            {variation && selfAnalysis && <SelfAnalysisBanner />}
-            <div className="board-area">
-              <Board />
-            </div>
-            {mode === 'replay' && !variation && <ReplayTabs />}
-          </main>
+          {/* ── 移动端：多层导航（首页 → 对战/棋谱/设置）── */}
 
-          {!mobileSheet && <MobilePlayBar />}
+          {/* 首页：三个大按钮 */}
+          {mobilePage === 'home' && <MobileHome />}
 
-          {mobileSheet && (
-            <div className="mobile-overlay">
-              <div className="mobile-overlay-header">
-                <button className="mobile-overlay-back" aria-label="返回"
-                  onClick={() => useStore.getState().navigateBack()}>←</button>
-                <span>{SHEET_TITLES[mobileSheet] ?? '面板'}</span>
-                <button className="mobile-overlay-close" aria-label="关闭"
-                  onClick={() => setSheetTab(BOARD_HOME)}>✕</button>
+          {/* 对战页：棋盘 + 操控栏（保持现有布局） */}
+          {mobilePage === 'play' && (
+            <>
+              <main className="app-main">
+                {variation && selfAnalysis && <SelfAnalysisBanner />}
+                <div className="board-area">
+                  <Board />
+                </div>
+                {mode === 'replay' && !variation && <ReplayTabs />}
+              </main>
+
+              {!mobileSheet && <MobilePlayBar />}
+
+              {mobileSheet && (
+                <div className="mobile-overlay">
+                  <div className="mobile-overlay-header">
+                    <button className="mobile-overlay-back" aria-label="返回"
+                      onClick={() => useStore.getState().navigateBack()}>←</button>
+                    <span>{SHEET_TITLES[mobileSheet] ?? '面板'}</span>
+                    <button className="mobile-overlay-close" aria-label="关闭"
+                      onClick={() => setSheetTab(BOARD_HOME)}>✕</button>
+                  </div>
+                  <div className="mobile-overlay-body">
+                    {renderPanelContent(mobileSheet)}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 棋谱页：全屏列表/大师库/错题本/训练 */}
+          {mobilePage === 'games' && (
+            <div className="mobile-page">
+              <div className="mobile-page-header">
+                <button className="mobile-page-back" onClick={() => setMobilePage('home')}>←</button>
+                <span className="mobile-page-title">棋谱</span>
               </div>
-              <div className="mobile-overlay-body">
-                {renderPanelContent(mobileSheet)}
+              <div className="mobile-page-body">
+                <GamesPanel />
               </div>
             </div>
           )}
 
-          {/* 底部 Tab 栏（移动端无独立「分析」页：分析在复盘页的局势图/分析/报告 Tab 区内） */}
-          <nav className="bottom-bar">
-            {([['play', '对战'], ['games', '棋谱'], ['settings', '设置']] as [Tab, string][]).map(([t, label]) => {
-              const replaying = mode === 'replay'
-              // 复盘属于「棋谱」上下文：复盘进行中高亮棋谱
-              const active = t === 'games'
-                ? (replaying || sheetTab === 'games')
-                : t === 'play'
-                  ? (!replaying && (sheetTab === null || sheetTab === BOARD_HOME))
-                  : sheetTab === t
-              return (
-                <button key={t} className={`bottom-tab ${active ? 'bottom-tab-active' : ''}`}
-                  onClick={() => {
-                    if (t === 'play' && useStore.getState().mode === 'replay') { exitReplay(); return }
-                    if (t === 'games' && useStore.getState().mode === 'replay') {
-                      // 有复盘进行中：棋谱 Tab = 回到复盘页（之前的位置）；
-                      // 已在复盘页则打开棋谱库列表换局
-                      const st = useStore.getState()
-                      if (st.sheetTab === null || st.sheetTab === BOARD_HOME) { st.setTab('games'); st.setSheetTab('games') }
-                      else { st.setTab('play'); st.setSheetTab(BOARD_HOME) }
-                      return
-                    }
-                    setTab(t); setSheetTab(t === 'play' ? BOARD_HOME : t)
-                  }}>
-                  {label}
-                </button>
-              )
-            })}
-          </nav>
+          {/* 设置页：全屏设置面板 */}
+          {mobilePage === 'settings' && (
+            <div className="mobile-page">
+              <div className="mobile-page-header">
+                <button className="mobile-page-back" onClick={() => setMobilePage('home')}>←</button>
+                <span className="mobile-page-title">设置</span>
+              </div>
+              <div className="mobile-page-body">
+                <StatsPanel />
+                <SettingsPanel />
+              </div>
+            </div>
+          )}
         </>
       ) : (
         /* 桌面端：棋盘常驻 + 右侧栏（保持现状） */
