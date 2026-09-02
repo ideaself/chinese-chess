@@ -305,9 +305,20 @@ export const App: React.FC = () => {
                 {mode === 'replay' && !variation && <ReplayTabs />}
               </main>
 
-              {!mobileSheet && <MobilePlayBar />}
+              {/* 拆解/错题/开局训练：棋盘 + 题目同屏（棋盘在上、题目在下） */}
+              {(masterQuiz || mode === 'puzzle' || openingTraining) && (
+                <div className="mobile-quiz-area">
+                  {renderPanelContent(
+                    mode === 'puzzle' ? 'puzzle'
+                    : masterQuiz ? 'quiz'
+                    : 'opening'
+                  )}
+                </div>
+              )}
 
-              {mobileSheet && (
+              {/* 普通模式：操控栏或覆盖层面板 */}
+              {!masterQuiz && mode !== 'puzzle' && !openingTraining && !mobileSheet && <MobilePlayBar />}
+              {!masterQuiz && mode !== 'puzzle' && !openingTraining && mobileSheet && (
                 <div className="mobile-overlay">
                   <div className="mobile-overlay-header">
                     <button className="mobile-overlay-back" aria-label="返回"

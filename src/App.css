@@ -1500,6 +1500,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     -webkit-overflow-scrolling: touch;
     padding: 12px;
   }
+
+  /* ── 拆解/错题/开局训练：棋盘+题目同屏 ── */
+  .mobile-quiz-area {
+    flex-shrink: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 10px 12px;
+  }
 }
 
 /* ── 大师棋谱库 ─────────────────────────────────────────────── */
