@@ -1,0 +1,6 @@
+# Copy to android/key.properties for local release builds.
+# Keep the matching keystore at android/app/upload-keystore.jks.
+storeFile=upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=CHANGE_ME
+keyPassword=CHANGE_ME

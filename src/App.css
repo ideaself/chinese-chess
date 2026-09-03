@@ -1529,6 +1529,24 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   display: flex;
   flex-direction: column;
 }
+.master-library-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.master-library-header h3 { margin: 0; color: var(--text); font-size: 14px; }
+.master-library-status { grid-column: 2; grid-row: 1; text-align: right; }
+.master-library-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
 .lib-badge {
   font-size: 11px;
   color: var(--text-2);
@@ -1761,6 +1779,14 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   overflow-y: auto;
   padding: 4px 8px 8px;
 }
+.replay-retry-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+}
+.replay-retry-panel .panel-hint { flex: 1; }
+.replay-retry-panel .btn { flex-shrink: 0; }
 
 /* 局势图 */
 .eval-curve { width: 100%; }

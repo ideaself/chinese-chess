@@ -24,7 +24,7 @@ import { join } from 'path'
 const pkg = JSON.parse(readFileSync('package.json', 'utf-8'))
 const [maj = 0, min = 0, patch = 0] = String(pkg.version || '').split('.').map(n => parseInt(n) || 0)
 const versionCode = maj * 10000 + min * 100 + patch
-const versionName = `${maj}.${min}`
+const versionName = `${maj}.${min}.${patch}`
 
 const androidDir0 = join(process.cwd(), 'android')
 if (!existsSync(androidDir0)) {
@@ -78,15 +78,19 @@ writeFileSync(join(androidDir, 'key.properties'), [
   `keyPassword=${keyPass}`,
 ].join('\n'))
 
-// 3. 补丁 build.gradle：release 块内替换 debug 签名引用为 key.properties 属性
+// 3. 补丁 build.gradle：显式创建 release 签名配置并绑定到 release 构建
 const gradlePath = join(androidDir, 'app', 'build.gradle')
 let gradle = readFileSync(gradlePath, 'utf-8')
 
-const signingProps = [
+const signingConfigBlock = [
+  '    signingConfigs {',
+  '        releaseSigning {',
   '            storeFile file(keystoreProperties[\'storeFile\'])',
   '            storePassword keystoreProperties[\'storePassword\']',
   '            keyAlias keystoreProperties[\'keyAlias\']',
   '            keyPassword keystoreProperties[\'keyPassword\']',
+  '        }',
+  '    }',
 ].join('\n')
 
 // 在 android { 块前注入 Properties 加载逻辑
@@ -106,12 +110,11 @@ if (!gradle.includes('keystoreProperties')) {
   gradle = loaderBlock + '\n' + gradle
 }
 
-// release buildTypes 内的 debug 签名引用 → 正式签名属性
-if (!gradle.includes('storeFile file(keystoreProperties')) {
-  gradle = gradle.replace(
-    /^(\s*)signingConfig signingConfigs\.debug\s*$/m,
-    `$1${signingProps.replace(/\n\s*/g, '\n$1')}`,
-  )
+if (!gradle.includes('releaseSigning {')) {
+  gradle = gradle.replace(/(\n\s*buildTypes\s*\{)/, `\n${signingConfigBlock}$1`)
+}
+if (!gradle.includes('signingConfig signingConfigs.releaseSigning')) {
+  gradle = gradle.replace(/(\n\s*release\s*\{)/, '$1\n            signingConfig signingConfigs.releaseSigning')
 }
 
 writeFileSync(gradlePath, gradle)
