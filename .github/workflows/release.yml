@@ -85,3 +85,27 @@ jobs:
         with:
           files: apk-out/*.apk
           generate_release_notes: true
+
+      - name: 同步 APK 到 Gitee Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "未配置 GITEE_TOKEN，跳过 Gitee Release 上传"
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          API="https://gitee.com/api/v5/repos/ideaself/chiness-chess"
+          RELEASE_JSON="$(curl --fail-with-body -sS -X POST "$API/releases" \
+            -H "Authorization: token $GITEE_TOKEN" \
+            --data-urlencode "tag_name=$GITHUB_REF_NAME" \
+            --data-urlencode "name=中国象棋 v$VERSION" \
+            --data-urlencode "body=自动构建 APK，版本 v$VERSION" \
+            --data-urlencode "target_commitish=$GITHUB_SHA")"
+          RELEASE_ID="$(node -e "const d=JSON.parse(process.argv[1]); process.stdout.write(String(d.id))" "$RELEASE_JSON")"
+          APK="apk-out/chinese-chess-v${VERSION}.apk"
+          curl --fail-with-body -sS -X POST "$API/releases/$RELEASE_ID/attach_files" \
+            -H "Authorization: token $GITEE_TOKEN" \
+            -F "file=@$APK"
