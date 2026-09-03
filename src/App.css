@@ -1530,22 +1530,30 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   flex-direction: column;
 }
 .master-library-header {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
 }
-.master-library-header h3 { margin: 0; color: var(--text); font-size: 14px; }
-.master-library-status { grid-column: 2; grid-row: 1; text-align: right; }
-.master-library-actions {
-  grid-column: 1 / -1;
+.master-library-title-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.master-library-title-row h3 { margin: 0; color: var(--text); font-size: 14px; }
+.master-library-title-row span { flex-shrink: 0; text-align: right; }
+.master-library-action-row {
+  display: flex;
+  justify-content: flex-start;
   gap: 6px;
   min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 1px;
 }
 .lib-badge {
   font-size: 11px;

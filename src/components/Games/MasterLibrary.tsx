@@ -202,14 +202,14 @@ export const MasterLibrary: React.FC = () => {
   return (
     <div className="master-library">
       <div className="master-library-header">
-        <h3>大师棋谱库</h3>
-        <div className="master-library-status">
+        <div className="master-library-title-row">
+          <h3>大师棋谱库</h3>
           <span style={{ fontSize: 12, color: '#888' }}>
             {info ? `已加载 ${info.loaded}/${info.total} 局` : `共 ${games.length} 局`}
             {cachedCount ? ` · 已预分析 ${cachedCount}` : ''}
           </span>
         </div>
-        <div className="master-library-actions">
+        <div className="master-library-action-row">
           <button className={`btn btn-sm ${preRunning ? 'btn-active' : ''}`}
             title={preRunning
               ? '停止批量预分析'
