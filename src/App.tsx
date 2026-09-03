@@ -57,7 +57,6 @@ export const App: React.FC = () => {
   const toast = useStore(s => s.toast)
   const variation = useStore(s => s.variation)
   const openingTraining = useStore(s => s.openingTraining)
-  const endgameTraining = useStore(s => s.endgameTraining)
   const masterQuiz = useStore(s => s.masterQuiz)
   const theme = useStore(s => s.settings.theme)
   const sheetTab = useStore(s => s.sheetTab)
@@ -263,7 +262,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* 状态栏（移动端复盘隐藏：步数与胜负已在标题和局势图中，给棋盘腾空间） */}
-      {!(isMobile && mode === 'play' && !openingTraining && !endgameTraining) &&
+      {!(isMobile && mobilePage === 'home') &&
         !(isMobile && mode === 'replay' && !variation) && (
         <div className="status-bar">
           <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
