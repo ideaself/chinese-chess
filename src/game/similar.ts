@@ -18,19 +18,32 @@ export interface GameMeta {
   res: string
 }
 
+import { ensureOpenableMaxId } from './masterLibrary'
+
 interface IndexShard {
   firstMove: string
   depth: number
   index: Record<string, Record<string, number[]>>
 }
 
-/** master-games 分片覆盖的最大 gameid（超过只能看标题不能打开） */
-export const OPENABLE_MAX_ID = 50000
+/** master-games 分片未就绪时的兜底上限（manifest 加载后以 maxId 为准） */
+export const OPENABLE_MAX_ID_FALLBACK = 50000
 const META_SHARD_SIZE = 20000
+
+let openableMaxId: number | null = null
 
 const shardCache = new Map<string, IndexShard>()
 const metaCache = new Map<number, GameMeta>()
 let metaLoading = new Set<string>()
+
+/** 确保"可打开上限"就绪（轻量：只拉 master-games manifest）；返回当前上限 */
+export async function ensureOpenableLimit(): Promise<number> {
+  if (openableMaxId === null) {
+    const fromManifest = await ensureOpenableMaxId()
+    if (fromManifest !== null) openableMaxId = fromManifest
+  }
+  return openableMaxId ?? OPENABLE_MAX_ID_FALLBACK
+}
 
 function shardName(firstMove: string): string {
   return firstMove && /^[a-z0-9]+$/i.test(firstMove) ? firstMove : 'other'
@@ -110,11 +123,13 @@ export function gameMeta(gameId: number): GameMeta | undefined {
 }
 
 export function canOpenGame(gameId: number): boolean {
-  return gameId <= OPENABLE_MAX_ID
+  const limit = openableMaxId ?? OPENABLE_MAX_ID_FALLBACK
+  return gameId <= limit && gameId > 0
 }
 
 /** 测试辅助 */
 export function _clearSimilarCache(): void {
   shardCache.clear()
   metaCache.clear()
+  openableMaxId = null
 }

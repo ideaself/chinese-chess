@@ -1,7 +1,7 @@
 /**
  * 大师棋谱库分类测试
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { classifyRecord, classifyLibrary } from '../masterLibrary'
@@ -64,6 +64,54 @@ describe('classifyLibrary 批量', () => {
     const out = classifyLibrary([rec('h2e2b9c7')])
     expect(out[0].cls.family).toBe('zhongpao')
     expect(out[0].r).toBe('红方')
+  })
+})
+
+describe('fetchGameById 定点取局（v1.21 解除 5 万局上限）', () => {
+  it('按 ranges 二分定位分片并命中 id；未收录返回 null', async () => {
+    vi.resetModules()
+    const mk = (id: number, mv: string) => ({ id, mv, eg: 0, r: '红方', b: '黑方', res: '红胜' })
+    const files: Record<string, unknown> = {
+      'master-games/manifest.json': {
+        generatedAt: '', source: '', total: 2, maxId: 3000, shardSize: 2,
+        shards: ['shard_0.json', 'shard_1.json'], ranges: [[1, 1000], [1001, 3000]],
+      },
+      'master-games/shard_0.json': [mk(1, 'h2e2'), mk(500, 'c3c4')],
+      'master-games/shard_1.json': [mk(2500, 'b2e2')],
+    }
+    ;(globalThis as any).fetch = async (url: string) => ({
+      ok: url in files,
+      status: url in files ? 200 : 404,
+      json: async () => files[url],
+    })
+    const lib = await import('../masterLibrary')
+    const hit = await lib.fetchGameById(2500)
+    expect(hit?.mv).toBe('b2e2')
+    expect((await lib.fetchGameById(1))?.mv).toBe('h2e2')
+    expect(await lib.fetchGameById(99999)).toBeNull()
+    expect(lib.getOpenableMaxId()).toBe(3000)
+  })
+
+  it('canOpenGame 以 manifest maxId 为准（经 similar.ensureOpenableLimit）', async () => {
+    vi.resetModules()
+    const files: Record<string, unknown> = {
+      'master-games/manifest.json': {
+        generatedAt: '', source: '', total: 1, maxId: 142433, shardSize: 1,
+        shards: ['shard_0.json'], ranges: [[1, 142433]],
+      },
+    }
+    ;(globalThis as any).fetch = async (url: string) => ({
+      ok: url in files,
+      status: url in files ? 200 : 404,
+      json: async () => files[url],
+    })
+    const similar = await import('../similar')
+    expect(similar.canOpenGame(50000)).toBe(true) // 未就绪时旧上限兜底
+    expect(similar.canOpenGame(50001)).toBe(false)
+    const limit = await similar.ensureOpenableLimit()
+    expect(limit).toBe(142433)
+    expect(similar.canOpenGame(142433)).toBe(true)
+    expect(similar.canOpenGame(200000)).toBe(false)
   })
 })
 

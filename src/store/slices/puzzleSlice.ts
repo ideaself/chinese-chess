@@ -9,7 +9,12 @@ import { createEmptyGame } from '../../game/model'
 import { getAllGames } from '../../game/storage'
 import { boardFromGame, parseMoveFromUci } from '../helpers'
 import type { PuzzleItem } from '../../game/puzzles'
-import { recordPuzzleCorrect, recordPuzzleWrong } from '../../game/puzzles'
+import { recordPuzzleCorrect, recordPuzzleWrong, difficultyFromDrop, getDailyPuzzle } from '../../game/puzzles'
+import { recordPuzzleAnswer, recordMistakeRetry, isMistakeAutoMastered } from '../../game/progress'
+import { toggleMastered } from '../../game/storage'
+
+/** 正在重走的错题去重键（局面|着法），用于错题重练追踪；题库/每日题时为 null */
+let activeMistakeKey: string | null = null
 
 
 
@@ -35,6 +40,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const ply = game.plies[plyIndex]
     if (!ply || !ply.analysis?.bestMove) return
     if (timerInterval) clearInterval(timerInterval)
+    activeMistakeKey = null
 
     set({
       mode: 'puzzle',
@@ -59,8 +65,12 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     startLibraryPuzzle: (p: PuzzleItem) => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
+    activeMistakeKey = null
     const replayOrigin = get().mobilePage
     const replayOriginTab = get().activeTab
+    // 是否当日挑战题（同题型且 game_id+ply 匹配，供完成标记）
+    const daily = getDailyPuzzle(p.type)
+    const isDaily = !!daily && daily.game_id === p.game_id && daily.ply === p.ply
 
     const turn = p.fen.split(' ')[1] === 'b' ? 'b' : 'w'
     const game = createEmptyGame()
@@ -109,6 +119,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         black: p.black,
         mover: turn,
         drop: p.score_drop ?? 0,
+        isDaily,
       },
       currentPlyIndex: 0,
       selected: null,
@@ -123,6 +134,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     exitPuzzle: () => {
     const { game, currentPlyIndex, replayOrigin, replayOriginTab } = get()
+    activeMistakeKey = null
     set({
       mode: 'replay',
       endgameTraining: false,
@@ -161,10 +173,39 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         board: newState,
         lastMove: { from, to, turn: st.turn },
       })
-      recordPuzzleCorrect()
+      const src = get().puzzleSource
+      if (src) {
+        // 题库题：完整统计（题型/难度/每日完成 + streak）
+        recordPuzzleAnswer({
+          type: src.type,
+          difficulty: difficultyFromDrop(src.type, src.drop),
+          correct: true,
+          isDaily: src.isDaily,
+        })
+      } else {
+        recordPuzzleCorrect()
+      }
+      if (activeMistakeKey) {
+        recordMistakeRetry(activeMistakeKey, true)
+        if (isMistakeAutoMastered(activeMistakeKey)) {
+          toggleMastered(activeMistakeKey)
+          get().showToast('连续答对 2 次，错题已自动标记掌握 ✓')
+        }
+      }
     } else {
       set({ puzzleResult: 'wrong', puzzleAttempts: puzzleAttempts + 1 })
-      recordPuzzleWrong()
+      const src = get().puzzleSource
+      if (src) {
+        recordPuzzleAnswer({
+          type: src.type,
+          difficulty: difficultyFromDrop(src.type, src.drop),
+          correct: false,
+          isDaily: src.isDaily,
+        })
+      } else {
+        recordPuzzleWrong()
+      }
+      if (activeMistakeKey) recordMistakeRetry(activeMistakeKey, false)
     }
     return true
   },
@@ -192,6 +233,10 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       replayOriginTab,
     })
     get().startPuzzle(plyIndex)
+    // 错题重练追踪键（与 getMistakes 去重键一致：局面|着法）；
+    // startPuzzle 内会先清空，这里在其后设置
+    const ply = g.plies[plyIndex]
+    activeMistakeKey = `${ply.fenBefore.split(' ').slice(0, 2).join(' ')}|${ply.move}`
   },
 
   /** 残局训练: 自定义起始局面，玩家执红先行 */

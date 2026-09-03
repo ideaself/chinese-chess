@@ -17,7 +17,7 @@ let lastRootBackAt = 0
 export type MobilePage = 'home' | 'play' | 'games' | 'settings'
 
 export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis' | 'mobilePage' | 'setMobilePage' | 'replayOrigin' | 'replayOriginTab'> {
+    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'trainingAutoStart' | 'setTrainingAutoStart' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis' | 'mobilePage' | 'setMobilePage' | 'replayOrigin' | 'replayOriginTab'> {
   return {
     activeTab: 'play',
 
@@ -32,6 +32,10 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     sheetTab: null,
 
     setSheetTab: (t) => set({ sheetTab: t }),
+
+    trainingAutoStart: null,
+
+    setTrainingAutoStart: (v) => set({ trainingAutoStart: v }),
 
     selfAnalysis: false,
 

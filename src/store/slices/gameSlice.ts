@@ -9,7 +9,10 @@ import { getLegalMoves, getGameStatus } from '../../game/rules'
 import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
 import { parsePGN, exportPGN } from '../../game/pgn'
 import { saveGame as storageSaveGame, getAllGames, getSettings, deleteGame as storageDeleteGame } from '../../game/storage'
+import { scheduleAutoSync } from '../../game/webdav'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
+import { ENDGAME_PRESETS } from '../../game/endgames'
+import { recordEndgameResult } from '../../game/progress'
 import { settleRating, boardFromGame, parseMoveFromUci } from '../helpers'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
@@ -287,6 +290,16 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       if (timerInterval) clearInterval(timerInterval)
       set({ timerInterval: null })
       playGameOverHaptic(settings.hapticEnabled)
+      // 残局训练结算进度（v1.21）
+      if (get().endgameTraining) {
+        const preset = ENDGAME_PRESETS.find(p => p.fen === game.startFen)
+        if (preset) {
+          const won =
+            (status.result === '1-0' && get().playerSide === 'w') ||
+            (status.result === '0-1' && get().playerSide === 'b')
+          recordEndgameResult(preset.id, won)
+        }
+      }
       get().saveCurrentGame()
       return true
     }
@@ -413,6 +426,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       get().showToast('⚠ 保存失败：存储空间已满，请在棋谱页备份或删除旧棋谱')
     }
     set({ savedGames: getAllGames() })
+    // 自动云同步（设置启用 + 已配置时延迟静默上传）
+    if (game.result !== '*') scheduleAutoSync()
   },
 
     loadGame: (id) => {

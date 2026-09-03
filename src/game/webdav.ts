@@ -14,6 +14,7 @@
 
 import { CapacitorHttp, Capacitor } from '@capacitor/core'
 import { exportFullBackup, importFullBackup, getSettings, saveSettings } from './storage'
+import { secureGet, secureSet, secureRemove } from './secureStore'
 
 export const BACKUP_FILENAME = 'xiangqi-backup.json'
 
@@ -23,11 +24,42 @@ export interface WebdavCred {
   password: string
 }
 
-/** 从应用设置读取凭据；未配置返回 null */
+/** 从应用设置读取凭据；未配置返回 null（同步版：密码可能尚未迁入安全存储，仅测试/兼容用） */
 export function credFromSettings(): WebdavCred | null {
   const s = getSettings()
   if (!s.webdavUrl || !s.webdavUser || !s.webdavPassword) return null
   return { url: s.webdavUrl.replace(/\/+$/, ''), user: s.webdavUser, password: s.webdavPassword }
+}
+
+const PWD_KEY = 'webdavPassword'
+
+/**
+ * 读取 WebDAV 密码（安全存储优先）。
+ * 一次性迁移：发现设置中残留明文密码时移入安全存储并清空设置字段。
+ */
+export async function loadWebdavPassword(): Promise<string> {
+  const s = getSettings()
+  if (s.webdavPassword) {
+    const legacy = s.webdavPassword
+    await secureSet(PWD_KEY, legacy)
+    saveSettings({ webdavPassword: '' })
+    return legacy
+  }
+  return (await secureGet(PWD_KEY)) ?? ''
+}
+
+/** 写入/清除 WebDAV 密码（仅安全存储，不再落设置） */
+export async function storeWebdavPassword(pw: string): Promise<void> {
+  if (pw) await secureSet(PWD_KEY, pw)
+  else await secureRemove(PWD_KEY)
+}
+
+/** 异步读取凭据（密码来自安全存储）；未配置返回 null */
+export async function credFromSettingsAsync(): Promise<WebdavCred | null> {
+  const s = getSettings()
+  const password = await loadWebdavPassword()
+  if (!s.webdavUrl || !s.webdavUser || !password) return null
+  return { url: s.webdavUrl.replace(/\/+$/, ''), user: s.webdavUser, password }
 }
 
 function authHeader(cred: WebdavCred): string {
@@ -64,8 +96,9 @@ async function wdRaw(
   method: string,
   absUrl: string,
   body?: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<WdResponse> {
-  const headers: Record<string, string> = { Authorization: authHeader(cred) }
+  const headers: Record<string, string> = { Authorization: authHeader(cred), ...(extraHeaders ?? {}) }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   // ── 原生 App：CapacitorHttp 直连 ──
@@ -235,6 +268,78 @@ export async function downloadBackup(cred: WebdavCred): Promise<SyncResult> {
     ].filter(Boolean)
     markLastSync()
     return { ok: true, message: parts.length ? `云备份恢复：${parts.join(' · ')}${suffix}` : `云端与本机一致${suffix}` }
+  }
+}
+
+// ── 历史版本轮换（v1.21：保留最近 N 份历史备份） ──────────────────
+
+/** 历史保留份数：backup-1.json ~ backup-3.json（1 为上一版） */
+const HISTORY_COPIES = 3
+
+function historyFileName(n: number): string {
+  return n === 0 ? BACKUP_FILENAME : `xiangqi-backup-${n}.json`
+}
+
+/** 用 WebDAV COPY 把主备份逐份后移；任一步失败静默跳过（不影响主备份上传） */
+async function rotateHistory(cred: WebdavCred): Promise<void> {
+  const dir = backupUrl(cred).slice(0, backupUrl(cred).lastIndexOf('/'))
+  for (let n = HISTORY_COPIES - 1; n >= 0; n--) {
+    const dest = `${dir}/${historyFileName(n + 1)}`
+    await wdRaw(cred, 'COPY', `${dir}/${historyFileName(n)}`, undefined, { Destination: dest })
+      .catch(() => undefined)
+      .then(r => { if (r && !r.ok && r.status !== 404) { /* 非 404 失败也忽略：历史轮换尽力而为 */ } })
+  }
+}
+
+/** 上传备份（先轮换历史，再写主文件）；手动与自动同步共用 */
+export async function uploadBackupWithHistory(cred: WebdavCred): Promise<SyncResult> {
+  try {
+    await ensureCollection(cred)
+  } catch { /* ensureCollection 失败时由 uploadBackup 给出可读错误 */ }
+  try {
+    await rotateHistory(cred)
+  } catch { /* 尽力而为 */ }
+  return uploadBackup(cred)
+}
+
+// ── 自动同步（v1.21：对局保存后静默上传，可关） ────────────────────
+
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null
+let autoSyncRunning = false
+let lastAutoSyncAt = 0
+const AUTO_SYNC_DELAY = 45_000
+const AUTO_SYNC_MIN_INTERVAL = 10 * 60_000
+
+/**
+ * 对局保存后调用：启用自动同步且已配置凭据时，延迟 45s 静默上传
+ * （合并短时间多次保存；同一进程 10 分钟内不重复上传）。
+ */
+export function scheduleAutoSync(): void {
+  const s = getSettings()
+  if (!s.webdavAutoSync) return
+  void credFromSettingsAsync().then(cred => {
+    if (!cred) return
+    if (autoSyncTimer) clearTimeout(autoSyncTimer)
+    autoSyncTimer = setTimeout(() => { autoSyncTimer = null; void runAutoSync() }, AUTO_SYNC_DELAY)
+  })
+}
+
+async function runAutoSync(): Promise<void> {
+  if (autoSyncRunning) return
+  if (Date.now() - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL) return
+  const cred = await credFromSettingsAsync()
+  if (!cred) return
+  autoSyncRunning = true
+  try {
+    const r = await uploadBackupWithHistory(cred)
+    if (r.ok) {
+      lastAutoSyncAt = Date.now()
+      console.info('云同步完成:', r.message)
+    } else {
+      console.warn('自动云同步失败:', r.message)
+    }
+  } finally {
+    autoSyncRunning = false
   }
 }
 

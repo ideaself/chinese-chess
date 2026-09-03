@@ -19,8 +19,12 @@ export interface LibraryManifest {
   generatedAt: string
   source: string
   total: number
+  /** 收录棋谱的最大 dpxq gameid（打开上限，v1.21 起随全量语料） */
+  maxId?: number
   shardSize: number
   shards: string[]
+  /** 各分片收录的 id 范围 [lo, hi]（分片按 id 升序切分，供定点取局） */
+  ranges?: [number, number][]
 }
 
 let cachePromise: Promise<void> | null = null
@@ -28,14 +32,43 @@ let cacheGames: LibraryGame[] | null = null
 let manifest: LibraryManifest | null = null
 let loadedShards = 0
 
+/** 轻量拉取 manifest（不加载任何分片）；用于打开上限与定点索引 */
+let manifestPromise: Promise<LibraryManifest | null> | null = null
+
+export function ensureManifest(): Promise<LibraryManifest | null> {
+  if (manifest) return Promise.resolve(manifest)
+  if (!manifestPromise) {
+    manifestPromise = (async () => {
+      try {
+        const m = await fetch('master-games/manifest.json')
+        if (!m.ok) return null
+        manifest = (await m.json()) as LibraryManifest
+        return manifest
+      } catch {
+        return null
+      }
+    })()
+  }
+  return manifestPromise
+}
+
+/** 可打开的最大 gameid；manifest 未加载时返回 null（调用方用旧上限兜底） */
+export function getOpenableMaxId(): number | null {
+  return manifest?.maxId ?? null
+}
+
+/** 确保打开上限可用（轻量，只拉 manifest）；返回 maxId 或 null */
+export async function ensureOpenableMaxId(): Promise<number | null> {
+  const m = await ensureManifest()
+  return m?.maxId ?? null
+}
+
 /** 加载棋谱库：manifest + 全部分片并行请求（模块级缓存，只请求一次） */
 export function loadLibrary(): Promise<void> {
   if (!cachePromise) {
     cachePromise = (async () => {
-      const m = await fetch('master-games/manifest.json')
-      if (!m.ok) throw new Error(`HTTP ${m.status}`)
-      const mf: LibraryManifest = await m.json()
-      manifest = mf
+      const mf = await ensureManifest()
+      if (!mf) throw new Error('manifest 加载失败')
       // 并行拉取全部分片，按分片顺序合并（浏览器对同源并发自动排队）
       const shardGames = await Promise.all(mf.shards.map(async name => {
         const res = await fetch(`master-games/${name}`)
@@ -47,6 +80,79 @@ export function loadLibrary(): Promise<void> {
     })()
   }
   return cachePromise
+}
+
+/** 加载前 N 个分片（全量库大时列表页首屏用；后续可用 loadMoreGames 续载） */
+export async function loadLibraryPrefix(n: number): Promise<void> {
+  const mf = await ensureManifest()
+  if (!mf) throw new Error('manifest 加载失败')
+  if (cacheGames && loadedShards > 0) return // 已有进度，续载交给 loadMoreGames
+  cacheGames = []
+  const take = mf.shards.slice(0, Math.max(1, Math.min(n, mf.shards.length)))
+  const shardGames = await Promise.all(take.map(async name => {
+    const res = await fetch(`master-games/${name}`)
+    if (!res.ok) throw new Error(`分片 ${name} 加载失败 (HTTP ${res.status})`)
+    return (await res.json()) as MasterRecord[]
+  }))
+  cacheGames = shardGames.flat().map(g => ({ ...g, cls: classifyRecord(g) }))
+  loadedShards = take.length
+}
+
+/** 定点取局缓存（按 id 打开单局用；LRU 上限，防内存膨胀） */
+const shardForIdCache = new Map<number, MasterRecord[]>()
+const SHARD_CACHE_MAX = 12
+
+function shardIndexForId(mf: LibraryManifest, id: number): number {
+  if (mf.ranges && mf.ranges.length === mf.shards.length) {
+    // 分片按 id 升序且范围不重叠 → 二分
+    let lo = 0, hi = mf.ranges.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      const [rlo, rhi] = mf.ranges[mid]
+      if (id < rlo) hi = mid - 1
+      else if (id > rhi) lo = mid + 1
+      else return mid
+    }
+    return -1
+  }
+  // 无 ranges（旧 manifest）：按序号估算 + 邻域扫描兜底
+  const guess = Math.min(mf.shards.length - 1, Math.max(0, Math.floor((id - 1) / mf.shardSize)))
+  return guess
+}
+
+/**
+ * 按 dpxq gameid 定点取一条记录（只拉所在分片，不全量加载）。
+ * 找不到返回 null。供相似局面「打开对局」等场景，替代全量 loadLibrary。
+ */
+export async function fetchGameById(id: number): Promise<MasterRecord | null> {
+  const mf = await ensureManifest()
+  if (!mf) return null
+  let idx = shardIndexForId(mf, id)
+  if (idx < 0) return null
+  const tryLoad = async (i: number): Promise<MasterRecord[] | null> => {
+    if (shardForIdCache.has(i)) return shardForIdCache.get(i)!
+    const name = mf.shards[i]
+    if (!name) return null
+    const res = await fetch(`master-games/${name}`)
+    if (!res.ok) return null
+    const recs = (await res.json()) as MasterRecord[]
+    shardForIdCache.set(i, recs)
+    // 简易 LRU：超上限删最旧
+    if (shardForIdCache.size > SHARD_CACHE_MAX) {
+      const first = shardForIdCache.keys().next().value
+      if (first !== undefined) shardForIdCache.delete(first)
+    }
+    return recs
+  }
+  // 命中范围优先；无 ranges 估算失配时向两侧各扫一个分片
+  const candidates = mf.ranges ? [idx] : [idx, idx - 1, idx + 1]
+  for (const i of candidates) {
+    if (i < 0 || i >= mf.shards.length) continue
+    const recs = await tryLoad(i)
+    const hit = recs?.find(r => r.id === id)
+    if (hit) return hit
+  }
+  return null
 }
 
 async function loadShard(i: number): Promise<void> {

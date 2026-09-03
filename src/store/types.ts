@@ -163,6 +163,8 @@ export interface AppState {
     black: string
     mover: 'w' | 'b'
     drop: number
+    /** 是否每日挑战题（完成标记/统计用） */
+    isDaily?: boolean
   } | null
 
   // ── 变化推演（多分支树 + 引擎评分对比）──
@@ -183,6 +185,9 @@ export interface AppState {
   /** 全局轻提示（自动消失） */
   toast: string | null
   showToast: (msg: string) => void
+  /** 训练页自动开始标记（主页每日一题卡片点击后置位，TrainingPanel 消费后清除） */
+  trainingAutoStart: 'daily' | null
+  setTrainingAutoStart: (v: 'daily' | null) => void
 
   // ── 对局控制 ──
   currentPlyIndex: number  // 当前查看的 Ply 序号 (0 = 初始局面)

@@ -15,7 +15,7 @@ import {
   pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, applyCachedAnalysis,
   acquireEngineSlot, releaseEngineSlot,
 } from '../../game/masterPreanalysis'
-import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
+import { getCachedLibrary, loadLibraryPrefix, recordToGame } from '../../game/masterLibrary'
 import { BOARD_HOME } from '../constants'
 
 
@@ -172,9 +172,14 @@ export function createMasterQuizSlice(set: StoreSet, get: StoreGet): Pick<AppSta
   // ── 引擎 ──
 
     startMasterQuiz: async (gameId) => {
-    const games = getCachedLibrary()
+    let games = getCachedLibrary()
     if (!games || games.length === 0) {
-      get().showToast('大师库尚未加载，请先打开「大师库」页签')
+      // 未打开过大师库页：渐进载入部分分片作为题池（避免全量加载）
+      try { await loadLibraryPrefix(30) } catch { /* 加载失败按空池处理 */ }
+      games = getCachedLibrary()
+    }
+    if (!games || games.length === 0) {
+      get().showToast('大师棋谱库加载失败，请检查网络后重试')
       return
     }
     const current = get().game

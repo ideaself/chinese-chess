@@ -7,6 +7,11 @@
  *   - 残局题: 残局阶段失误，找最佳着
  */
 
+import {
+  getPuzzleStreak as progressGetPuzzleStreak,
+  recordPuzzleAnswer,
+} from './progress'
+
 export interface PuzzleItem {
   type: '杀局' | '失误题' | '残局题'
   game_id: number
@@ -76,9 +81,14 @@ export function getPuzzlesByType(type: PuzzleType, n = 50): PuzzleItem[] {
 
 /** 题目难度分级（基于掉分/杀棋） */
 export function puzzleDifficulty(p: PuzzleItem): '初级' | '中级' | '高级' {
-  if (p.type === '杀局') return '高级'
-  if (p.score_drop >= 500) return '高级'
-  if (p.score_drop >= 200) return '中级'
+  return difficultyFromDrop(p.type, p.score_drop ?? 0)
+}
+
+/** 由题型与掉分推导难度（题库题与复盘重走共用） */
+export function difficultyFromDrop(type: string, drop: number): '初级' | '中级' | '高级' {
+  if (type === '杀局') return '高级'
+  if (drop >= 500) return '高级'
+  if (drop >= 200) return '中级'
   return '初级'
 }
 
@@ -92,33 +102,16 @@ export function getDailyPuzzle(type: PuzzleType): PuzzleItem | null {
   return pool[seed % pool.length]
 }
 
-/** 连对 streak 持久化（localStorage） */
-const STREAK_KEY = 'xiangqi-puzzle-streak'
-const STREAK_DATE_KEY = 'xiangqi-puzzle-streak-date'
-
+/** 连对 streak（v1.21 起由 progress.ts 统一存储，此处保留原 API） */
 export function getPuzzleStreak(): { count: number; todayDone: boolean } {
-  try {
-    const count = parseInt(localStorage.getItem(STREAK_KEY) || '0', 10) || 0
-    const date = localStorage.getItem(STREAK_DATE_KEY) || ''
-    const today = new Date().toDateString()
-    return { count, todayDone: date === today && count > 0 }
-  } catch {
-    return { count: 0, todayDone: false }
-  }
+  return progressGetPuzzleStreak()
 }
 
 /** 答对：count+1（同日去重）；答错：清零 */
 export function recordPuzzleCorrect(): void {
-  try {
-    const { count, todayDone } = getPuzzleStreak()
-    if (todayDone) return
-    localStorage.setItem(STREAK_KEY, String(count + 1))
-    localStorage.setItem(STREAK_DATE_KEY, new Date().toDateString())
-  } catch { /* 忽略 */ }
+  recordPuzzleAnswer({ correct: true })
 }
 
 export function recordPuzzleWrong(): void {
-  try {
-    localStorage.setItem(STREAK_KEY, '0')
-  } catch { /* 忽略 */ }
+  recordPuzzleAnswer({ correct: false })
 }

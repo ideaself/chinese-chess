@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { BOARD_HOME } from '../../store/constants'
 import {
-  loadLibrary, getCachedLibrary, getLibraryInfo,
+  loadLibraryPrefix, loadMoreGames, getCachedLibrary, getLibraryInfo,
   recordToGame, recordTitle,
   aggregatePlayers, gameHasPlayer, aggregatePlayerProfile,
   FAMILY_INFO, DEFENSE_INFO,
@@ -48,6 +48,7 @@ export const MasterLibrary: React.FC = () => {
   const [playerOpen, setPlayerOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
   const [info, setInfo] = useState<{ total: number; loaded: number; source: string } | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   // 批量预分析状态
   const [preRunning, setPreRunning] = useState(isPreanalysisRunning())
   const [preProgress, setPreProgress] = useState<PreanalysisProgress | null>(null)
@@ -68,12 +69,27 @@ export const MasterLibrary: React.FC = () => {
 
   useEffect(() => {
     let alive = true
-    loadLibrary()
+    // 全量库较大：首屏渐进载入前 30 片（3 万局），其余经「加载更多」续载
+    loadLibraryPrefix(30)
       .then(() => { if (alive) { setGames(getCachedLibrary() ?? []); setInfo(getLibraryInfo()) } })
       .catch(e => { if (alive) setError(`棋谱库加载失败: ${e.message}`) })
     getAllMasterAnalysisIds().then(ids => { if (alive) setCachedCount(ids.size) })
     return () => { alive = false }
   }, [])
+
+  /** 续载下一批分片（追加到列表与统计） */
+  const loadMoreShards = async () => {
+    setLoadingMore(true)
+    try {
+      await loadMoreGames()
+      setGames(getCachedLibrary() ?? [])
+      setInfo(getLibraryInfo())
+    } catch (e) {
+      showToast(`加载更多失败: ${e instanceof Error ? e.message : e}`)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // 棋手页纳入返回栈：按返回先关棋手页回列表
   useEffect(() => {
@@ -440,6 +456,15 @@ export const MasterLibrary: React.FC = () => {
         <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
           onClick={() => setVisible(v => v + PAGE_SIZE)}>
           加载更多（剩余 {filtered.length - visible} 局）
+        </button>
+      )}
+
+      {/* 数据源续载：已展示完当前加载批次的全部匹配，库里还有未载入分片时出现 */}
+      {filtered.length <= visible && info && info.loaded < info.total && (
+        <button className="btn btn-sm" style={{ marginTop: 8, alignSelf: 'center' }}
+          disabled={loadingMore}
+          onClick={() => void loadMoreShards()}>
+          {loadingMore ? '⏳ 加载中…' : `载入库中其余对局（已载 ${info.loaded}/${info.total}）`}
         </button>
       )}
     </div>

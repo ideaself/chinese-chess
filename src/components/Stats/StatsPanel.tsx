@@ -7,10 +7,11 @@
 
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { getStats, getWeaknessAnalysis, getMistakes, getAllGames } from '../../game/storage'
+import { getStats, getWeaknessAnalysis, getMistakes, getAllGames, getOutcomeSeries } from '../../game/storage'
 import type { PlayerOutcome } from '../../game/storage'
 import { generateTrainingPlan } from '../../game/training'
 import { getRatingState, getRank, resetRating } from '../../game/rating'
+import { WinRateTrend, PhaseLossBars } from './Charts'
 
 const OUTCOME_CHAR: Record<PlayerOutcome, string> = {
   win: '胜',
@@ -46,6 +47,9 @@ export const StatsPanel: React.FC = () => {
     ).length
     return generateTrainingPlan(weakness, getMistakes(), unanalyzed, winRateNum, stats.totalGames)
   }, [weakness, winRateNum, stats.totalGames])
+
+  // 胜率走势（完整胜负序列）
+  const allOutcomes = useMemo(() => getOutcomeSeries(), [stats.totalGames])
 
   const goAction = (type: string) => {
     if (type === 'retry-mistakes') { setGamesSubTab('mistakes'); setTab('games') }
@@ -101,6 +105,7 @@ export const StatsPanel: React.FC = () => {
                 </span>
               ))}
             </div>
+            {allOutcomes.length >= 3 && <WinRateTrend outcomes={allOutcomes} />}
           </>
         )}
 
@@ -115,6 +120,7 @@ export const StatsPanel: React.FC = () => {
         {weakness && (
           <div className="weakness-box">
             <div className="stats-label" style={{ marginBottom: 6 }}>阶段表现（基于已分析对局）</div>
+            <PhaseLossBars weakness={weakness} />
             {(['opening', 'middle', 'endgame'] as const).map(phase => {
               const s = weakness[phase]
               if (s.plies === 0) return null

@@ -11,6 +11,7 @@
 import type { Game } from '../game/model'
 import { ERROR_LEVELS } from '../game/model'
 import { importRatingState } from './rating'
+import { snapshotTrainingProgress, restoreTrainingProgress } from './progress'
 
 const STORAGE_KEY = 'xiangqi_games'
 const SETTINGS_KEY = 'xiangqi_settings'
@@ -168,7 +169,7 @@ export function saveGame(game: Game): boolean {
 // ── 备份 / 恢复 / 容量 ────────────────────────────────────────────
 
 const BACKUP_VERSION = 1
-const FULL_BACKUP_VERSION = 2
+const FULL_BACKUP_VERSION = 3
 
 /** 导出全部棋谱为 JSON 字符串（旧格式，仅棋谱；兼容保留） */
 export function exportAllGames(): string {
@@ -187,6 +188,8 @@ export interface FullBackupSummary {
   mistakes: number
   mastered: number
   ratingRestored: boolean
+  /** v3 备份：训练进度（题库/残局/错题重练）已合并 */
+  trainingMerged?: boolean
 }
 
 /** 两份战绩取各项最大值（累计值只增不减） */
@@ -212,7 +215,7 @@ export function mergeQuizMistakes(current: QuizMistake[], incoming: QuizMistake[
   return merged.slice(0, 50)
 }
 
-/** 导出全量备份 JSON（含设置、拆解数据与棋力分） */
+/** 导出全量备份 JSON（含设置、拆解数据、训练进度与棋力分） */
 export function exportFullBackup(): string {
   let rating: unknown = null
   try { rating = JSON.parse(localStorage.getItem('xiangqi_rating') || 'null') } catch { /* ignore */ }
@@ -224,6 +227,7 @@ export function exportFullBackup(): string {
     quizStats: getQuizStats(),
     quizMistakes: getQuizMistakes(),
     masteredKeys: [...getMasteredKeys()],
+    trainingProgress: snapshotTrainingProgress(),
     rating,
   })
 }
@@ -299,6 +303,9 @@ export function importFullBackup(json: string): FullBackupSummary {
             summary.ratingRestored = true
           }
         } catch { /* ignore */ }
+      }
+      if (data.trainingProgress && typeof data.trainingProgress === 'object') {
+        if (restoreTrainingProgress(data.trainingProgress)) summary.trainingMerged = true
       }
     }
 
@@ -597,6 +604,8 @@ export interface AppSettings {
   webdavUser: string
   /** WebDAV 密码/应用密码 */
   webdavPassword: string
+  /** 自动云同步：对局保存后静默上传（v1.21） */
+  webdavAutoSync: boolean
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -624,6 +633,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   webdavUrl: '',
   webdavUser: '',
   webdavPassword: '',
+  webdavAutoSync: false,
 }
 
 export function getSettings(): AppSettings {
@@ -702,6 +712,16 @@ export function getStats(): GameStats {
     recentResults,
     avgMoveLoss: lossCount > 0 ? lossSum / lossCount : null,
   }
+}
+
+/** 完整胜负序列（新→旧，不截断；胜率走势图用） */
+export function getOutcomeSeries(): PlayerOutcome[] {
+  const out: PlayerOutcome[] = []
+  for (const g of getAllGames()) {
+    const outcome = playerOutcome(g)
+    if (outcome) out.push(outcome)
+  }
+  return out
 }
 
 // ── 错题本（计划第17节 V2） ───────────────────────────────────────

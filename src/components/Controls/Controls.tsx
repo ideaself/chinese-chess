@@ -180,7 +180,7 @@ export const Controls: React.FC = () => {
             ⚔ 新对局
           </button>
           <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
-          <button className="btn" onClick={() => exportGameImage(game)}>🖼 导出图片</button>
+          <button className="btn" onClick={() => exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })}>🖼 导出/分享图片</button>
           <button className="btn" onClick={() => {
             const pgn = exportCurrentPGN()
             const blob = new Blob([pgn], { type: 'text/plain' })

@@ -5,23 +5,15 @@
  *   对战 | 棋谱 | 分析 | 设置
  */
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { useStore, DIFFICULTY_LABELS } from './store/useStore'
 import type { Difficulty } from './store/useStore'
 import { Board } from './components/Board/Board'
 import { Controls } from './components/Controls/Controls'
 import { NewGamePanel } from './components/Controls/NewGamePanel'
-import { AnalysisPanel } from './components/Analysis/AnalysisPanel'
-import { SetupPanel } from './components/Analysis/SetupPanel'
-import { PuzzlePanel } from './components/Analysis/PuzzlePanel'
-import { VariationPanel } from './components/Analysis/VariationPanel'
-import { OpeningTrainingPanel } from './components/Games/OpeningTrainingPanel'
-import { MasterQuizPanel } from './components/Games/MasterQuizPanel'
-import { GamesPanel } from './components/Games/GamesPanel'
-import { StatsPanel } from './components/Stats/StatsPanel'
 import { isInCheck } from './game/rules'
 import { getSettings } from './game/storage'
-import { uploadBackup, downloadBackup, getLastSync, diagnoseConnection } from './game/webdav'
+import { uploadBackupWithHistory, downloadBackup, getLastSync, diagnoseConnection, loadWebdavPassword, storeWebdavPassword } from './game/webdav'
 import type { DiagStep } from './game/webdav'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
@@ -38,6 +30,23 @@ import { BOARD_HOME } from './store/constants'
 import { initBackNav, syncLayers } from './game/backNav'
 import { Capacitor } from '@capacitor/core'
 import './App.css'
+
+// 次级面板懒加载（v1.21 code-split）：首屏只载对战棋盘，其余按需
+const lazyOf = <T extends React.ComponentType>(load: () => Promise<{ [k: string]: T }>, key: string) =>
+  lazy(() => load().then(m => ({ default: m[key] })))
+const AnalysisPanel = lazyOf(() => import('./components/Analysis/AnalysisPanel'), 'AnalysisPanel')
+const SetupPanel = lazyOf(() => import('./components/Analysis/SetupPanel'), 'SetupPanel')
+const PuzzlePanel = lazyOf(() => import('./components/Analysis/PuzzlePanel'), 'PuzzlePanel')
+const VariationPanel = lazyOf(() => import('./components/Analysis/VariationPanel'), 'VariationPanel')
+const OpeningTrainingPanel = lazyOf(() => import('./components/Games/OpeningTrainingPanel'), 'OpeningTrainingPanel')
+const MasterQuizPanel = lazyOf(() => import('./components/Games/MasterQuizPanel'), 'MasterQuizPanel')
+const GamesPanel = lazyOf(() => import('./components/Games/GamesPanel'), 'GamesPanel')
+const StatsPanel = lazyOf(() => import('./components/Stats/StatsPanel'), 'StatsPanel')
+
+/** 懒加载分片的过渡占位 */
+const LazyFallback = (
+  <div className="panel-hint" style={{ padding: 24, textAlign: 'center' }}>加载中…</div>
+)
 
 type Tab = 'play' | 'games' | 'analysis' | 'settings'
 
@@ -73,6 +82,27 @@ export const App: React.FC = () => {
     if (settings.defaultDifficulty) {
       setDifficulty(settings.defaultDifficulty as Difficulty)
     }
+    // 懒加载分片空闲预取：首屏渲染后后台拉取，导航零等待
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+    const prefetch = () => {
+      void import('./components/Games/GamesPanel')
+      void import('./components/Stats/StatsPanel')
+      void import('./components/Analysis/AnalysisPanel')
+      void import('./components/Analysis/SetupPanel')
+      void import('./components/Analysis/PuzzlePanel')
+      void import('./components/Analysis/VariationPanel')
+      void import('./components/Games/MasterQuizPanel')
+      void import('./components/Games/OpeningTrainingPanel')
+    }
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(prefetch, { timeout: 2500 })
+      return () => w.cancelIdleCallback?.(id)
+    }
+    const t = setTimeout(prefetch, 1200)
+    return () => clearTimeout(t)
   }, [init, setDifficulty])
 
   // 主题应用（深色/浅色）
@@ -178,6 +208,9 @@ export const App: React.FC = () => {
       default: return null
     }
   }
+  const renderPanel = (key: string | null) => (
+    <Suspense fallback={LazyFallback}>{renderPanelContent(key)}</Suspense>
+  )
 
   const SHEET_TITLES: Record<string, string> = {
     controls: '对局设置', games: '棋谱库', analysis: '局面分析', settings: '设置',
@@ -321,11 +354,13 @@ export const App: React.FC = () => {
               {/* 拆解/错题/开局训练：棋盘 + 题目同屏（棋盘在上、题目在下） */}
               {(masterQuiz || mode === 'puzzle' || openingTraining) && (
                 <div className="mobile-quiz-area">
-                  {renderPanelContent(
-                    mode === 'puzzle' ? 'puzzle'
-                    : masterQuiz ? 'quiz'
-                    : 'opening'
-                  )}
+                  <Suspense fallback={LazyFallback}>
+                    {renderPanelContent(
+                      mode === 'puzzle' ? 'puzzle'
+                      : masterQuiz ? 'quiz'
+                      : 'opening'
+                    )}
+                  </Suspense>
                 </div>
               )}
 
@@ -341,7 +376,9 @@ export const App: React.FC = () => {
                       onClick={() => setSheetTab(BOARD_HOME)}>✕</button>
                   </div>
                   <div className="mobile-overlay-body">
-                    {renderPanelContent(mobileSheet)}
+                    <Suspense fallback={LazyFallback}>
+                      {renderPanelContent(mobileSheet)}
+                    </Suspense>
                   </div>
                 </div>
               )}
@@ -356,7 +393,9 @@ export const App: React.FC = () => {
                 <span className="mobile-page-title">棋谱</span>
               </div>
               <div className="mobile-page-body">
-                <GamesPanel />
+                <Suspense fallback={LazyFallback}>
+                  <GamesPanel />
+                </Suspense>
               </div>
             </div>
           )}
@@ -369,8 +408,10 @@ export const App: React.FC = () => {
                 <span className="mobile-page-title">设置</span>
               </div>
               <div className="mobile-page-body">
-                <StatsPanel />
-                <SettingsPanel />
+                <Suspense fallback={LazyFallback}>
+                  <StatsPanel />
+                  <SettingsPanel />
+                </Suspense>
               </div>
             </div>
           )}
@@ -383,29 +424,31 @@ export const App: React.FC = () => {
           </div>
 
           <div className="side-panel">
-            {mode === 'setup' ? (
-              <SetupPanel />
-            ) : mode === 'puzzle' ? (
-              <PuzzlePanel />
-            ) : variation ? (
-              <VariationPanel />
-            ) : activeTab === 'play' && openingTraining ? (
-              <OpeningTrainingPanel />
-            ) : activeTab === 'play' && masterQuiz ? (
-              <MasterQuizPanel />
-            ) : (
-              <>
-                {activeTab === 'play' && <Controls />}
-                {activeTab === 'games' && <GamesPanel />}
-                {activeTab === 'analysis' && <AnalysisPanel />}
-                {activeTab === 'settings' && (
-                  <>
-                    <StatsPanel />
-                    <SettingsPanel />
-                  </>
-                )}
-              </>
-            )}
+            <Suspense fallback={LazyFallback}>
+              {mode === 'setup' ? (
+                <SetupPanel />
+              ) : mode === 'puzzle' ? (
+                <PuzzlePanel />
+              ) : variation ? (
+                <VariationPanel />
+              ) : activeTab === 'play' && openingTraining ? (
+                <OpeningTrainingPanel />
+              ) : activeTab === 'play' && masterQuiz ? (
+                <MasterQuizPanel />
+              ) : (
+                <>
+                  {activeTab === 'play' && <Controls />}
+                  {activeTab === 'games' && <GamesPanel />}
+                  {activeTab === 'analysis' && <AnalysisPanel />}
+                  {activeTab === 'settings' && (
+                    <>
+                      <StatsPanel />
+                      <SettingsPanel />
+                    </>
+                  )}
+                </>
+              )}
+            </Suspense>
           </div>
         </main>
       )}
@@ -709,7 +752,7 @@ const SettingsPanel: React.FC = () => {
 }
 
 
-/** 云同步（WebDAV）：凭据配置 + 上传/下载全量备份 */
+/** 云同步（WebDAV）：凭据配置 + 上传/下载全量备份（密码存安全存储，不进设置） */
 const CloudSyncSection: React.FC<{
   settings: AppSettings
   update: (patch: Partial<AppSettings>) => void
@@ -720,10 +763,16 @@ const CloudSyncSection: React.FC<{
   const [diag, setDiag] = useState<DiagStep[] | null>(null)
   const [diagWorkingPath, setDiagWorkingPath] = useState<string | undefined>(undefined)
   const [diagBusy, setDiagBusy] = useState(false)
+  const [pwd, setPwd] = useState('')
+  useEffect(() => {
+    let alive = true
+    loadWebdavPassword().then(p => { if (alive) setPwd(p) })
+    return () => { alive = false }
+  }, [])
   const cred: { url: string; user: string; password: string } = {
     url: settings.webdavUrl || '',
     user: settings.webdavUser || '',
-    password: settings.webdavPassword || '',
+    password: pwd,
   }
   const configured = !!(cred.url && cred.user && cred.password)
   const lastSync = getLastSync()
@@ -731,7 +780,7 @@ const CloudSyncSection: React.FC<{
   const run = async (kind: 'upload' | 'download') => {
     if (!configured) { showToast('请先填写 WebDAV 地址 / 账号 / 密码'); return }
     setBusy(kind)
-    const result = kind === 'upload' ? await uploadBackup(cred) : await downloadBackup(cred)
+    const result = kind === 'upload' ? await uploadBackupWithHistory(cred) : await downloadBackup(cred)
     setBusy(null)
     if (result.ok) {
       refreshSavedGames()
@@ -783,8 +832,8 @@ const CloudSyncSection: React.FC<{
           className="settings-select"
           style={{ maxWidth: 180 }}
           placeholder="密码 / 应用密码"
-          value={cred.password}
-          onChange={e => update({ webdavPassword: e.target.value })}
+          value={pwd}
+          onChange={e => { setPwd(e.target.value); void storeWebdavPassword(e.target.value) }}
         />
       </div>
       <div className="settings-row" style={{ gap: 8 }}>
@@ -804,6 +853,21 @@ const CloudSyncSection: React.FC<{
         <span style={{ fontSize: 12, color: '#888' }}>
           {lastSync ? `上次同步 ${new Date(lastSync).toLocaleString()}` : '未同步过'}
         </span>
+      </div>
+
+      <div className="settings-row">
+        <span>
+          自动云同步
+          <span style={{ display: 'block', fontSize: 11, color: '#888' }}>
+            终局保存后自动备份到云端（约延迟 1 分钟，静默执行）
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={!!settings.webdavAutoSync}
+          disabled={!configured}
+          onChange={e => update({ webdavAutoSync: e.target.checked })}
+        />
       </div>
 
       {/* 诊断结果 */}
@@ -828,9 +892,10 @@ const CloudSyncSection: React.FC<{
         </div>
       )}
       <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-        全量备份（棋谱/设置/战绩/错题本/棋力分）上传为 xiangqi-backup.json；
+        全量备份（棋谱/设置/战绩/错题本/训练进度/棋力分）上传为 xiangqi-backup.json；
+        每次上传前自动轮换保留最近 3 份历史（xiangqi-backup-1~3.json）。
         恢复为合并语义，不覆盖本机已有数据。坚果云等支持 WebDAV 的网盘均可，
-        推荐使用应用密码。凭据仅保存在本机。
+        推荐使用应用密码。App 内密码加密存储（Android Keystore），不进入备份文件。
       </div>
     </div>
   )

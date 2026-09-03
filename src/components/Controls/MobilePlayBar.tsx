@@ -13,6 +13,7 @@ import type { SideControl } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportPGN } from '../../game/pgn'
 import { boardToFen } from '../../game/board'
+import { exportGameImage } from '../../game/imageExport'
 import { BOARD_HOME } from '../../store/constants'
 import { TriRight } from '../ui/icons'
 
@@ -134,6 +135,10 @@ export const MobilePlayBar: React.FC = () => {
                 void navigator.clipboard?.writeText(exportPGN(game))
                 showToast('棋谱 PGN 已复制到剪贴板')
               }}>↗ 分享棋谱</button>
+              <button onClick={() => {
+                setMenuOpen(false)
+                void exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })
+              }}>🖼 分享局面</button>
               <button onClick={() => { setMenuOpen(false); enterSelfAnalysis() }}>🔍 自我分析</button>
             </div>
           </>

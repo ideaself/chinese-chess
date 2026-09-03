@@ -11,12 +11,14 @@
  *   - 无需完整规则引擎：盲走校验（起点必须有子）过滤损坏记录
  *   - 统计每局残局阶段长度，为「残局」分类提供标签
  *   - 输出按 id 排序分片，前端逐片懒加载
+ *   - manifest 含 maxId 与各分片 id 范围（ranges），前端可按 id 定点取局
  *
  * 用法:
  *   node scripts/dpxq-convert.mjs [--src <dir>] [--out-dir <dir>]
- *        [--max <N>=3000] [--min-plies <N>=16] [--shard <N>=1000] [--no-famous]
+ *        [--max <N>=0(不限)] [--min-plies <N>=16] [--shard <N>=1000] [--no-famous]
  *
- * 默认名家优先: 全量扫描语料，含名家棋手的对局排前，取前 --max 局；
+ * 语料源: ../chinese-chess-qipu/data/raw/dpxq_master（全量 ~14 万局）
+ * 默认名家优先: 全量扫描语料，含名家棋手的对局排前，取前 --max 局（max=0 不截断）；
  * --no-famous 恢复旧的按文件顺序取前 N 局行为。
  */
 
@@ -34,9 +36,9 @@ function arg(name, dflt) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt
 }
 
-const SRC_DIR = resolve(arg('src', join(REPO_ROOT, '..', 'chinese-chess', 'data', 'raw', 'dpxq_master')))
+const SRC_DIR = resolve(arg('src', join(REPO_ROOT, '..', 'chinese-chess-qipu', 'data', 'raw', 'dpxq_master')))
 const OUT_DIR = resolve(arg('out-dir', join(REPO_ROOT, 'public', 'master-games')))
-const MAX_GAMES = parseInt(arg('max', '3000'), 10)
+const MAX_GAMES = parseInt(arg('max', '0'), 10) // 0 = 不限量（全量语料）
 const MIN_PLIES = parseInt(arg('min-plies', '16'), 10)
 const SHARD_SIZE = parseInt(arg('shard', '1000'), 10)
 const NO_FAMOUS = process.argv.includes('--no-famous')
@@ -64,7 +66,7 @@ function isFamousGame(rec) {
   return FAMOUS_PLAYERS.some(n => (rec.r || '').includes(n) || (rec.b || '').includes(n))
 }
 
-const STATE_FILE = join(OUT_DIR, 'state.json')
+const STATE_FILE = join(REPO_ROOT, '.cache', 'dpxq-state.json')
 
 // ── 盲走棋盘（仅用于合法性粗筛与子力统计） ────────────────────────
 
@@ -170,6 +172,7 @@ try {
 }
 
 mkdirSync(OUT_DIR, { recursive: true })
+mkdirSync(dirname(STATE_FILE), { recursive: true })
 
 // 增量状态：{ v, files: { [文件名]: { mtime, size, rec } } }
 // v=2: rec.mv 为 UCI 格式（v1 为 dpxq 坐标，不兼容则弃用缓存）
@@ -222,14 +225,14 @@ for (const f of files) {
   if (NO_FAMOUS && records.length >= MAX_GAMES) stopScan = true
 }
 
-// 名家优先: 全量收集后按名家局排前（同组内按 id 升序），截取前 MAX_GAMES 局
+// 名家优先: 全量收集后按名家局排前（同组内按 id 升序），截取前 MAX_GAMES 局（0 不截断）
 let famousCount = 0
 if (!NO_FAMOUS) {
   records.sort((a, b) => (isFamousGame(b) ? 1 : 0) - (isFamousGame(a) ? 1 : 0) || a.id - b.id)
-  if (records.length > MAX_GAMES) records.length = MAX_GAMES
+  if (MAX_GAMES > 0 && records.length > MAX_GAMES) records.length = MAX_GAMES
   famousCount = records.filter(isFamousGame).length
 } else {
-  if (records.length > MAX_GAMES) records.length = MAX_GAMES
+  if (MAX_GAMES > 0 && records.length > MAX_GAMES) records.length = MAX_GAMES
 }
 
 records.sort((a, b) => a.id - b.id)
@@ -242,23 +245,28 @@ for (const f of readdirSync(OUT_DIR)) {
 }
 
 const shards = []
+const ranges = []
 for (let i = 0; i < records.length; i += SHARD_SIZE) {
+  const slice = records.slice(i, i + SHARD_SIZE)
   const name = `shard_${shards.length}.json`
-  writeFileSync(join(OUT_DIR, name), JSON.stringify(records.slice(i, i + SHARD_SIZE)))
+  writeFileSync(join(OUT_DIR, name), JSON.stringify(slice))
   shards.push(name)
+  ranges.push([slice[0].id, slice[slice.length - 1].id]) // 按 id 升序 → 分片内 id 连续范围
 }
 
 const manifest = {
   generatedAt: new Date().toISOString(),
   source: 'dpxq.com 东萍象棋网',
   total: records.length,
+  maxId: records.length > 0 ? records[records.length - 1].id : 0,
   shardSize: SHARD_SIZE,
   shards,
+  ranges,
 }
 writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest))
 writeFileSync(STATE_FILE, JSON.stringify(state))
 
 console.log(`完成: 扫描 ${scanned} 文件（缓存命中 ${fromCache} · 重新解析 ${reparsed}）→ 收录 ${records.length} 局${!NO_FAMOUS ? ` · 名家局 ${famousCount}` : ''}`)
 console.log(`  跳过: 无效 ${invalid} · 重复棋谱 ${dupGames}${stopScan ? ' · 达到上限停止扫描' : ''}`)
-console.log(`输出: ${OUT_DIR}/manifest.json + ${shards.length} 个分片`)
+console.log(`输出: ${OUT_DIR}/manifest.json + ${shards.length} 个分片（maxId=${manifest.maxId}）`)
 console.log(`耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s`)

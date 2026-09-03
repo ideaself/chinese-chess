@@ -23,7 +23,8 @@ async function run(ctx) {
 
   const s1 = JSON.parse(await evalJs(`JSON.stringify((() => {
     const items = document.querySelectorAll('.master-library .game-item').length
-    const header = document.querySelector('.master-library .panel-header')?.textContent || ''
+    // v1.19 头部重构后为 .master-library-header（原 .panel-header）
+    const header = document.querySelector('.master-library .master-library-header')?.textContent || ''
     return { items, loaded: header.includes('已加载'), hasQuizBtn: header.includes('名局拆解') }
   })())`))
   check('大师库列表已加载分片', s1.items > 0, `items=${s1.items}`)

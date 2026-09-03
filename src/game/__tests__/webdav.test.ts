@@ -52,7 +52,7 @@ describe('uploadBackup', () => {
     const [putUrl, putInit] = fetchMock.mock.calls[1]
     expect(putUrl).toBe('/__webdav/dav/xiangqi/' + BACKUP_FILENAME)
     expect(putInit.method).toBe('PUT')
-    expect(JSON.parse(putInit.body).version).toBe(2) // 全量备份格式
+    expect(JSON.parse(putInit.body).version).toBe(3) // 全量备份格式（v3 含训练进度）
   })
 
   it('MKCOL 405（已存在）不视为失败', async () => {

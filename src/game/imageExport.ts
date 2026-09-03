@@ -22,13 +22,24 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
   g.closePath()
 }
 
-export async function exportGameImage(game: Game): Promise<void> {
+export interface ExportImageOpts {
+  /** 导出第 plyIndex 手之后的局面（默认 = 终局） */
+  plyIndex?: number
+  /** 'share' 优先走系统分享（Web Share API，移动端），失败/不支持回退下载 */
+  mode?: 'download' | 'share'
+}
+
+export async function exportGameImage(game: Game, opts: ExportImageOpts = {}): Promise<void> {
+  const total = game.plies.length
+  const plyIndex = Math.max(0, Math.min(opts.plyIndex ?? total, total))
+  const partial = plyIndex < total
+
   const S = 74                 // 格距
   const PAD_X = 46             // 棋盘左右留白
   const BOARD_TOP = 108        // 棋盘顶
   const BOARD_W = 8 * S
   const BOARD_H = 9 * S
-  const MOVES_AREA = Math.min(220, 26 * Math.ceil(game.plies.length / 2 / 4) + 40)
+  const MOVES_AREA = Math.min(220, 26 * Math.ceil(plyIndex / 2 / 4) + 40)
   const W = BOARD_W + PAD_X * 2
   const H = BOARD_TOP + BOARD_H + 34 + MOVES_AREA
 
@@ -44,8 +55,9 @@ export async function exportGameImage(game: Game): Promise<void> {
   // ── 标题区 ──
   const red = game.header.Red || '红方'
   const black = game.header.Black || '黑方'
-  const resultText =
-    game.result === '1-0' ? '红胜' : game.result === '0-1' ? '黑胜' : game.result === '1/2-1/2' ? '和棋' : '未结束'
+  const resultText = partial
+    ? `第 ${Math.ceil(plyIndex / 2)} 回合局面`
+    : game.result === '1-0' ? '红胜' : game.result === '0-1' ? '黑胜' : game.result === '1/2-1/2' ? '和棋' : '未结束'
   g.textAlign = 'center'
   g.fillStyle = '#e05555'
   g.font = 'bold 26px "PingFang SC", "Microsoft YaHei", sans-serif'
@@ -58,7 +70,7 @@ export async function exportGameImage(game: Game): Promise<void> {
   g.fillStyle = '#a0a0b8'
   g.font = '15px sans-serif'
   const date = game.header.Date || new Date(game.createdAt).toISOString().slice(0, 10)
-  g.fillText(`${resultText} · 共 ${Math.ceil(game.plies.length / 2)} 回合 · ${date}`, W / 2, 78)
+  g.fillText(`${resultText} · 共 ${Math.ceil(total / 2)} 回合 · ${date}`, W / 2, 78)
 
   // ── 棋盘木底 ──
   const bx = PAD_X - 26
@@ -97,7 +109,7 @@ export async function exportGameImage(game: Game): Promise<void> {
 
   // ── 棋子 ──
   const finalState = boardFromFen(
-    game.plies.length > 0 ? game.plies[game.plies.length - 1].fenAfter : game.startFen,
+    plyIndex > 0 ? game.plies[plyIndex - 1].fenAfter : game.startFen,
   )
   const R = S * 0.42
   for (let c = 0; c < 9; c++) {
@@ -135,7 +147,7 @@ export async function exportGameImage(game: Game): Promise<void> {
 
   g.font = '15px "PingFang SC", sans-serif'
   const perLine = 4 // 每行 4 个回合
-  const rounds = Math.ceil(game.plies.length / 2)
+  const rounds = Math.ceil(plyIndex / 2)
   const shownRounds = Math.min(rounds, perLine * 6)
   for (let rd = 0; rd < shownRounds; rd++) {
     const colIdx = rd % perLine
@@ -154,14 +166,34 @@ export async function exportGameImage(game: Game): Promise<void> {
     g.fillText(`……共 ${rounds} 回合`, PAD_X, my + Math.ceil(shownRounds / perLine) * 24 + 6)
   }
 
-  // ── 下载 ──
+  // ── 输出：系统分享（Web Share API）或下载 ──
   const blob = await new Promise<Blob>((resolve) =>
     cv.toBlob((b) => resolve(b!), 'image/png'),
   )
+  const filename = `xiangqi_${game.id}${partial ? `_ply${plyIndex}` : ''}.png`
+
+  if (opts.mode === 'share') {
+    try {
+      const file = new File([blob], filename, { type: 'image/png' })
+      const nav = navigator as Navigator & {
+        canShare?: (data: { files?: File[] }) => boolean
+        share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>
+      }
+      if (nav.canShare?.({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], title: red + ' ⚔ ' + black, text: resultText })
+        return
+      }
+    } catch (e) {
+      // 用户取消或其他错误 → 回退下载
+      if ((e as DOMException)?.name === 'AbortError') return
+      console.warn('系统分享失败，回退下载:', e)
+    }
+  }
+
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `xiangqi_${game.id}.png`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
 }

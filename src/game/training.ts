@@ -6,6 +6,9 @@
  */
 
 import type { WeaknessAnalysis, MistakeItem } from './storage'
+import { getPuzzles, difficultyFromDrop } from './puzzles'
+import type { PuzzleItem } from './puzzles'
+import { getTrainingProgress } from './progress'
 
 export type PlanAction =
   | { type: 'retry-mistakes' }
@@ -102,4 +105,92 @@ export function generateTrainingPlan(
   }
 
   return items.length > 0 ? { items } : null
+}
+
+// ── 自适应出题（v1.21 训练闭环） ──────────────────────────────────
+
+export interface AdaptivePick {
+  puzzle: PuzzleItem
+  /** 展示文案：如「残局专项 · 中级」 */
+  label: string
+  reason: string
+}
+
+const PUZZLE_TYPE_OF_PHASE: Record<string, PuzzleItem['type']> = {
+  opening: '失误题',
+  middle: '失误题',
+  endgame: '残局题',
+}
+
+/**
+ * 按弱点与历史正确率自适应选题：
+ *   - 题型权重：最弱阶段定向加权；正确率偏低的题型加权
+ *   - 难度：总体正确率 ≥85% 偏高级 / ≥60% 中级 / 其余初级（无候选时逐级放宽）
+ */
+export function pickAdaptivePuzzle(weakness: WeaknessAnalysis | null): AdaptivePick | null {
+  const pool = getPuzzles()
+  if (!pool || pool.length === 0) return null
+
+  const prog = getTrainingProgress()
+  const accuracy = (s: { asked: number; right: number } | undefined) =>
+    s && s.asked >= 3 ? s.right / s.asked : null
+
+  // 题型权重
+  const weights: Record<PuzzleItem['type'], number> = { '杀局': 1, '失误题': 1, '残局题': 1 }
+  const reasons: string[] = []
+  if (weakness?.weakestPhase) {
+    const t = PUZZLE_TYPE_OF_PHASE[weakness.weakestPhase]
+    weights[t] *= 2.5
+    const phaseName = weakness.weakestPhase === 'opening' ? '开局' : weakness.weakestPhase === 'middle' ? '中局' : '残局'
+    reasons.push(`${phaseName}偏弱，定向强化${t}`)
+  }
+  for (const t of ['杀局', '失误题', '残局题'] as PuzzleItem['type'][]) {
+    const acc = accuracy(prog.puzzle.byType[t])
+    if (acc !== null && acc < 0.6) {
+      weights[t] *= 1.8
+      reasons.push(`${t}正确率 ${Math.round(acc * 100)}%，多练`)
+    }
+  }
+
+  // 加权随机选题型
+  const types = Object.keys(weights) as PuzzleItem['type'][]
+  const totalW = types.reduce((sum, t) => sum + weights[t], 0)
+  let r = Math.random() * totalW
+  let chosenType: PuzzleItem['type'] = '失误题'
+  for (const t of types) {
+    r -= weights[t]
+    if (r <= 0) { chosenType = t; break }
+  }
+
+  // 难度目标：按总体正确率
+  const overall = accuracy({ asked: Object.values(prog.puzzle.byType).reduce((a, s) => a + s.asked, 0), right: Object.values(prog.puzzle.byType).reduce((a, s) => a + s.right, 0) })
+  const targetDiff: '初级' | '中级' | '高级' =
+    overall === null ? '中级' : overall >= 0.85 ? '高级' : overall >= 0.6 ? '中级' : '初级'
+  // 逐级放宽：目标 → 相邻 → 全部
+  const ladder: ('初级' | '中级' | '高级')[] =
+    targetDiff === '高级' ? ['高级', '中级', '初级'] : targetDiff === '中级' ? ['中级', '高级', '初级'] : ['初级', '中级', '高级']
+
+  let chosen: PuzzleItem | null = null
+  let chosenDiff: '初级' | '中级' | '高级' = targetDiff
+  for (const d of ladder) {
+    const candidates = pool.filter(p => p.type === chosenType && difficultyFromDrop(p.type, p.score_drop ?? 0) === d)
+    if (candidates.length > 0) {
+      chosen = candidates[Math.floor(Math.random() * candidates.length)]
+      chosenDiff = d
+      break
+    }
+  }
+  // 该题型完全无候选 → 任选该类型；再退化任选全库
+  if (!chosen) {
+    const of = pool.filter(p => p.type === chosenType)
+    if (of.length > 0) chosen = of[Math.floor(Math.random() * of.length)]
+    else chosen = pool[Math.floor(Math.random() * pool.length)]
+  }
+
+  const accTxt = overall === null ? '' : `（总体正确率 ${Math.round(overall * 100)}%）`
+  return {
+    puzzle: chosen,
+    label: `${chosenType} · ${chosenDiff}`,
+    reason: (reasons.length > 0 ? reasons.join('；') : '按你的答题记录智能匹配') + accTxt,
+  }
 }

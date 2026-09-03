@@ -9,10 +9,10 @@ import React, { useEffect, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
   loadSimilarShard, loadMetaFor, querySimilar, moveScore, gameMeta,
-  canOpenGame, type SimilarEntry,
+  canOpenGame, ensureOpenableLimit, type SimilarEntry,
 } from '../../game/similar'
 import { chineseFromFen } from '../../game/rules'
-import { loadLibrary, getCachedLibrary, recordToGame } from '../../game/masterLibrary'
+import { fetchGameById, recordToGame, classifyRecord } from '../../game/masterLibrary'
 
 interface Props {
   /** 当前局面 FEN */
@@ -31,15 +31,16 @@ export const SimilarPanel: React.FC<Props> = ({ fen, moves }) => {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [openIds, setOpenIds] = useState<number[]>([])
 
-  // 查询：moves 变化时加载对应索引分片
+  // 查询：moves 变化时加载对应索引分片（顺带确保"可打开上限"就绪）
   useEffect(() => {
     setEntries(null)
     setExpanded(null)
     setOpenIds([])
     if (!moves || moves.length === 0) return
     let alive = true
-    loadSimilarShard(moves[0]).then(() => {
+    loadSimilarShard(moves[0]).then(async () => {
       if (!alive) return
+      await ensureOpenableLimit() // maxId 就绪后再渲染，打开按钮判定一次到位
       const q = querySimilar(moves)
       setEntries(q)
       if (q) {
@@ -52,17 +53,12 @@ export const SimilarPanel: React.FC<Props> = ({ fen, moves }) => {
   }, [moves.join(' ')])
 
   const openGame = async (gameId: number) => {
-    let lib = getCachedLibrary()
-    if (!lib) {
-      await loadLibrary().catch(() => undefined)
-      lib = getCachedLibrary()
-    }
-    const rec = lib?.find(g => g.id === gameId)
+    const rec = await fetchGameById(gameId)
     if (!rec) {
       showToast('该对局未收录，仅可查看信息')
       return
     }
-    const game = recordToGame(rec)
+    const game = recordToGame({ ...rec, cls: classifyRecord(rec) })
     if (!game) { showToast('⚠ 棋谱数据有误'); return }
     loadGameObject(game)
     setTab('play')
