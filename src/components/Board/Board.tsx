@@ -249,7 +249,7 @@ export const Board: React.FC = () => {
     }) : []
   , [legalTargets, board, boardFlipped, settings.showLegalMoves, grid])
 
-   // ── 提示箭头（天天象棋风格：尾细头粗渐变箭头）──
+   // ── 提示箭头（天天象棋风格：起点编号 + 圆头粗线 + 三角箭头）──
    const hintArrows = React.useMemo(() => {
      const moves = hintInfo?.movesUci
      if (!moves || moves.length === 0) return null
@@ -261,39 +261,23 @@ export const Board: React.FC = () => {
        const dx = to.x - from.x
        const dy = to.y - from.y
        const len = Math.hypot(dx, dy) || 1
+      // 天天象棋风格：提示线从起点交叉点/棋子中心出发，尖端落在终点中心。
+      const startX = from.x
+      const startY = from.y
+      const tipX = to.x
+      const tipY = to.y
+       const headLen = Math.min(20, Math.max(13, len * 0.28))
+       const baseX = tipX - (dx / len) * headLen
+       const baseY = tipY - (dy / len) * headLen
        // 单位法线（垂直于行进方向）
        const nx = -dy / len
        const ny = dx / len
-       // 箭头尖端（缩进棋子半径）
-       const tipX = to.x - (dx / len) * (PIECE_RADIUS + 2)
-       const tipY = to.y - (dy / len) * (PIECE_RADIUS + 2)
-       // 箭头根部（尖端后方 ARROW_LEN 处）
-       const ARROW_LEN = len * 0.55
-       const baseX = tipX - (dx / len) * ARROW_LEN
-       const baseY = tipY - (dy / len) * ARROW_LEN
-       // 尾宽 → 头宽
-       const TAIL_W = 3
-       const HEAD_W = 16
-       // 四个关键点：尾左、尾右、头左、头右
-       const tailLx = from.x + nx * TAIL_W
-       const tailLy = from.y + ny * TAIL_W
-       const tailRx = from.x - nx * TAIL_W
-       const tailRy = from.y - ny * TAIL_W
-       const headLx = tipX + nx * HEAD_W
-       const headLy = tipY + ny * HEAD_W
-       const headRx = tipX - nx * HEAD_W
-       const headRy = tipY - ny * HEAD_W
-       // 箭身拐点（从尾过渡到头的最宽处，约 60% 位置）
-       const BODY_W = 6
-       const bodyX = baseX + (dx / len) * ARROW_LEN * 0.6
-       const bodyY = baseY + (dy / len) * ARROW_LEN * 0.6
-       const bodyLx = bodyX + nx * BODY_W
-       const bodyLy = bodyY + ny * BODY_W
-       const bodyRx = bodyX - nx * BODY_W
-       const bodyRy = bodyY - ny * BODY_W
-       // 构建箭头路径：尾左 → 拐点左 → 头左 → 尖端 → 头右 → 拐点右 → 尾右
-       const path = `M${tailLx},${tailLy} L${bodyLx},${bodyLy} L${headLx},${headLy} L${tipX},${tipY} L${headRx},${headRy} L${bodyRx},${bodyRy} L${tailRx},${tailRy} Z`
-       return { path, n: i + 1, cx: from.x, cy: from.y }
+       const headWidth = Math.min(11, Math.max(8, len * 0.16))
+       return {
+         shaft: { x1: startX, y1: startY, x2: tipX, y2: tipY },
+         head: `${baseX + nx * headWidth},${baseY + ny * headWidth} ${tipX},${tipY} ${baseX - nx * headWidth},${baseY - ny * headWidth}`,
+         n: i + 1, cx: from.x, cy: from.y,
+       }
      })
     }, [hintInfo, boardFlipped, grid])
 
@@ -336,9 +320,19 @@ export const Board: React.FC = () => {
         {!boardSkin && gridLines}{lastMoveMarks}{targetMarks}{pieces}
         {hintArrows && (
           <g className="hint-arrows" pointerEvents="none">
+            {/* 先绘制所有箭杆，避免后一个编号圆覆盖前一个箭头的连接部分。 */}
             {hintArrows.map((a, i) => (
-              <g key={i}>
-                <path d={a.path} fill="#16a34a" opacity="0.88" filter="url(#arrowShadow)" />
+              <g key={`arrow-${i}`}>
+                <line x1={a.shaft.x1} y1={a.shaft.y1} x2={a.shaft.x2} y2={a.shaft.y2}
+                  stroke="rgba(0,0,0,0.22)" strokeWidth="10" strokeLinecap="round" />
+                <line x1={a.shaft.x1} y1={a.shaft.y1} x2={a.shaft.x2} y2={a.shaft.y2}
+                  stroke="#16a34a" strokeWidth="7" strokeLinecap="round" opacity="0.92" />
+                <polygon points={a.head} fill="#16a34a" opacity="0.95" />
+              </g>
+            ))}
+            {/* 编号最后绘制，只标记每步起点，不参与箭杆层级。 */}
+            {hintArrows.map((a, i) => (
+              <g key={`arrow-label-${i}`}>
                 <circle cx={a.cx} cy={a.cy} r="13" fill="#16a34a" stroke="#fff" strokeWidth="2" />
                 <text x={a.cx} y={a.cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
               </g>

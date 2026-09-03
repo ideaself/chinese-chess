@@ -33,8 +33,10 @@ import { recordPuzzleCorrect, recordPuzzleWrong } from '../../game/puzzles'
 
 
 export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'puzzleSource' | 'startPuzzle' | 'startLibraryPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleAnswer' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'replayQuizMistake'> {
+  'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'puzzleSource' | 'endgameTraining' | 'startPuzzle' | 'startLibraryPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleAnswer' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'replayQuizMistake'> {
   return {
+  endgameTraining: false,
+
     puzzlePlyIndex: null,
 
     puzzleAttempts: 0,
@@ -76,6 +78,8 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     startLibraryPuzzle: (p: PuzzleItem) => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
+    const replayOrigin = get().mobilePage
+    const replayOriginTab = get().activeTab
 
     const turn = p.fen.split(' ')[1] === 'b' ? 'b' : 'w'
     const game = createEmptyGame()
@@ -108,6 +112,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     set({
       mode: 'puzzle',
+      endgameTraining: false,
       modeBeforeSetup: 'replay',
       timerInterval: null,
       game,
@@ -128,13 +133,18 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       selected: null,
       legalTargets: [],
       lastMove: null,
+      activeTab: 'play',
+      mobilePage: 'play' as const,
+      replayOrigin,
+      replayOriginTab,
     })
   },
 
     exitPuzzle: () => {
-    const { game, currentPlyIndex } = get()
+    const { game, currentPlyIndex, replayOrigin, replayOriginTab } = get()
     set({
       mode: 'replay',
+      endgameTraining: false,
       board: boardFromGame(game, currentPlyIndex),
       puzzlePlyIndex: null,
       puzzleResult: 'waiting',
@@ -142,6 +152,10 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       puzzleSource: null,
       selected: null,
       legalTargets: [],
+      activeTab: replayOriginTab ?? 'play',
+      mobilePage: replayOrigin ?? 'play',
+      replayOrigin: null,
+      replayOriginTab: null,
     })
   },
 
@@ -182,13 +196,19 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const g = getAllGames().find(x => x.id === gameId)
     if (!g || !g.plies[plyIndex]?.analysis?.bestMove) return
 
+    const replayOrigin = get().mobilePage
+    const replayOriginTab = get().activeTab
     // 先以 replay 形式载入该棋谱（退出重走时回到它的复盘）
     set({
       game: g,
       mode: 'replay',
+      endgameTraining: false,
       currentPlyIndex: plyIndex,
       // 移动端多层导航：从错题本进入时切换到对战页
       mobilePage: 'play' as const,
+      activeTab: 'play',
+      replayOrigin,
+      replayOriginTab,
     })
     get().startPuzzle(plyIndex)
   },
@@ -198,6 +218,8 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     startEndgameTraining: (fen, name, side = 'w') => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
+    const replayOrigin = get().mobilePage
+    const replayOriginTab = get().activeTab
 
     const game = createEmptyGame()
     game.startFen = fen
@@ -207,6 +229,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     set({
       mode: 'play',
+      endgameTraining: true,
       game,
       board: boardFromFen(fen),
       playerSide: side,
@@ -221,6 +244,9 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       puzzlePlyIndex: null,
       // 移动端多层导航：残局训练切换到对战页
       mobilePage: 'play' as const,
+      activeTab: 'play',
+      replayOrigin,
+      replayOriginTab,
     })
 
     const interval = setInterval(() => {

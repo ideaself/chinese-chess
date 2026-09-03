@@ -55,6 +55,7 @@ export const AnalysisPanel: React.FC = () => {
   const analysisProgress = useStore(s => s.analysisProgress)
   const cancelAnalysis = useStore(s => s.cancelAnalysis)
   const enterVariationFromLive = useStore(s => s.enterVariationFromLive)
+  const startMasterQuiz = useStore(s => s.startMasterQuiz)
   const engine = useStore(s => s.engine)
   const mode = useStore(s => s.mode)
 
@@ -127,6 +128,11 @@ export const AnalysisPanel: React.FC = () => {
           </button>
           <button className="btn btn-sm" onClick={() => enterSetup()} disabled={isThinking}>
             摆棋
+          </button>
+          <button className="btn btn-sm" onClick={() => startMasterQuiz(game.id)}
+            disabled={isThinking || game.plies.length < 40}
+            title="从当前棋谱选择关键手进行名局拆解">
+            名局拆解
           </button>
         </div>
       </div>

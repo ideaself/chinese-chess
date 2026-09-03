@@ -26,6 +26,7 @@ import {
 import { getBookMove, loadOpeningBook } from '../../game/book'
 import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
+import { BOARD_HOME } from '../constants'
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
 
 
@@ -57,6 +58,7 @@ function buildQuizOptions(game: Game, ply: number): { options: string[]; correct
  * 用于挑选"大师与引擎分歧最大"的关键手；id 校验防止换局后串用。
  */
 let quizAnalysisRec: { id: string; rec: MasterAnalysisRecord | null } = { id: '', rec: null }
+let quizOrigin: { activeTab: AppState['activeTab']; mobilePage: AppState['mobilePage']; sheetTab: string | null } | null = null
 
 function quizCachedAnalysis(gameId: string): MasterAnalysisRecord | null {
   return quizAnalysisRec.id === gameId ? quizAnalysisRec.rec : null
@@ -180,24 +182,31 @@ export function createMasterQuizSlice(set: StoreSet, get: StoreGet): Pick<AppSta
 
   // ── 引擎 ──
 
-    startMasterQuiz: async () => {
+    startMasterQuiz: async (gameId) => {
     const games = getCachedLibrary()
     if (!games || games.length === 0) {
       get().showToast('大师库尚未加载，请先打开「大师库」页签')
       return
     }
+    const current = get().game
+    const selected = gameId && current.id === gameId && current.plies.length >= 40 ? current : null
     const pool = games.filter(g => g.mv.length / 4 >= 40)
     if (pool.length === 0) {
       get().showToast('⚠ 棋谱库为空')
       return
     }
+    quizOrigin = {
+      activeTab: get().activeTab,
+      mobilePage: get().mobilePage,
+      sheetTab: get().sheetTab,
+    }
     for (let attempt = 0; attempt < 5; attempt++) {
       const rec = pool[Math.floor(Math.random() * pool.length)]
-      const game = recordToGame(rec)
+      const game = selected ?? recordToGame(rec)
       if (!game || game.plies.length < 40) continue
       get().loadGameObject(game)
       // 拆解模式需要棋盘 → 切到对战页（loadGameObject 在棋谱页不会自动切）
-      set({ mobilePage: 'play' as const })
+      set({ activeTab: 'play', mobilePage: 'play' as const, sheetTab: BOARD_HOME })
       // 预取该局预分析缓存，关键手优先问"大师与引擎分歧最大"处
       quizAnalysisRec = { id: game.id, rec: await getMasterAnalysis(game.id) }
       // 关键手模式从第一个高价值关键点开始；全程模式从第 0 手开始
@@ -273,7 +282,16 @@ export function createMasterQuizSlice(set: StoreSet, get: StoreGet): Pick<AppSta
   },
 
     exitMasterQuiz: () => {
-    set({ masterQuiz: null })
+    const origin = quizOrigin
+    quizOrigin = null
+    set({
+      masterQuiz: null,
+      ...(origin ? {
+        activeTab: origin.activeTab,
+        mobilePage: origin.mobilePage,
+        sheetTab: origin.sheetTab ?? BOARD_HOME,
+      } : {}),
+    })
   },
 
     toggleQuizKeyMode: () => {

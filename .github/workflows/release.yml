@@ -37,6 +37,13 @@ jobs:
       - name: 生成 Android 工程
         run: npx cap add android && npx cap sync android
 
+      - name: 同步 Android 版本
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          VERSION_CODE="$(node -p "const [major, minor, patch] = require('./package.json').version.split('.').map(Number); major * 10000 + minor * 100 + patch")"
+          sed -i "s/versionCode [0-9]*/versionCode ${VERSION_CODE}/; s/versionName \"[^\"]*\"/versionName \"${VERSION}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
       # 允许明文 HTTP（自建 WebDAV 服务器常为 http://，Android 9+ 默认禁止）
       - name: 放行明文 HTTP
         run: |

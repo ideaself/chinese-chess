@@ -41,11 +41,15 @@ let lastRootBackAt = 0
 export type MobilePage = 'home' | 'play' | 'games' | 'settings'
 
 export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis' | 'mobilePage' | 'setMobilePage'> {
+    'activeTab' | 'sheetTab' | 'setSheetTab' | 'toast' | 'showToast' | 'gamesSubTab' | 'setGamesSubTab' | 'settings' | 'updateSettings' | 'setTab' | 'navigateBack' | 'selfAnalysis' | 'setSelfAnalysis' | 'mobilePage' | 'setMobilePage' | 'replayOrigin' | 'replayOriginTab'> {
   return {
     activeTab: 'play',
 
     mobilePage: 'home',
+
+    replayOrigin: null,
+
+    replayOriginTab: null,
 
     setMobilePage: (p) => set({ mobilePage: p }),
 
@@ -104,14 +108,19 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       if (st.mode === 'puzzle') { get().exitPuzzle(); return }
       if (st.masterQuiz) { get().exitMasterQuiz(); return }
       if (st.openingTraining) { get().exitOpeningTraining(); return }
+      if (st.endgameTraining) {
+        const origin = st.replayOrigin ?? 'play'
+        get().restart()
+        set({ endgameTraining: false, mobilePage: origin, activeTab: st.replayOriginTab ?? 'play', sheetTab: BOARD_HOME, replayOrigin: null, replayOriginTab: null })
+        return
+      }
       // 4) 打开的覆盖层面板 → 回纯棋盘主页
       if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
-      // 4.5) 复盘模式 → 退出复盘
+      // 4.5) 复盘模式 → 退出复盘，回到来源页
       if (st.mode === 'replay') {
+        const origin = st.replayOrigin ?? 'play'
         get().restart()
-        // 从棋谱页进的复盘 → 回到棋谱列表；其他场景 → 回对战页
-        const backTo = st.mobilePage === 'games' ? 'games' : 'play'
-        set({ mobilePage: backTo, sheetTab: BOARD_HOME })
+        set({ mobilePage: origin, sheetTab: BOARD_HOME, replayOrigin: null, replayOriginTab: null })
         return
       }
       // 5) 非首页 → 回首页
@@ -146,9 +155,11 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
     // 4.5) 复盘模式 → 退出复盘，回到可下棋的对战棋盘
     if (st.mode === 'replay') {
+      const originTab = st.replayOriginTab ?? 'play'
       get().restart()
-      get().setTab('play')
+      get().setTab(originTab)
       get().setSheetTab(BOARD_HOME)
+      set({ replayOriginTab: null })
       return
     }
     // 5) 非「对战」标签 → 棋盘主页

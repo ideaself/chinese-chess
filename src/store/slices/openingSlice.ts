@@ -40,6 +40,8 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     startOpeningTraining: (lineId) => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
+    const replayOrigin = get().mobilePage
+    const replayOriginTab = get().activeTab
 
     set({
       mode: 'play',
@@ -60,11 +62,20 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       activeTab: 'play',
       // 移动端多层导航：开局训练切换到对战页
       mobilePage: 'play' as const,
+      replayOrigin,
+      replayOriginTab,
     })
   },
 
     exitOpeningTraining: () => {
-    set({ openingTraining: null })
+    const { replayOrigin, replayOriginTab } = get()
+    set({
+      openingTraining: null,
+      activeTab: replayOriginTab ?? 'play',
+      mobilePage: replayOrigin ?? 'play',
+      replayOrigin: null,
+      replayOriginTab: null,
+    })
     get().restart() // 回到普通对局
   },
 

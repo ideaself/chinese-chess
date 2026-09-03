@@ -131,6 +131,8 @@ export interface AppState {
     index: number
     status: 'playing' | 'wrong' | 'done'
   } | null
+  /** 是否正在进行残局训练（残局训练复用 play 模式） */
+  endgameTraining: boolean
 
   /** 棋谱页子导航（供训练计划等外部跳转） */
   gamesSubTab: 'list' | 'library' | 'mistakes' | 'training'
@@ -171,6 +173,10 @@ export interface AppState {
   /** 移动端页面导航（多层结构：home → play/games/settings） */
   mobilePage: MobilePage
   setMobilePage: (page: MobilePage) => void
+  /** 进入复盘时的来源页（供 navigateBack 返回棋谱列表） */
+  replayOrigin: MobilePage | null
+  /** 进入复盘时的桌面端来源页签 */
+  replayOriginTab: TabType | null
   /** 移动端覆盖层（全屏面板）key：底部 Tab 或特殊模式（setup/puzzle/quiz/opening/variation/controls）；null 时为纯棋盘主页 */
   sheetTab: string | null
   setSheetTab: (tab: string | null) => void
@@ -281,7 +287,8 @@ export interface AppState {
     /** 引擎认可玩家的选择（与大师着法不同但同样好） */
     aiAgree?: boolean
   } | null
-  startMasterQuiz: () => void
+  /** 开始名局拆解；传入棋谱 id 时拆解指定棋谱，否则随机选局 */
+  startMasterQuiz: (gameId?: string) => void
   answerMasterQuiz: (uci: string) => void
   nextQuizPly: () => void
   exitMasterQuiz: () => void

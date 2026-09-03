@@ -1271,13 +1271,19 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2px 2px calc(2px + env(safe-area-inset-bottom));
+    width: 100%;
+    padding: 0 0 calc(2px + env(safe-area-inset-bottom));
     background: var(--bg);
     border: none;
     border-radius: 0;
   }
+  /* 复盘时棋盘按自身比例排版，避免剩余高度把棋盘上下撑出空白。 */
+  .app-main:has(.replay-tabs) { flex: 0 0 auto; min-height: 0; }
+  .app-main:has(.replay-tabs) .board-area { flex: 0 0 auto; align-items: flex-start; }
+  .app-main:has(.replay-tabs) .board-container { height: auto; }
   .board-container { width: 100%; height: 100%; justify-content: center; }
-  .board-container svg { width: 100%; height: auto; max-height: 100%; }
+  .board-container svg { display: block; width: 100%; height: auto; max-height: 100%; }
+  .app-main:has(.replay-tabs) .board-container svg { max-height: none; }
   .player-info { max-width: 100%; margin: 5px 0; padding: 5px 12px; }
   .timer { font-size: 14px; }
   .side-panel { display: none; }
@@ -1504,7 +1510,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   /* ── 拆解/错题/开局训练：棋盘+题目同屏 ── */
   .mobile-quiz-area {
     flex-shrink: 0;
-    max-height: 40vh;
+    max-height: 24vh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     background: var(--panel);
@@ -1633,8 +1639,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* ── 名局拆解 ───────────────────────────────────────────────── */
 
-.quiz-options { display: flex; flex-direction: column; gap: 6px; }
-.quiz-option { width: 100%; font-size: 14px; padding: 9px; }
+.quiz-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.quiz-option { width: 100%; min-width: 0; font-size: 14px; padding: 9px 4px; }
 .quiz-verdict { font-size: 14px; font-weight: bold; }
 .quiz-verdict.correct { color: var(--green); }
 .quiz-verdict.wrong { color: var(--red); }
@@ -1726,7 +1732,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   flex-direction: column;
   background: var(--panel);
   border-top: 1px solid var(--line);
-  max-height: 34vh;
+  max-height: 18vh;
 }
 .replay-tabs-bar {
   display: flex;

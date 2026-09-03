@@ -120,7 +120,7 @@ export const MasterQuizPanel: React.FC = () => {
             </div>
           )}
 
-          <button className="btn btn-sm" style={{ width: '100%' }} onClick={startMasterQuiz}>
+          <button className="btn btn-sm" style={{ width: '100%' }} onClick={() => startMasterQuiz()}>
             🔄 换一局
           </button>
         </>
@@ -142,7 +142,7 @@ export const MasterQuizPanel: React.FC = () => {
                 : '别灰心，跟着大师的思路走一遍，重点体会每步的目的。'}
           </div>
           <button className="btn btn-primary" style={{ width: '100%', marginBottom: 6 }}
-            onClick={startMasterQuiz}>再来一局</button>
+            onClick={() => startMasterQuiz()}>再来一局</button>
           <button className="btn" style={{ width: '100%' }} onClick={exitMasterQuiz}>退出拆解</button>
         </div>
       )}
