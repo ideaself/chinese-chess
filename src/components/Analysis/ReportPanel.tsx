@@ -9,8 +9,8 @@ import React, { useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { phaseRanges, accuracyFromAvgLoss } from '../../game/analysis'
 import type { MoveClassification } from '../../game/model'
+import { ERROR_LEVELS } from '../../game/model'
 
-const BAD_LEVELS: MoveClassification[] = ['mistake', 'blunder', 'blunder2']
 const LEVEL_LABEL: Record<string, string> = {
   inaccuracy: '缓着',
   mistake: '失误',
@@ -32,7 +32,7 @@ export const ReportPanel: React.FC = () => {
       if (!p.analysis) return
       losses[p.turn].push(p.analysis.moveLoss ?? 0)
       const lv = p.analysis.classification
-      if (lv && BAD_LEVELS.includes(lv)) {
+      if (lv && ERROR_LEVELS.includes(lv)) {
         bad.push({ idx: i + 1, turn: p.turn, cn: p.moveCn, level: lv, loss: p.analysis.moveLoss ?? 0 })
       }
     })

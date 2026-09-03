@@ -6,9 +6,8 @@
  * 属于分析层的上层功能，不替代引擎。
  */
 
-import type { Game, MoveClassification } from './model'
-
-const ERROR_LEVELS: MoveClassification[] = ['mistake', 'blunder', 'blunder2']
+import type { Game } from './model'
+import { ERROR_LEVELS } from './model'
 
 /** 局面棋子数（用于粗分残局） */
 function pieceCount(fen: string): number {

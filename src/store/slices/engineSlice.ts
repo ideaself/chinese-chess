@@ -2,21 +2,20 @@
  * 引擎/AI 走棋/AI 分析 slice
  */
 import type { AppState, StoreSet, StoreGet } from '../types'
-import type { BoardState, Move, Pos, Turn, GameMode, Difficulty } from '../types'
+import type { Difficulty } from '../types'
 import type { Game } from '../../game/model'
-import { makeMove, boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
-import { getLegalMoves, getAllLegalMoves, getGameStatus, chineseFromFen, pvToChinese } from '../../game/rules'
-import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
-import { parsePGN, exportPGN } from '../../game/pgn'
+import { boardToFen } from '../../game/board'
+import { getAllLegalMoves, chineseFromFen, pvToChinese } from '../../game/rules'
 import {
-  saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
-  deleteGame as storageDeleteGame, initGameStorage,
-  getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
-  getMasterAnalysis, putMasterAnalysis, MASTER_ANALYSIS_FMT,
+  saveGame as storageSaveGame, getAllGames, getSettings, initGameStorage,
 } from '../../game/storage'
-import type { MasterAnalysisRecord } from '../../game/storage'
 import { PikafishEngine } from '../../engine/pikafish'
 import type { EngineInfo } from '../../engine/pikafish'
+import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL, DIFFICULTY_MOVE_TIME, QUICK_EVAL_MOVE_TIME } from '../constants'
+import { boardFromGame } from '../helpers'
+import { classifyMove } from '../../game/masterPreanalysis'
+import { getBookMove, loadOpeningBook } from '../../game/book'
+import { resumeAudio } from '../../game/sound'
 
 /**
  * 拟人降强：弱级以一定概率不走最优着法，而从 topN 候选里按权重（名次递减）挑一手。
@@ -39,17 +38,6 @@ function pickSkillMove(cands: EngineInfo[], difficulty: Difficulty): string | nu
   }
   return cands[0].move
 }
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL, DIFFICULTY_MOVE_TIME, QUICK_EVAL_MOVE_TIME } from '../constants'
-import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
-import {
-  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
-  applyCachedAnalysis, warmupGame, cancelWarmup,
-  acquireEngineSlot, releaseEngineSlot,
-} from '../../game/masterPreanalysis'
-import { getBookMove, loadOpeningBook } from '../../game/book'
-import { OPENING_LINES } from '../../game/openings'
-import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
 
 
 /** 整盘分析取消标记 */

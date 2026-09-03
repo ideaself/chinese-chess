@@ -2,32 +2,21 @@
  * 名局拆解训练 slice
  */
 import type { AppState, StoreSet, StoreGet } from '../types'
-import type { BoardState, Move, Pos, Turn, GameMode } from '../types'
+import type { Pos } from '../types'
 import type { Game } from '../../game/model'
-import { makeMove, boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
-import { getLegalMoves, getAllLegalMoves, getGameStatus, chineseFromFen, pvToChinese } from '../../game/rules'
-import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
-import { parsePGN, exportPGN } from '../../game/pgn'
+import { boardFromFen } from '../../game/board'
+import { getAllLegalMoves, chineseFromFen } from '../../game/rules'
 import {
-  saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
-  deleteGame as storageDeleteGame, initGameStorage,
   getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
   getMasterAnalysis, putMasterAnalysis, MASTER_ANALYSIS_FMT,
 } from '../../game/storage'
 import type { MasterAnalysisRecord } from '../../game/storage'
-import { PikafishEngine } from '../../engine/pikafish'
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
-import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
 import {
-  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
-  applyCachedAnalysis, warmupGame, cancelWarmup,
+  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, applyCachedAnalysis,
   acquireEngineSlot, releaseEngineSlot,
 } from '../../game/masterPreanalysis'
-import { getBookMove, loadOpeningBook } from '../../game/book'
-import { OPENING_LINES } from '../../game/openings'
 import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
 import { BOARD_HOME } from '../constants'
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
 
 
 // ── 模块级状态与函数 ──

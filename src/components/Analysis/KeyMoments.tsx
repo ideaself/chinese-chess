@@ -8,8 +8,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { MoveClassification } from '../../game/model'
-
-const ERROR_LEVELS: MoveClassification[] = ['mistake', 'blunder', 'blunder2']
+import { ERROR_LEVELS } from '../../game/model'
 
 const LABELS: Record<string, string> = {
   mistake: '疑问',

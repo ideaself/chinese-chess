@@ -81,6 +81,9 @@ export type MoveClassification =
   | 'blunder2'   // 严重失误 ??
   | 'unknown'    // 未分类
 
+/** 所有错误级别的走法分类（用于失误统计/错题本等） */
+export const ERROR_LEVELS: MoveClassification[] = ['mistake', 'blunder', 'blunder2']
+
 // ── Header 模型 ───────────────────────────────────────────────────
 
 export interface GameHeader {
@@ -190,16 +193,10 @@ export function rebuildFenSequence(startFen: string, plies: Ply[]): string[] {
   return fens
 }
 
-/** 根据 Ply 数组重建第 N 步后的棋盘状态 */
+/** 根据 Ply 数组重建第 N 步后的棋盘状态（利用 ply.fenAfter 缓存，O(1)） */
 export function getStateAtPly(startFen: string, plies: Ply[], plyIndex: number) {
-  let state = boardFromFen(startFen)
-  for (let i = 0; i < plyIndex && i < plies.length; i++) {
-    const ply = plies[i]
-    const from = { col: ply.move[0].charCodeAt(0) - 97, row: parseInt(ply.move[1]) }
-    const to = { col: ply.move[2].charCodeAt(0) - 97, row: parseInt(ply.move[3]) }
-    state = makeMove(state, { from, to, turn: ply.turn })
-  }
-  return state
+  if (plyIndex === 0) return boardFromFen(startFen)
+  return boardFromFen(plies[plyIndex - 1].fenAfter)
 }
 
 /** 添加一步棋到棋谱 */

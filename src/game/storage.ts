@@ -9,6 +9,7 @@
  */
 
 import type { Game } from '../game/model'
+import { ERROR_LEVELS } from '../game/model'
 import { importRatingState } from './rating'
 
 const STORAGE_KEY = 'xiangqi_games'
@@ -245,17 +246,19 @@ export function importFullBackup(json: string): FullBackupSummary {
     if (Array.isArray(incoming)) {
       if (!memoryGames) memoryGames = []
       const ids = new Set(memoryGames.map(g => g.id))
+      const newIds = new Set<string>()
       for (const g of incoming) {
         if (!g?.id || !Array.isArray(g.plies)) continue
         if (ids.has(g.id)) continue
         memoryGames.unshift(g)
         ids.add(g.id)
+        newIds.add(g.id)
         summary.games++
       }
       if (summary.games > 0) {
         for (const g of incoming) {
           if (!g?.id || !Array.isArray(g.plies)) continue
-          idbPut(g).catch(() => {})
+          if (newIds.has(g.id)) idbPut(g).catch(() => {})
         }
       }
     }
@@ -317,19 +320,21 @@ export function importAllGames(json: string): number {
     if (!Array.isArray(incoming)) return 0
     if (!memoryGames) memoryGames = []
     const ids = new Set(memoryGames.map(g => g.id))
+    const newIds = new Set<string>()
     let added = 0
     for (const g of incoming) {
       if (!g?.id || !Array.isArray(g.plies)) continue
       if (ids.has(g.id)) continue // 已存在跳过
       memoryGames.unshift(g)
       ids.add(g.id)
+      newIds.add(g.id)
       added++
     }
     if (added > 0) {
       if (!idbBroken) {
         for (const g of incoming) {
           if (!g?.id || !Array.isArray(g.plies)) continue
-          idbPut(g).catch(() => {})
+          if (newIds.has(g.id)) idbPut(g).catch(() => {})
         }
       } else {
         fallbackPersist()
@@ -736,7 +741,6 @@ export function toggleMastered(key: string): void {
 
 /** 从已分析棋谱中提取玩家的失误局面（新→旧，同局面同着法去重，最多 50 条） */
 export function getMistakes(): MistakeItem[] {
-  const ERROR_LEVELS = new Set(['mistake', 'blunder', 'blunder2'])
   const items: MistakeItem[] = []
   const seen = new Set<string>()
 
@@ -751,7 +755,7 @@ export function getMistakes(): MistakeItem[] {
     for (let i = 0; i < g.plies.length; i++) {
       const ply = g.plies[i]
       if (!ply.analysis || ply.turn !== playerTurn) continue
-      if (!ERROR_LEVELS.has(ply.analysis.classification)) continue
+      if (!ERROR_LEVELS.includes(ply.analysis.classification)) continue
 
       // 去重键：局面（棋盘+行棋方，忽略计数器）+ 着法
       const posKey = ply.fenBefore.split(' ').slice(0, 2).join(' ')
@@ -809,7 +813,6 @@ function emptyPhase(): PhaseStat {
 
 /** 按开局/中局/残局聚合玩家着法质量 */
 export function getWeaknessAnalysis(): WeaknessAnalysis | null {
-  const ERROR_LEVELS = new Set(['mistake', 'blunder', 'blunder2'])
   const result: WeaknessAnalysis = {
     opening: emptyPhase(),
     middle: emptyPhase(),
@@ -832,7 +835,7 @@ export function getWeaknessAnalysis(): WeaknessAnalysis | null {
       const stat = result[phaseOf(i, pieces)]
       stat.plies++
       stat.lossSum += ply.analysis.moveLoss
-      if (ERROR_LEVELS.has(ply.analysis.classification)) stat.errors++
+      if (ERROR_LEVELS.includes(ply.analysis.classification)) stat.errors++
       samples++
     }
   }

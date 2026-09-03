@@ -2,31 +2,12 @@
  * 错误重走/残局训练 slice
  */
 import type { AppState, StoreSet, StoreGet } from '../types'
-import type { BoardState, Move, Pos, Turn, GameMode } from '../types'
-import type { Game } from '../../game/model'
-import { makeMove, boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
-import { getLegalMoves, getAllLegalMoves, getGameStatus, chineseFromFen, pvToChinese } from '../../game/rules'
-import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
-import { parsePGN, exportPGN } from '../../game/pgn'
-import {
-  saveGame as storageSaveGame, getAllGames, getSettings, saveSettings,
-  deleteGame as storageDeleteGame, initGameStorage,
-  getQuizStats, saveQuizStats, addQuizMistake, removeQuizMistake,
-  getMasterAnalysis, putMasterAnalysis, MASTER_ANALYSIS_FMT,
-} from '../../game/storage'
-import type { MasterAnalysisRecord } from '../../game/storage'
-import { PikafishEngine } from '../../engine/pikafish'
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
-import { settleRating, boardFromGame, generateId, parseMoveFromUci } from '../helpers'
-import {
-  pickBestKeyPly, engineEvalOnce, JUDGE_MIN_DEPTH, classifyMove,
-  applyCachedAnalysis, warmupGame, cancelWarmup,
-  acquireEngineSlot, releaseEngineSlot,
-} from '../../game/masterPreanalysis'
-import { getBookMove, loadOpeningBook } from '../../game/book'
-import { OPENING_LINES } from '../../game/openings'
-import { getCachedLibrary, recordToGame } from '../../game/masterLibrary'
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckHaptic, playMoveHaptic, playGameOverHaptic, resumeAudio } from '../../game/sound'
+import type { Turn } from '../types'
+import { makeMove, boardFromFen } from '../../game/board'
+import { chineseFromFen } from '../../game/rules'
+import { createEmptyGame } from '../../game/model'
+import { getAllGames } from '../../game/storage'
+import { boardFromGame, parseMoveFromUci } from '../helpers'
 import type { PuzzleItem } from '../../game/puzzles'
 import { recordPuzzleCorrect, recordPuzzleWrong } from '../../game/puzzles'
 
