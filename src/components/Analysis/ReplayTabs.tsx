@@ -7,6 +7,7 @@ import { EvalCurve } from './EvalCurve'
 import { KeyMoments } from './KeyMoments'
 import { ReportPanel } from './ReportPanel'
 import { useStore } from '../../store/useStore'
+import { AnalysisPanel } from './AnalysisPanel'
 
 type Tab = 'curve' | 'analyze' | 'report' | 'retry'
 
@@ -54,7 +55,7 @@ export const ReplayTabs: React.FC = () => {
       </div>
       <div className="replay-tabs-body">
         {tab === 'curve' && <EvalCurve />}
-        {tab === 'analyze' && <KeyMoments />}
+        {tab === 'analyze' && <AnalysisPanel />}
         {tab === 'report' && <ReportPanel />}
         {tab === 'retry' && <RetryPanel />}
       </div>

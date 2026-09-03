@@ -473,6 +473,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       console.error('PGN 解析失败:', result.error)
       return false
     }
+    const replayOrigin = get().mobilePage
+    const replayOriginTab = get().activeTab
     const board = boardFromGame(result.game, result.game.plies.length)
     set({
       mode: 'replay',
@@ -486,6 +488,10 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
         : null,
       hintInfo: null,
       activeTab: 'play',
+      mobilePage: 'play' as const,
+      sheetTab: null,
+      replayOrigin,
+      replayOriginTab,
     })
     return true
   },

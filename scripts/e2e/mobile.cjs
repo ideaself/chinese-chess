@@ -64,17 +64,23 @@ async function run(ctx) {
   check('根层返回提示「再按一次退出」', rootToast.includes('再按一次退出'), rootToast)
   await sleep(2300) // 等双击窗口过期，避免影响后续用例
 
-  // 复盘模式：5 键操作条 + 局势图/分析/报告 Tab 区 + 标题进度
+  // 复盘模式：5 键操作条 + 局势图/分析/报告/重试 Tab 区 + 标题进度
   await evalJs(`(() => { const s = window.__store.getState(); s.loadGameObject(s.game); })()`)
   await sleep(400)
   check('复盘模式显示 5 键操作条', await evalJs(`!!document.querySelector('.mpb-five')`))
-  check('复盘页显示 Tab 区（局势图/分析/报告）', await evalJs(`!!document.querySelector('.replay-tabs')`))
+  check('复盘页显示 Tab 区（局势图/分析/报告/重试）', await evalJs(`document.querySelectorAll('.replay-tab').length === 4`))
   check('局势图渲染（空态或曲线）', await evalJs(`!!document.querySelector('.eval-curve-empty') || !!document.querySelector('.eval-curve-svg')`))
   const replayTitle = await evalJs(`document.querySelector('.replay-title')?.textContent || ''`)
   check('复盘标题含进度 (n/总)', /\(\d+\/\d+\)/.test(replayTitle), replayTitle)
 
   // 局势图区：手动整盘分析控制行（深度选择 + 按钮）
   check('曲线区显示分析控制行（深度+按钮）', await evalJs(`!!document.querySelector('.curve-analyze-row') && !!document.querySelector('.curve-depth')`))
+  await evalJs(`[...document.querySelectorAll('.replay-tab')].find(b => b.textContent === '分析')?.click()`)
+  await sleep(250)
+  check('分析 Tab 显示完整分析面板', await evalJs(`!!document.querySelector('.analysis-panel') && [...document.querySelectorAll('.analysis-panel button')].some(b => b.textContent.includes('整盘分析'))`))
+  await evalJs(`[...document.querySelectorAll('.replay-tab')].find(b => b.textContent === '重试')?.click()`)
+  await sleep(150)
+  check('重试 Tab 显示当前局面入口', await evalJs(`!!document.querySelector('.replay-retry-panel')`))
 
   // 棋谱 Tab：复盘进行中先开列表，再点回到复盘页（不丢位置）
   await evalJs(`[...document.querySelectorAll('.bottom-tab')].find(b => b.textContent === '棋谱')?.click()`)

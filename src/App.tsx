@@ -57,6 +57,7 @@ export const App: React.FC = () => {
   const toast = useStore(s => s.toast)
   const variation = useStore(s => s.variation)
   const openingTraining = useStore(s => s.openingTraining)
+  const endgameTraining = useStore(s => s.endgameTraining)
   const masterQuiz = useStore(s => s.masterQuiz)
   const theme = useStore(s => s.settings.theme)
   const sheetTab = useStore(s => s.sheetTab)
@@ -131,10 +132,19 @@ export const App: React.FC = () => {
   // ── 层级导航：安卓返回手势/按键、浏览器右滑、页头「←」统一走 navigateBack ──
   useEffect(() => {
     initBackNav(() => useStore.getState().navigateBack())
+    let mounted = true
+    let backButtonListener: { remove: () => Promise<void> } | null = null
     if (Capacitor.isNativePlatform()) {
       import('@capacitor/app').then(({ App }) => {
-        void App.addListener('backButton', () => useStore.getState().navigateBack())
+        void App.addListener('backButton', () => useStore.getState().navigateBack()).then(listener => {
+          if (mounted) backButtonListener = listener
+          else void listener.remove()
+        })
       }).catch(() => {})
+    }
+    return () => {
+      mounted = false
+      if (backButtonListener) void backButtonListener.remove()
     }
   }, [])
 
@@ -253,7 +263,8 @@ export const App: React.FC = () => {
       </header>
 
       {/* 状态栏（移动端复盘隐藏：步数与胜负已在标题和局势图中，给棋盘腾空间） */}
-      {!(isMobile && mode === 'replay' && !variation) && (
+      {!(isMobile && mode === 'play' && !openingTraining && !endgameTraining) &&
+        !(isMobile && mode === 'replay' && !variation) && (
         <div className="status-bar">
           <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
             {variation
