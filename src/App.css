@@ -1313,13 +1313,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     border: none;
     border-radius: 0;
   }
-  /* 复盘时棋盘按自身比例排版，避免剩余高度把棋盘上下撑出空白。 */
-  .app-main:has(.replay-tabs) { flex: 0 0 auto; min-height: 0; }
-  .app-main:has(.replay-tabs) .board-area { flex: 0 0 auto; align-items: flex-start; }
-  .app-main:has(.replay-tabs) .board-container { height: auto; }
   .board-container { width: 100%; height: 100%; justify-content: center; }
   .board-container svg { display: block; width: 100%; height: auto; max-height: 100%; }
-  .app-main:has(.replay-tabs) .board-container svg { max-height: none; }
+  /* 复盘：主区弹性占据页头与底部操作条之间，棋盘按内容排版（空间不足时按高度收缩），
+     剩余空间交给 Tab 区（局势图），底部菜单/导航操作条固定在屏幕最底。 */
+  .app-main:has(.replay-tabs) { flex: 1; min-height: 0; }
+  .app-main:has(.replay-tabs) .board-area { flex: 0 1 auto; min-height: 0; }
+  .app-main:has(.replay-tabs) .board-container { height: 100%; }
+  .app-main:has(.replay-tabs) .board-container svg { max-height: 100%; }
+  .app-main:has(.replay-tabs) .replay-tabs { flex: 1 1 0; min-height: 132px; max-height: none; }
+  .app-main:has(.replay-tabs) .replay-tabs-body { display: flex; flex-direction: column; }
+  .app-main:has(.replay-tabs) .eval-curve { flex: 1; display: flex; flex-direction: column; justify-content: center; }
   .player-info { max-width: 100%; margin: 5px 0; padding: 5px 12px; }
   .timer { font-size: 14px; }
   .side-panel { display: none; }

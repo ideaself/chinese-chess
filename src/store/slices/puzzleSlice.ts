@@ -73,13 +73,16 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const isDaily = !!daily && daily.game_id === p.game_id && daily.ply === p.ply
 
     const turn = p.fen.split(' ')[1] === 'b' ? 'b' : 'w'
+    // 判定答案：杀局题实战着法即制胜一击，答案与实战一致；
+    // 失误题/残局题实战着是失误，答案取引擎最佳着
+    const answerUci = p.type === '杀局' ? p.move_uci : p.best_move
+    const answerCn = answerUci.length >= 4 ? chineseFromFen(p.fen, answerUci) : undefined
     const game = createEmptyGame()
     game.startFen = p.fen
     game.header.Event = p.event || p.type
     game.header.Red = p.red
     game.header.Black = p.black
     game.header.Result = p.result
-    const bestMoveCn = p.best_move.length >= 4 ? chineseFromFen(p.fen, p.best_move) : undefined
     game.plies = [{
       plyIndex: 1,
       turn,
@@ -92,9 +95,9 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       analysis: {
         score: p.score_before ?? 0,
         depth: 12,
-        bestMove: p.best_move,
-        bestMoveCn,
-        pv: [p.best_move],
+        bestMove: answerUci,
+        bestMoveCn: answerCn,
+        pv: [answerUci],
         moveLoss: Math.max(0, p.score_drop ?? 0),
         classification: 'blunder',
         analyzedAt: Date.now(),

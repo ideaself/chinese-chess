@@ -41,8 +41,17 @@ export const PuzzlePanel: React.FC = () => {
       <div className="panel-body">
         {isLibrary ? (
           <div className="panel-hint">
-            实战{ply.moveCn || '这一手'}不是最佳着法（掉分 {puzzleSource.drop}cp）。<br />
-            该你走了（执{puzzleSource.mover === 'w' ? '红' : '黑'}），找出最佳着：
+            {puzzleSource.type === '杀局' ? (
+              <>
+                局面已到制胜时刻，实战中{puzzleSource.mover === 'w' ? '红' : '黑'}方走出了杀着。<br />
+                该你走了（执{puzzleSource.mover === 'w' ? '红' : '黑'}），请还原实战杀着：
+              </>
+            ) : (
+              <>
+                实战{ply.moveCn || '这一手'}不是最佳着法（掉分 {puzzleSource.drop}cp）。<br />
+                该你走了（执{puzzleSource.mover === 'w' ? '红' : '黑'}），找出最佳着：
+              </>
+            )}
           </div>
         ) : (
           <div className="panel-hint">
@@ -67,7 +76,8 @@ export const PuzzlePanel: React.FC = () => {
         {puzzleRevealed && answerCn && (
           <div className="puzzle-answer">
             应走：<b>{answerCn}</b>
-            {puzzleSource && <span className="panel-hint">（实战着 {ply.moveCn || ply.move}）</span>}
+            {puzzleSource && answerCn !== (ply.moveCn || ply.move) &&
+              <span className="panel-hint">（实战着 {ply.moveCn || ply.move}）</span>}
           </div>
         )}
 

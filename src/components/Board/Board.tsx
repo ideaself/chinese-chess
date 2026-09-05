@@ -160,6 +160,8 @@ export const Board: React.FC = () => {
     if (mode === 'setup') { setupClick(pos); return }
     // 推演/自我分析：允许点选双方棋子试走（selectPiece 内部路由到 variationTryMove）
     if (mode === 'replay' && variation) { selectPiece(pos); return }
+    // 错误重走/题库/每日一题：点选走子做答（selectPiece/tryMove 内部路由到 puzzleTryMove）
+    if (mode === 'puzzle') { selectPiece(pos); return }
     if (mode !== 'play') return
     selectPiece(pos)
   }, [getSvgCoords, grid])
