@@ -77,5 +77,12 @@ v1.22.0（本次发布）：教学向修复与闭环补全——评估分视角�
 
 ## 待办候选
 
-- CI 配置签名 Secrets 后验证正式签名包（本地 keystore 见 android/key.properties，gitignored）
 - e2e 移动套件按 v1.19 新导航重写（现 17 项失效）；角色套件提示箭头基线失败排查
+
+## CI 说明
+
+- `.github/workflows/release.yml`：tag `v*` 或手动 dispatch 触发；npm ci → 单测 → build →
+  `cap add android` → 版本注入 → 放行明文 HTTP → `scripts/ci-sign.mjs` → gradlew → GitHub Release。
+  **已移除 Gitee 镜像步骤**（连续三次失败）；**签名 Secrets 已于 2026-09 换为新 keystore**，
+  CI 包与本地包同签名、可互相覆盖升级。CI 包不含原生引擎（二进制不入库），需要引擎请用
+  `chinese-chess-vX.Y.Z-engine.apk` 或本地按上面的流程自建。
