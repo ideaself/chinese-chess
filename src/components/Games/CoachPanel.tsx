@@ -20,6 +20,7 @@ import {
 } from '../../game/masterLibrary'
 import type { LibraryGame } from '../../game/masterLibrary'
 import { isCoachEnabled, askCoach } from '../../game/coach/aiCoach'
+import { redScoreFromFen } from '../../game/evalScore'
 import type { CoachContext } from '../../game/coach/aiCoach'
 
 const CLASS_LABELS: Record<string, string> = {
@@ -120,7 +121,8 @@ export const CoachPanel: React.FC = () => {
         openingName: opening?.name,
       }
       if (analysis && analysis.fen === ctx.fen) {
-        ctx.score = analysis.score
+        // 引擎分是行棋方视角，教练上下文统一按红方视角（否则教练拿到的是反的形势判断）
+        ctx.score = redScoreFromFen(analysis.score, analysis.fen)
         ctx.bestMoveCn = analysis.bestMove ? chineseFromFen(analysis.fen, analysis.bestMove) : undefined
       }
       await askCoach(ctx, q, {
@@ -206,8 +208,8 @@ export const CoachPanel: React.FC = () => {
           <>
             <div className="info-row" style={{ marginTop: 6 }}>
               <span className="info-label">评估</span>
-              <span className={`info-value ${analysis.score >= 0 ? 'score-red' : 'score-black'}`}>
-                {formatScore(analysis.score)}（深度{analysis.depth}）
+              <span className={`info-value ${redScoreFromFen(analysis.score, analysis.fen) >= 0 ? 'score-red' : 'score-black'}`}>
+                {formatScore(redScoreFromFen(analysis.score, analysis.fen))}（深度{analysis.depth}）
               </span>
             </div>
             {analysis.fen !== (currentPlyIndex === 0 ? game.startFen : currentPly?.fenAfter) && (

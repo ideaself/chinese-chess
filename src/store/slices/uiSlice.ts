@@ -88,12 +88,7 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       if (st.mode === 'puzzle') { get().exitPuzzle(); return }
       if (st.masterQuiz) { get().exitMasterQuiz(); return }
       if (st.openingTraining) { get().exitOpeningTraining(); return }
-      if (st.endgameTraining) {
-        const origin = st.replayOrigin ?? 'play'
-        get().restart()
-        set({ endgameTraining: false, mobilePage: origin, activeTab: st.replayOriginTab ?? 'play', sheetTab: BOARD_HOME, replayOrigin: null, replayOriginTab: null })
-        return
-      }
+      if (st.endgameTraining) { get().exitEndgameTraining(); return }
       // 4) 打开的覆盖层面板 → 回纯棋盘主页
       if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
       // 4.5) 复盘模式 → 退出复盘，回到来源页
@@ -131,6 +126,8 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (st.mode === 'puzzle') { get().exitPuzzle(); return }
     if (st.masterQuiz) { get().exitMasterQuiz(); return }
     if (st.openingTraining) { get().exitOpeningTraining(); return }
+    // 3.5) 残局训练：还原进入前的页面（此前桌面端漏了这个分支，只能靠"新对局"变相退出）
+    if (st.endgameTraining) { get().exitEndgameTraining(); return }
     // 4) 打开的覆盖层面板 → 回纯棋盘主页
     if (st.sheetTab !== null && st.sheetTab !== BOARD_HOME) { get().setSheetTab(BOARD_HOME); return }
     // 4.5) 复盘模式 → 退出复盘，回到可下棋的对战棋盘

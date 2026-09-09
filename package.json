@@ -1,7 +1,7 @@
 {
   "name": "xiangqi-app",
   "private": true,
-  "version": "1.21.0",
+  "version": "1.22.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "dpxq": "node scripts/dpxq-convert.mjs",
     "book": "node scripts/book-gen.mjs",
     "server": "node server/pikafish-server.mjs",
-    "server:dev": "npx concurrently -n vite,ws \"npm run dev\" \"npm run server\""
+    "server:dev": "npx concurrently -n vite,ws \"npm run dev\" \"npm run server\"",
+    "android:engine": "node scripts/android-engine.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",

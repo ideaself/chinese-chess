@@ -155,6 +155,12 @@ export interface AppState {
   puzzleAttempts: number
   puzzleResult: 'waiting' | 'correct' | 'wrong'
   puzzleRevealed: boolean
+  /** 分级提示已展开级数：0=无，1=提示子力，2=提示着法性质 */
+  puzzleHintLevel: number
+  /** 答案之后的引擎后续变化（中文记谱，null=未加载，[]=无续着） */
+  puzzleLine: string[] | null
+  /** 正在推演后续变化 */
+  puzzleLineLoading: boolean
   /** 精选题库来源信息（null = 来自棋谱重走） */
   puzzleSource: {
     type: string
@@ -163,8 +169,20 @@ export interface AppState {
     black: string
     mover: 'w' | 'b'
     drop: number
+    /** 按局面事实判定的难度（统计口径，与题库 type 标签无关） */
+    difficulty: '初级' | '中级' | '高级'
+    /** 按局面事实判定的任务类型：杀王 / 防守 / 找最佳着 */
+    task: '杀王' | '防守' | '找最佳着'
+    /** 失误严重度文案（绝杀级分差不显示 cp） */
+    dropText: string
+    /** 题目键（局面|答案），SRS 复习安排用 */
+    key: string
     /** 是否每日挑战题（完成标记/统计用） */
     isDaily?: boolean
+    /** 引擎追认"殊途同归"（玩家着法与引擎并列第一） */
+    aiAgree?: boolean
+    /** 正在做引擎追认判定 */
+    checking?: boolean
   } | null
 
   // ── 变化推演（多分支树 + 引擎评分对比）──
@@ -255,7 +273,13 @@ export interface AppState {
   startPuzzle: (plyIndex: number) => void
   /** 精选题库入口：从题库题目进入重走模式 */
   startLibraryPuzzle: (p: import('../game/puzzles').PuzzleItem) => void
+  /** 换下一题（同题型/同难度优先，不退出训练） */
+  nextLibraryPuzzle: () => void
   exitPuzzle: () => void
+  /** 展开下一级提示（子力 → 着法性质） */
+  revealPuzzleHint: () => void
+  /** 拉取答案之后的引擎变化线（回答"为什么应走这步"） */
+  loadPuzzleLine: () => void
   puzzleTryMove: (from: Pos, to: Pos) => boolean
   revealPuzzleAnswer: () => void
   /** 从某步的 PV 进入主变推演（计划第15节） */
@@ -302,6 +326,8 @@ export interface AppState {
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
   startEndgameTraining: (fen: string, name: string, side?: 'w' | 'b') => void
+  /** 退出残局训练：回到进入前的页面并开新对局 */
+  exitEndgameTraining: () => void
   /** 重演拆解错题局面（执提问方行棋 vs 引擎） */
   replayQuizMistake: (m: { fen: string; turn: 'w' | 'b' }) => void
 

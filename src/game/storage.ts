@@ -12,6 +12,7 @@ import type { Game } from '../game/model'
 import { ERROR_LEVELS } from '../game/model'
 import { importRatingState } from './rating'
 import { snapshotTrainingProgress, restoreTrainingProgress } from './progress'
+import { resolvePlayerSide, type PlayerSide } from './playerIdentity'
 
 const STORAGE_KEY = 'xiangqi_games'
 const SETTINGS_KEY = 'xiangqi_settings'
@@ -145,6 +146,11 @@ export async function initGameStorage(): Promise<void> {
 /** 获取所有棋谱 */
 export function getAllGames(): Game[] {
   return memoryGames ?? []
+}
+
+/** 测试辅助：直接注入内存镜像并清空初始化标记 */
+export function _setGamesForTest(games: Game[] | null): void {
+  memoryGames = games
 }
 
 /** 保存棋谱（内存即时生效，异步落库） */
@@ -584,6 +590,11 @@ export interface AppSettings {
   // 对局
   defaultSide: 'w' | 'b' | 'random'
   defaultDifficulty: string
+  /**
+   * 「我的棋手名」：用于识别导入棋谱里哪一方是玩家（进错题本/弱点分析/战绩统计）。
+   * 留空则只识别 App 内建对局（header 写入的 '玩家'）。
+   */
+  myPlayerName: string
   /** 整盘分析深度档位（计划9.1）: 8 快速 / 12 标准 / 16 深度 */
   analysisDepth: number
   // 外观
@@ -624,6 +635,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticEnabled: true,
   defaultSide: 'w',
   defaultDifficulty: 'medium',
+  myPlayerName: '',
   analysisDepth: 16,
   theme: 'dark',
   autoEval: true,
@@ -666,14 +678,21 @@ export interface GameStats {
   avgMoveLoss: number | null
 }
 
-/** 判定一局棋中玩家的胜负（header.Red/Black === '玩家' 标记人机对局） */
+/**
+ * 判定一局棋中"我"执哪一方（null = 不是我的对局）。
+ * 内建对局看 header 的 '玩家' 标记；导入棋谱按设置里的「我的棋手名」匹配。
+ */
+export function playerSideOfGame(g: Game): PlayerSide | null {
+  return resolvePlayerSide(g.header, getSettings().myPlayerName)
+}
+
+/** 判定一局棋中玩家的胜负 */
 function playerOutcome(g: Game): PlayerOutcome | null {
-  const isRedPlayer = g.header.Red === '玩家'
-  const isBlackPlayer = g.header.Black === '玩家'
-  if (!isRedPlayer && !isBlackPlayer) return null // 导入/非人机对局不计入
+  const side = playerSideOfGame(g)
+  if (!side) return null // 不是我的对局（大师棋谱等）不计入
   if (g.result === '1/2-1/2') return 'draw'
-  if (g.result === '1-0') return isRedPlayer ? 'win' : 'loss'
-  if (g.result === '0-1') return isBlackPlayer ? 'win' : 'loss'
+  if (g.result === '1-0') return side === 'w' ? 'win' : 'loss'
+  if (g.result === '0-1') return side === 'b' ? 'win' : 'loss'
   return null
 }
 
@@ -696,11 +715,10 @@ export function getStats(): GameStats {
   let lossSum = 0, lossCount = 0
   for (const g of games) {
     if (g.analysisStatus !== 'complete') continue
-    const isRedPlayer = g.header.Red === '玩家'
-    const isBlackPlayer = g.header.Black === '玩家'
+    const side = playerSideOfGame(g)
     for (const ply of g.plies) {
       if (!ply.analysis) continue
-      if (isRedPlayer !== isBlackPlayer && ply.turn !== (isRedPlayer ? 'w' : 'b')) continue
+      if (side && ply.turn !== side) continue
       lossSum += ply.analysis.moveLoss
       lossCount++
     }
@@ -767,10 +785,8 @@ export function getMistakes(): MistakeItem[] {
   const games = [...getAllGames()].sort((a, b) => b.updatedAt - a.updatedAt)
   for (const g of games) {
     if (g.analysisStatus !== 'complete') continue
-    const isRedPlayer = g.header.Red === '玩家'
-    const isBlackPlayer = g.header.Black === '玩家'
-    if (isRedPlayer === isBlackPlayer) continue // 非人机对局不计入
-    const playerTurn = isRedPlayer ? 'w' : 'b'
+    const playerTurn = playerSideOfGame(g)
+    if (!playerTurn) continue // 不是我的对局不计入
 
     for (let i = 0; i < g.plies.length; i++) {
       const ply = g.plies[i]
@@ -843,10 +859,8 @@ export function getWeaknessAnalysis(): WeaknessAnalysis | null {
   let samples = 0
   for (const g of getAllGames()) {
     if (g.analysisStatus !== 'complete') continue
-    const isRedPlayer = g.header.Red === '玩家'
-    const isBlackPlayer = g.header.Black === '玩家'
-    if (isRedPlayer === isBlackPlayer) continue
-    const playerTurn = isRedPlayer ? 'w' : 'b'
+    const playerTurn = playerSideOfGame(g)
+    if (!playerTurn) continue
 
     for (let i = 0; i < g.plies.length; i++) {
       const ply = g.plies[i]

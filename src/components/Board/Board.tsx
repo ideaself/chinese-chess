@@ -381,8 +381,8 @@ export const Board: React.FC = () => {
       {hintInfo && (
         <div className="board-hint-overlay">
           💡 推荐 {hintInfo.line.join(' → ')}
-          <span className="board-hint-score">
-            {(hintInfo.score / 100 >= 0 ? '+' : '') + (hintInfo.score / 100).toFixed(2)}
+          <span className="board-hint-score" title="行棋方视角的评估（正分=走这步后我方占优）">
+            {(hintInfo.score / 100 >= 0 ? '+' : '') + (hintInfo.score / 100).toFixed(2)}（我方）
           </span>
         </div>
       )}

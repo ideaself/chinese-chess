@@ -133,6 +133,24 @@ export function getAllLegalMoves(state: BoardState): Array<{ from: Pos; to: Pos 
 
 // ── 将死/困毙判定 ────────────────────────────────────────────────
 
+/**
+ * 当前方是否存在至少一个合法走法（找到即返回，用于将死判定）
+ *
+ * 与 `getAllLegalMoves(state).length > 0` 等价，但多数局面只需扫描少数棋子，
+ * 适合在批量判定（如题库难度分级）里替代全量生成。
+ */
+export function hasLegalMove(state: BoardState): boolean {
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const piece = state.board[c][r]
+      if (piece === '.') continue
+      if (isRed(piece) !== (state.turn === 'w')) continue
+      if (getLegalMoves(state, c, r).length > 0) return true
+    }
+  }
+  return false
+}
+
 export type GameEndReason = 'checkmate' | 'stalemate' | null
 
 /** 判断对局是否结束，返回结束原因 */

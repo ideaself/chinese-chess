@@ -11,6 +11,7 @@ import {
   getMistakes, getMasteredKeys, toggleMastered,
   getQuizMistakes, clearQuizMistakes, removeQuizMistake,
 } from '../../game/storage'
+import { dueMistakeKeys } from '../../game/progress'
 
 const LABELS: Record<string, { icon: string; text: string }> = {
   mistake: { icon: '⚠️', text: '疑问' },
@@ -36,6 +37,12 @@ export const MistakeBook: React.FC = () => {
   )
   const quizMistakes = getQuizMistakes()
   const replayQuizMistake = useStore(s => s.replayQuizMistake)
+  // SRS：到期的错题排前面并给出数量（答对间隔 1→3→7→21→60 天，答错 10 分钟后再来）
+  const dueKeys = new Set(dueMistakeKeys())
+  const dueCount = mistakes.filter(m => dueKeys.has(m.key)).length
+  const ordered = [...mistakes].sort(
+    (a, b) => Number(dueKeys.has(b.key)) - Number(dueKeys.has(a.key)),
+  )
 
   if (all.length === 0 && quizMistakes.length === 0) {
     return (
@@ -103,13 +110,19 @@ export const MistakeBook: React.FC = () => {
         </div>
       </div>
 
+      {dueCount > 0 && (
+        <div className="panel-hint" style={{ padding: '2px 0 8px' }}>
+          📅 今日待复习 <b>{dueCount}</b> 道（已按到期顺序排在前面）
+        </div>
+      )}
+
       {mistakes.length === 0 ? (
         <div className="panel-hint" style={{ padding: '14px 0', textAlign: 'center' }}>
           {filter === 'todo' ? '太棒了，没有待练习的错题！' : '该类别下暂无错题'}
         </div>
       ) : (
         <div className="key-moments-list">
-          {mistakes.map(m => {
+          {ordered.map(m => {
             const label = LABELS[m.classification] ?? LABELS.mistake
             const isMastered = masteredKeys.has(m.key)
             return (

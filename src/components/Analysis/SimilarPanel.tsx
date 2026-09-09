@@ -12,6 +12,7 @@ import {
   canOpenGame, ensureOpenableLimit, type SimilarEntry,
 } from '../../game/similar'
 import { chineseFromFen } from '../../game/rules'
+import { BOARD_HOME } from '../../store/constants'
 import { fetchGameById, recordToGame, classifyRecord } from '../../game/masterLibrary'
 
 interface Props {
@@ -25,6 +26,7 @@ export const SimilarPanel: React.FC<Props> = ({ fen, moves }) => {
   const loadGameObject = useStore(s => s.loadGameObject)
   const setSheetTab = useStore(s => s.setSheetTab)
   const setTab = useStore(s => s.setTab)
+  const setMobilePage = useStore(s => s.setMobilePage)
   const showToast = useStore(s => s.showToast)
 
   const [entries, setEntries] = useState<SimilarEntry[] | null>(null)
@@ -61,8 +63,10 @@ export const SimilarPanel: React.FC<Props> = ({ fen, moves }) => {
     const game = recordToGame({ ...rec, cls: classifyRecord(rec) })
     if (!game) { showToast('⚠ 棋谱数据有误'); return }
     loadGameObject(game)
+    // 跳转复盘页：移动端要切 mobilePage，否则停在空白浮层（历史 bug）
     setTab('play')
-    setSheetTab('puzzle') // 复用复盘页入口（BOARD_HOME）
+    setMobilePage('play')
+    setSheetTab(BOARD_HOME)
   }
 
   if (!moves || moves.length === 0) return null

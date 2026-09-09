@@ -1,9 +1,20 @@
 /**
  * 开局训练数据 - 计划第22节"开局训练"
  *
- * 经典开局定式线路，玩家执红按理论顺序行棋，
- * 走对继续、走偏提示正确着法；对手一侧由系统自动演示。
+ * 两条数据来源：
+ *   1. `OPENING_LINES`：内置经典定式（离线兜底，4 条）
+ *   2. 开局书生成：从 141k 局大师语料（public/opening-book.json）按频率走主线，
+ *      用棋谱库分类逻辑命名，并带上"多少局走过、红方得分率"——真实语料驱动
+ *
+ * 界面与 slice 一律通过 `getOpeningLines()` 取线路（生成成功则用生成的）。
+ * 玩家执红按理论顺序行棋，走对继续、走偏提示正确着法；对手一侧由系统自动演示。
  */
+
+import { boardFromFen, boardToFen, makeMove, START_FEN } from './board'
+import { chineseFromFen } from './rules'
+import { getBookCandidates, getBookFirstMoves, loadOpeningBook } from './book'
+import { classifyRecord, FAMILY_INFO, DEFENSE_INFO } from './openingClassify'
+import type { MasterRecord } from './dhtmlxq'
 
 export interface OpeningLine {
   id: string
@@ -17,6 +28,129 @@ export interface OpeningLine {
   notes: string[]
 }
 
+// ── 语料生成线路（v1.22） ─────────────────────────────────────────
+
+/** 生成线路的默认深度（手）与首着数量 */
+export const BOOK_LINE_PLIES = 10
+export const BOOK_LINE_COUNT = 8
+/** 冷门线路阈值：到达局数少于此值的首着不生成线路 */
+export const MIN_LINE_GAMES = 100
+
+let dynamicLines: OpeningLine[] | null = null
+
+/** 当前可用线路：优先语料生成，其次内置定式 */
+export function getOpeningLines(): OpeningLine[] {
+  return dynamicLines ?? OPENING_LINES
+}
+
+/** 测试辅助：注入/清空生成的线路 */
+export function _setOpeningLinesForTest(lines: OpeningLine[] | null): void {
+  dynamicLines = lines
+}
+
+/** 该局面下各候选着法的总局数（= 走到该局面的局数） */
+function gamesAt(prefix: string[]): number {
+  const cands = getBookCandidates(prefix)
+  return cands ? cands.reduce((sum, c) => sum + c.n, 0) : 0
+}
+
+/** 在棋盘上执行一步 UCI 着法 */
+function applyUci(board: ReturnType<typeof boardFromFen>, uci: string) {
+  const from = { col: uci.charCodeAt(0) - 97, row: parseInt(uci[1]) }
+  const to = { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) }
+  return makeMove(board, { from, to, turn: board.turn })
+}
+
+/** 沿开局书按"出现次数最多"走主线（首手固定为 firstMove），返回 UCI 序列与逐手统计 */
+function walkMainLine(firstMove: string): {
+  moves: string[]
+  notes: string[]
+  names: string[]
+  reachedGames: number
+} | null {
+  const moves: string[] = []
+  const notes: string[] = []
+  const names: string[] = []
+  let board = boardFromFen(START_FEN)
+
+  // 首手统计优先取起始局面候选表；多数首着不在该表中（book-gen 已裁剪），
+  // 退化为"其后继局数"，只显示局数不显示得分率
+  const firstStat = getBookCandidates([])?.find(c => c.m === firstMove)
+  const firstCn = chineseFromFen(boardToFen(board), firstMove)
+  notes.push(firstStat
+    ? `${firstCn}：${firstStat.n.toLocaleString()} 局，红方得分率 ${Math.round(firstStat.wr * 100)}%`
+    : firstCn)
+  names.push(firstCn)
+  moves.push(firstMove)
+  board = applyUci(board, firstMove)
+
+  for (let ply = 1; ply < BOOK_LINE_PLIES; ply++) {
+    const cands = getBookCandidates(moves)
+    if (!cands || cands.length === 0) break
+    const top = cands[0]
+    const cn = chineseFromFen(boardToFen(board), top.m)
+    names.push(cn)
+    notes.push(`${cn}：${top.n.toLocaleString()} 局，红方得分率 ${Math.round(top.wr * 100)}%`)
+    moves.push(top.m)
+    board = applyUci(board, top.m)
+  }
+
+  if (moves.length < 4) return null
+  // 走到最终局面的局数；最终局面无记录时用上一位置的局数
+  const reachedGames = gamesAt(moves) || gamesAt(moves.slice(0, -1))
+  return { moves, notes, names, reachedGames }
+}
+
+/** 线路名称：复用棋谱库的开局分类（中炮对屏风马等） */
+function nameOfLine(moves: string[]): { name: string; desc: string } {
+  const cls = classifyRecord({ id: 0, mv: moves.join('') } as MasterRecord)
+  const family = FAMILY_INFO[cls.family]
+  if (cls.family !== 'other' && cls.defense) {
+    const def = DEFENSE_INFO[cls.defense]
+    return { name: `${family.name}对${def.name}`, desc: `${family.desc}；黑方以${def.name}应对` }
+  }
+  return { name: family.name, desc: family.desc }
+}
+
+/**
+ * 从开局书生成训练线路：取语料中出现最多的若干首着，各走一条主线。
+ * 开局书未加载或数据不足时返回空数组。
+ */
+export async function buildOpeningLinesFromBook(): Promise<OpeningLine[]> {
+  const ok = await loadOpeningBook()
+  if (!ok) return []
+  const firstMoves = getBookFirstMoves()
+  if (firstMoves.length === 0) return []
+
+  const built: OpeningLine[] = []
+  for (const first of firstMoves) {
+    const line = walkMainLine(first)
+    // 少于 200 局的冷门线路不进训练（避免把边角着法当定式教）
+    if (!line || line.reachedGames < MIN_LINE_GAMES) continue
+    const { name, desc } = nameOfLine(line.moves)
+    built.push({
+      id: `book:${line.moves.join('')}`,
+      name,
+      desc: `${desc} · 语料约 ${line.reachedGames.toLocaleString()} 局走到此局面`,
+      moves: line.moves,
+      names: line.names,
+      notes: line.notes,
+    })
+  }
+  // 同一体系可能生成多条，按到达局数取前 N 条
+  return built.slice(0, BOOK_LINE_COUNT)
+}
+
+/** 拉取开局书并生成线路（幂等；失败保持内置定式） */
+let buildPromise: Promise<void> | null = null
+export function ensureBookOpeningLines(): Promise<void> {
+  if (!buildPromise) {
+    buildPromise = buildOpeningLinesFromBook()
+      .then(lines => { if (lines.length > 0) dynamicLines = lines })
+      .catch(() => { /* 保持内置定式 */ })
+  }
+  return buildPromise
+}
 export const OPENING_LINES: OpeningLine[] = [
   {
     id: 'zhongpao-pingfeng',

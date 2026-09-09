@@ -6,9 +6,9 @@
  */
 
 import type { WeaknessAnalysis, MistakeItem } from './storage'
-import { getPuzzles, difficultyFromDrop } from './puzzles'
+import { getPuzzles, puzzleDifficulty, puzzleKey } from './puzzles'
 import type { PuzzleItem } from './puzzles'
-import { getTrainingProgress } from './progress'
+import { getTrainingProgress, duePuzzleKeys } from './progress'
 
 export type PlanAction =
   | { type: 'retry-mistakes' }
@@ -107,6 +107,27 @@ export function generateTrainingPlan(
   return items.length > 0 ? { items } : null
 }
 
+// ── SRS 到期复习（v1.22） ─────────────────────────────────────────
+
+/** 题库中已练过且到期的题目数（用于「今日复习」卡片） */
+export function duePuzzleCount(pool: PuzzleItem[], now = Date.now()): number {
+  const keys = new Set(duePuzzleKeys(now, 500))
+  if (keys.size === 0) return 0
+  return pool.reduce((n, p) => n + (keys.has(puzzleKey(p)) ? 1 : 0), 0)
+}
+
+/**
+ * 取一道到期待复习的题（最早到期优先的键集里随机，避免每次都是同一题）。
+ * 没有到期题时返回 null。
+ */
+export function pickDuePuzzle(pool: PuzzleItem[], now = Date.now()): PuzzleItem | null {
+  const keys = duePuzzleKeys(now, 500)
+  if (keys.length === 0) return null
+  const dueSet = new Set(keys)
+  const due = pool.filter(p => dueSet.has(puzzleKey(p)))
+  if (due.length === 0) return null
+  return due[Math.floor(Math.random() * due.length)]
+}
 // ── 自适应出题（v1.21 训练闭环） ──────────────────────────────────
 
 export interface AdaptivePick {
@@ -173,7 +194,7 @@ export function pickAdaptivePuzzle(weakness: WeaknessAnalysis | null): AdaptiveP
   let chosen: PuzzleItem | null = null
   let chosenDiff: '初级' | '中级' | '高级' = targetDiff
   for (const d of ladder) {
-    const candidates = pool.filter(p => p.type === chosenType && difficultyFromDrop(p.type, p.score_drop ?? 0) === d)
+    const candidates = pool.filter(p => p.type === chosenType && puzzleDifficulty(p) === d)
     if (candidates.length > 0) {
       chosen = candidates[Math.floor(Math.random() * candidates.length)]
       chosenDiff = d

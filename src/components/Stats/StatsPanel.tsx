@@ -7,7 +7,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { getStats, getWeaknessAnalysis, getMistakes, getAllGames, getOutcomeSeries } from '../../game/storage'
+import { getStats, getWeaknessAnalysis, getMistakes, getAllGames, getOutcomeSeries, playerSideOfGame } from '../../game/storage'
 import type { PlayerOutcome } from '../../game/storage'
 import { generateTrainingPlan } from '../../game/training'
 import { getRatingState, getRank, resetRating } from '../../game/rating'
@@ -31,6 +31,7 @@ export const StatsPanel: React.FC = () => {
   const winRateNum = stats.totalGames > 0 ? (stats.wins / stats.totalGames) * 100 : 0
   const setTab = useStore(s => s.setTab)
   const setGamesSubTab = useStore(s => s.setGamesSubTab)
+  const setMobilePage = useStore(s => s.setMobilePage)
   /** 棋力分版本号：终局结算后刷新卡片 */
   const ratingVersion = useStore(s => s.lastRatingChange?.after)
 
@@ -43,7 +44,7 @@ export const StatsPanel: React.FC = () => {
   const plan = useMemo(() => {
     const games = getAllGames()
     const unanalyzed = games.filter(
-      g => g.analysisStatus !== 'complete' && (g.header.Red === '玩家' || g.header.Black === '玩家'),
+      g => g.analysisStatus !== 'complete' && playerSideOfGame(g) !== null,
     ).length
     return generateTrainingPlan(weakness, getMistakes(), unanalyzed, winRateNum, stats.totalGames)
   }, [weakness, winRateNum, stats.totalGames])
@@ -55,6 +56,8 @@ export const StatsPanel: React.FC = () => {
     if (type === 'retry-mistakes') { setGamesSubTab('mistakes'); setTab('games') }
     else if (type === 'endgame-training' || type === 'opening-training') { setGamesSubTab('training'); setTab('games') }
     else { setGamesSubTab('list'); setTab('games') }
+    // 移动端按 mobilePage 渲染，只 setTab 会停在设置页（历史 bug）
+    setMobilePage('games')
   }
 
   const winRate = stats.totalGames > 0 ? winRateNum.toFixed(1) : '0.0'

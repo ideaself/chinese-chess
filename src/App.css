@@ -938,6 +938,12 @@ kbd {
   padding: 5px 9px; font-size: 12px; max-width: 180px;
 }
 .settings-select:focus { outline: none; border-color: var(--accent); }
+.settings-input {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 5px 9px; font-size: 12px; width: 180px; max-width: 55vw;
+}
+.settings-input:focus { outline: none; border-color: var(--accent); }
 input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 
 /* ── 战绩统计 ─────────────────────────────────────────────────── */
@@ -1272,6 +1278,29 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   margin-bottom: 6px;
 }
 .puzzle-answer b { color: var(--accent); }
+
+/* 分级提示（子力 → 着法性质） */
+.puzzle-hint-lines {
+  padding: 9px 13px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,196,0,0.10);
+  border: 1px solid rgba(255,196,0,0.28);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.puzzle-hint-lines b { color: var(--accent); }
+
+/* 答案之后的引擎变化线 */
+.puzzle-line {
+  margin-bottom: 8px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  background: rgba(74,158,255,0.07);
+  border: 1px solid rgba(74,158,255,0.2);
+}
+.puzzle-line .info-label { font-size: 12px; color: var(--text-3); margin-bottom: 4px; }
 
 /* ── 响应式 ───────────────────────────────────────────────────── */
 

@@ -14,6 +14,7 @@ import { useStore } from '../../store/useStore'
 import { getStateAtPly } from '../../game/model'
 import { boardToFen } from '../../game/board'
 import { chineseFromFen, pvToChinese } from '../../game/rules'
+import { redScoreFromFen, toRedScore, fenTurn } from '../../game/evalScore'
 import { generateGameSummary } from '../../game/summary'
 import { getSettings, saveSettings } from '../../game/storage'
 import { acquireEngineSlot, releaseEngineSlot } from '../../game/masterPreanalysis'
@@ -103,6 +104,10 @@ export const AnalysisPanel: React.FC = () => {
     ? game.startFen
     : boardToFen(getStateAtPly(game.startFen, game.plies, currentPlyIndex))
 
+  // 引擎分是行棋方视角，界面统一按红方视角展示（曾把黑方行棋的分当红方显示，红黑颠倒）
+  const analysisScoreRed = analysis ? redScoreFromFen(analysis.score, analysis.fen) : null
+  const candScoreRed = (score: number) => toRedScore(score, fenTurn(currentFen))
+
   // 本局总结（整盘分析完成后生成，计划第18节）
   const summary = useMemo(
     () => (game.analysisStatus === 'complete' ? generateGameSummary(game) : null),
@@ -185,8 +190,8 @@ export const AnalysisPanel: React.FC = () => {
             </div>
             <div className="info-row">
               <span className="info-label">评估</span>
-              <span className={`info-value ${analysis.score >= 0 ? 'score-red' : 'score-black'}`}>
-                {formatScore(analysis.score)}
+              <span className={`info-value ${analysisScoreRed! >= 0 ? 'score-red' : 'score-black'}`}>
+                {formatScore(analysisScoreRed!)}
               </span>
             </div>
             {analysis.bestMove && analysis.bestMove.length >= 4 && (
@@ -240,18 +245,21 @@ export const AnalysisPanel: React.FC = () => {
            )}
            {cands && cands.length > 0 && (
              <div className="cand-list">
-               {cands.map((c, i) => (
+               {cands.map((c, i) => {
+                 const red = candScoreRed(c.score)
+                 return (
                  <button key={c.uci + i} className="cand-row"
                    disabled={mode !== 'replay'}
                    onClick={() => playCandidate(c.uci)}>
                    <span className="cand-rank">{i + 1}</span>
                    <span className="cand-move">{c.cn}</span>
-                   <span className={`cand-score ${c.score >= 0 ? 'score-red' : 'score-black'}`}>
-                     {c.score >= 100000 ? '胜势' : c.score <= -100000 ? '败势'
-                       : (c.score / 100 >= 0 ? '+' : '') + (c.score / 100).toFixed(2)}
+                   <span className={`cand-score ${red >= 0 ? 'score-red' : 'score-black'}`}>
+                     {red >= 100000 ? '胜势' : red <= -100000 ? '败势'
+                       : (red / 100 >= 0 ? '+' : '') + (red / 100).toFixed(2)}
                    </span>
                  </button>
-               ))}
+                 )
+               })}
              </div>
            )}
            {cands && cands.length === 0 && (

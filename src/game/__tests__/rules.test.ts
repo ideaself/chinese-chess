@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { boardFromFen } from '../board'
-import { getLegalMoves, getAllLegalMoves, getGameStatus } from '../rules'
+import { getLegalMoves, getAllLegalMoves, getGameStatus, hasLegalMove } from '../rules'
 
 const has = (moves: { col: number; row: number }[], c: number, r: number) =>
   moves.some(m => m.col === c && m.row === r)
@@ -99,5 +99,20 @@ describe('初始局面', () => {
     const st = boardFromFen('rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w')
     expect(getAllLegalMoves(st).length).toBe(44)
     expect(getGameStatus(st).isGameOver).toBe(false)
+  })
+})
+
+describe('hasLegalMove（提前退出的将死判定）', () => {
+  it('与 getAllLegalMoves 的判空结果一致', () => {
+    const fens = [
+      'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w', // 开局
+      'R3k4/9/9/9/9/9/9/9/9/4K4 b',                                   // 被将死
+      '4k4/3P1PR2/9/9/9/9/9/9/9/4K4 b',                               // 困毙
+      '3ak3/2C1k4/9/9/9/9/9/9/9/4K4 w',                               // 未结束
+    ]
+    for (const fen of fens) {
+      const st = boardFromFen(fen)
+      expect(hasLegalMove(st), fen).toBe(getAllLegalMoves(st).length > 0)
+    }
   })
 })

@@ -75,6 +75,37 @@ export function isBookLoaded(): boolean {
   return bigBook !== null
 }
 
+/**
+ * 取某个局面的候选着法（按出现次数降序），开局训练用。
+ * 开局书未加载或该局面不在库中时返回 null。
+ */
+export function getBookCandidates(moves: string[]): BookCandidate[] | null {
+  const table = bigBook?.positions
+  if (!table) return null
+  const list = table[moves.join(' ')]
+  if (!list || list.length === 0) return null
+  return [...list].sort((a, b) => b.n - a.n)
+}
+
+/**
+ * 开局书里"有后续数据"的首着手，按到达局数降序。
+ *
+ * 注意：起始局面的候选表只保留了极少数首着（book-gen 按行棋方得分率裁剪），
+ * 因此生成训练线路要遍历一步键，而不是只看起始局面的候选。
+ */
+export function getBookFirstMoves(): string[] {
+  const table = bigBook?.positions
+  if (!table) return []
+  const count = (prefix: string) =>
+    (table[prefix] ?? []).reduce((sum, c) => sum + c.n, 0)
+  return Object.keys(table)
+    .filter(k => k.length > 0 && !k.includes(' '))
+    .sort((a, b) => count(b) - count(a))
+}
+export function getBookMaxPly(): number {
+  return bigBook?.maxPly ?? 0
+}
+
 // ── 查询 ──────────────────────────────────────────────────────────
 
 /**

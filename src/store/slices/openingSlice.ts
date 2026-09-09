@@ -4,7 +4,8 @@
 import type { AppState, StoreSet, StoreGet } from '../types'
 import { makeMove, boardFromFen, START_FEN } from '../../game/board'
 import { createEmptyGame } from '../../game/model'
-import { OPENING_LINES } from '../../game/openings'
+import { getOpeningLines } from '../../game/openings'
+import { recordOpeningStart, recordOpeningDone } from '../../game/progress'
 
 
 
@@ -21,6 +22,7 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const replayOrigin = get().mobilePage
     const replayOriginTab = get().activeTab
 
+    recordOpeningStart(lineId)
     set({
       mode: 'play',
       openingTraining: { lineId, index: 0, status: 'playing' },
@@ -62,7 +64,7 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     openingTryMove: (from, to) => {
     const ot = get().openingTraining
     if (!ot) return false
-    const line = OPENING_LINES.find(l => l.id === ot.lineId)
+    const line = getOpeningLines().find(l => l.id === ot.lineId)
     if (!line || ot.index >= line.moves.length) return false
 
     const uci = `${String.fromCharCode(97 + from.col)}${from.row}${String.fromCharCode(97 + to.col)}${to.row}`
@@ -102,9 +104,13 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           board: st2,
           lastMove: { from: oppFrom, to: oppTo, turn: ob.turn },
         })
-        if (done) get().showToast('🎉 定式走完！你已掌握这条开局')
+        if (done) {
+          recordOpeningDone(ot.lineId)
+          get().showToast('🎉 定式走完！你已掌握这条开局')
+        }
       }, 600)
     } else {
+      recordOpeningDone(ot.lineId)
       get().showToast('🎉 定式走完！你已掌握这条开局')
       set({ openingTraining: { ...get().openingTraining!, status: 'done' } })
     }

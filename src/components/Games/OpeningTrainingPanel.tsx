@@ -7,14 +7,15 @@
 
 import React from 'react'
 import { useStore } from '../../store/useStore'
-import { OPENING_LINES } from '../../game/openings'
+import { getOpeningLines } from '../../game/openings'
 
 export const OpeningTrainingPanel: React.FC = () => {
   const openingTraining = useStore(s => s.openingTraining)
   const exitOpeningTraining = useStore(s => s.exitOpeningTraining)
   const startOpeningTraining = useStore(s => s.startOpeningTraining)
 
-  const line = openingTraining ? OPENING_LINES.find(l => l.id === openingTraining.lineId) : null
+  const lines = getOpeningLines()
+  const line = openingTraining ? lines.find(l => l.id === openingTraining.lineId) : null
 
   // ── 训练进行中 ──
   if (openingTraining && line) {
@@ -66,7 +67,7 @@ export const OpeningTrainingPanel: React.FC = () => {
           <button
             className="btn"
             onClick={() => {
-              const others = OPENING_LINES.filter(l => l.id !== line.id)
+              const others = lines.filter(l => l.id !== line.id)
               startOpeningTraining(others[Math.floor(Math.random() * others.length)].id)
             }}
           >🔄 换一条</button>
@@ -75,28 +76,5 @@ export const OpeningTrainingPanel: React.FC = () => {
     )
   }
 
-  // ── 线路选择 ──
-  return (
-    <div className="controls">
-      <div className="ctrl-title">选择一条开局定式开始训练</div>
-      <div className="training-list">
-        {OPENING_LINES.map(l => (
-          <div key={l.id} className="training-item">
-            <div className="training-info">
-              <div className="training-name">{l.name}</div>
-              <div className="training-desc">{l.desc}</div>
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ padding: '8px 16px', flexShrink: 0 }}
-              onClick={() => startOpeningTraining(l.id)}
-            >开始</button>
-          </div>
-        ))}
-      </div>
-      <div className="panel-hint">
-        训练规则：你执红按定式行棋，走对自动演示对方应手，走偏会提示正确着法。
-      </div>
-    </div>
-  )
+  // 线路选择由训练面板（TrainingPanel）负责，本面板只在训练进行中渲染
 }

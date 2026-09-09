@@ -17,6 +17,7 @@ import { uploadBackupWithHistory, downloadBackup, getLastSync, diagnoseConnectio
 import type { DiagStep } from './game/webdav'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
+import { ENDGAME_PRESETS } from './game/endgames'
 import { resumeAudio } from './game/sound'
 import { fetchModels } from './game/coach/aiCoach'
 import { APP_VERSION } from './version'
@@ -470,11 +471,34 @@ const GameOverModal: React.FC<{
   const analyzeCurrentGame = useStore(s => s.analyzeCurrentGame)
   const lastRatingChange = useStore(s => s.lastRatingChange)
   const rank = useStore(s => (s.lastRatingChange ? getRank(s.lastRatingChange.after).tier.name : null))
+  // 残局训练：结算后直接进入下一关 / 返回训练列表（此前只能"再来一局"开普通对局）
+  const endgameTraining = useStore(s => s.endgameTraining)
+  const startEndgameTraining = useStore(s => s.startEndgameTraining)
+  const exitEndgameTraining = useStore(s => s.exitEndgameTraining)
+  const setGamesSubTab = useStore(s => s.setGamesSubTab)
+  const setMobilePage = useStore(s => s.setMobilePage)
 
   const handleReview = () => {
     loadGame(game.id)
     analyzeCurrentGame()
     setTab('analysis')
+  }
+
+  const endgamePreset = endgameTraining
+    ? ENDGAME_PRESETS.find(p => p.fen === game.startFen) ?? null
+    : null
+
+  const nextEndgame = () => {
+    const idx = endgamePreset ? ENDGAME_PRESETS.findIndex(p => p.id === endgamePreset.id) : -1
+    const next = ENDGAME_PRESETS[(idx + 1) % ENDGAME_PRESETS.length]
+    startEndgameTraining(next.fen, next.name)
+  }
+
+  const backToTraining = () => {
+    exitEndgameTraining()
+    setGamesSubTab('training')
+    setTab('games')
+    setMobilePage('games')
   }
 
   return (
@@ -507,9 +531,19 @@ const GameOverModal: React.FC<{
           </div>
         </div>
         <div className="game-over-actions">
-          <button className="btn btn-primary" onClick={restart}>再来一局</button>
-          <button className="btn btn-secondary" onClick={handleReview}>复盘本局</button>
-          <button className="btn btn-secondary" onClick={() => { loadGame(game.id); setTab('games') }}>查看棋谱</button>
+          {endgameTraining ? (
+            <>
+              <button className="btn btn-primary" onClick={nextEndgame}>下一关 →</button>
+              <button className="btn btn-secondary" onClick={backToTraining}>返回训练</button>
+              <button className="btn btn-secondary" onClick={handleReview}>复盘本局</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" onClick={restart}>再来一局</button>
+              <button className="btn btn-secondary" onClick={handleReview}>复盘本局</button>
+              <button className="btn btn-secondary" onClick={() => { loadGame(game.id); setTab('games') }}>查看棋谱</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -683,6 +717,17 @@ const SettingsPanel: React.FC = () => {
               <option value={500}>快</option>
               <option value={200}>极快</option>
             </select>
+          </div>
+          <div className="settings-row">
+            <span title="填写后，导入的棋谱（如天天象棋导出的 PGN）只要红方或黑方姓名与此一致，就会计入错题本、弱点分析、战绩与对局总结">
+              我的棋手名
+            </span>
+            <input className="settings-input" value={settings.myPlayerName}
+              placeholder="如：张三（留空则只统计 App 内对局）"
+              onChange={e => update({ myPlayerName: e.target.value })} />
+          </div>
+          <div className="panel-hint" style={{ marginTop: -4 }}>
+            填写「我的棋手名」后，导入自己的棋谱也会进入训练闭环（错题本 / 弱点分析 / 战绩 / 对局总结）。
           </div>
         </div>
         <div className="settings-group">

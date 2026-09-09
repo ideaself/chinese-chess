@@ -13,6 +13,7 @@ import {
   loadInsights, getInsights,
   type InsightsData, type MistakeCollection,
 } from '../../game/insights'
+import { BOARD_HOME } from '../../store/constants'
 
 const PAGE_SIZE = 40
 
@@ -47,7 +48,7 @@ export const InsightsPanel: React.FC = () => {
       black: m.black,
     })
     setTab('play')
-    setSheetTab('puzzle')
+    setSheetTab(BOARD_HOME)
   }
 
   const loadMore = useCallback(() => {
