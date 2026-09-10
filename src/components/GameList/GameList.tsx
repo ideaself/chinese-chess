@@ -9,7 +9,7 @@
  *   - 删除
  */
 
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Game } from '../../game/model'
 import { parsePGN, splitPGNGames } from '../../game/pgn'
@@ -39,7 +39,8 @@ export const GameList: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const backupInputRef = useRef<HTMLInputElement>(null)
 
-  const usage = getStorageUsage()
+  // 用量估算要对全库做 JSON.stringify：只在棋谱库变化时计算
+  const usage = useMemo(() => getStorageUsage(), [savedGames])
   const usagePct = Math.round((usage.bytes / usage.limitBytes) * 100)
   const usageKB = Math.max(1, Math.round(usage.bytes / 1024))
 
@@ -79,7 +80,7 @@ export const GameList: React.FC = () => {
     }
   }
 
-  const filtered = savedGames.filter(g => {
+  const filtered = useMemo(() => savedGames.filter(g => {
     if (filter === 'starred') return g.starred
     if (filter === 'wins') return g.result === '1-0'
     if (filter === 'losses') return g.result === '0-1'
@@ -94,7 +95,7 @@ export const GameList: React.FC = () => {
       (g.header.Event || '').toLowerCase().includes(q) ||
       (g.header.Date || '').includes(q)
     )
-  })
+  }), [savedGames, filter, query])
   const shownGames = filtered.slice(0, renderLimit)
 
   /** 筛选/搜索变化时重置分页 */

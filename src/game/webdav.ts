@@ -216,7 +216,7 @@ export async function uploadBackup(cred: WebdavCred): Promise<SyncResult> {
       await ensureCollection(alt)
       r = await wdRaw(alt, 'PUT', backupUrl(alt), json)
       if (r.ok || r.status === 201 || r.status === 204) {
-        saveCredToSettings(alt)
+        await saveCredToSettings(alt)
         markLastSync()
         return { ok: true, message: `已备份到云端 ${FALLBACK_DIR}/（原地址根目录不可写，已自动改用子目录并更新设置）` }
       }
@@ -245,7 +245,7 @@ export async function downloadBackup(cred: WebdavCred): Promise<SyncResult> {
       const alt: WebdavCred = { ...cred, url: cred.url + FALLBACK_DIR }
       r = await wdRaw(alt, 'GET', backupUrl(alt))
       if (r.ok) {
-        saveCredToSettings(alt)
+        await saveCredToSettings(alt)
         return finishDownload(r.text, `（于 ${FALLBACK_DIR}/ 找到，已更新设置为该子目录）`)
       }
     }
@@ -360,9 +360,10 @@ export function getLastSync(): number | null {
   }
 }
 
-/** 保存凭据到设置（明文存 localStorage，与 AI 教练 Key 同级） */
-export function saveCredToSettings(cred: WebdavCred): void {
-  saveSettings({ webdavUrl: cred.url, webdavUser: cred.user, webdavPassword: cred.password })
+/** 保存凭据：url/user 进设置，密码只进安全存储（不落明文，也不随备份上传） */
+export async function saveCredToSettings(cred: WebdavCred): Promise<void> {
+  saveSettings({ webdavUrl: cred.url, webdavUser: cred.user, webdavPassword: '' })
+  await storeWebdavPassword(cred.password)
 }
 
 // ── 连接诊断：自动探测可写位置 ────────────────────────────────────

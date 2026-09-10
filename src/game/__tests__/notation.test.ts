@@ -72,3 +72,25 @@ describe('真实棋谱 PGN 往返 (test.pgn)', () => {
     expect(r.success).toBe(false)
   })
 })
+
+describe('同列多子的歧义记谱', () => {
+  // 红方 a 列两车（row3 在前、row0 在后），e4 兵挡将
+  const fen = '4k4/9/9/9/9/4P4/R8/9/9/R3K4 w'
+
+  it('无前/后缀的歧义记谱拒绝解析（不再猜"最前的"）', () => {
+    const r = parsePGN(`[FEN "${fen}"]\n\n1. 车九进一`)
+    expect(r.success).toBe(false)
+  })
+
+  it('带前缀的记谱能正确解析', () => {
+    const r = parsePGN(`[FEN "${fen}"]\n\n1. 前车进一`)
+    expect(r.success).toBe(true)
+    expect(r.game?.plies[0].move).toBe('a3a4')
+  })
+
+  it('moveToChinese 对同列双车自动加前/后缀', () => {
+    const st = boardFromFen(fen)
+    expect(moveToChinese(st, { from: { col: 0, row: 3 }, to: { col: 0, row: 4 }, turn: 'w' })).toBe('前车进一')
+    expect(moveToChinese(st, { from: { col: 0, row: 0 }, to: { col: 0, row: 1 }, turn: 'w' })).toBe('后车进一')
+  })
+})

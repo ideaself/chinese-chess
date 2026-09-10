@@ -5,6 +5,7 @@ import type { AppState, StoreSet, StoreGet } from '../types'
 import { getSettings, saveSettings } from '../../game/storage'
 import { BOARD_HOME } from '../constants'
 import { consumeTopBackHandler, ensurePlaceholder, exitAppNative } from '../../game/backNav'
+import { MOBILE_QUERY } from '../../utils/useMediaQuery'
 
 
 /** toast 自动消失定时器 */
@@ -12,6 +13,13 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 根层最近一次按返回的时间（双击再退出） */
 let lastRootBackAt = 0
+
+/** 当前是否为移动端布局（与 App/Board 的 useMediaQuery 同源） */
+function isMobileLayout(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia(MOBILE_QUERY).matches
+}
 
 
 export type MobilePage = 'home' | 'play' | 'games' | 'settings'
@@ -75,7 +83,7 @@ export function createUiSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const st = get()
 
     // ── 移动端层级导航 ──
-    if (st.mobilePage !== undefined) {
+    if (isMobileLayout()) {
       // 1) 面板内子级页（棋手页/筛选等自注册层）优先消费
       if (consumeTopBackHandler()) {
         ensurePlaceholder(true)

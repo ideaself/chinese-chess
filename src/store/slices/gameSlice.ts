@@ -6,14 +6,14 @@ import type { Turn } from '../types'
 import type { Game } from '../../game/model'
 import { boardFromFen, boardToFen, START_FEN } from '../../game/board'
 import { getLegalMoves, getGameStatus } from '../../game/rules'
-import { createEmptyGame, addPlyToGame, getFenSequence } from '../../game/model'
+import { createEmptyGame, addPlyToGame, getPositionStrings } from '../../game/model'
 import { parsePGN, exportPGN } from '../../game/pgn'
 import { saveGame as storageSaveGame, getAllGames, getSettings, deleteGame as storageDeleteGame } from '../../game/storage'
 import { scheduleAutoSync } from '../../game/webdav'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
 import { ENDGAME_PRESETS } from '../../game/endgames'
 import { recordEndgameResult } from '../../game/progress'
-import { settleRating, boardFromGame, parseMoveFromUci } from '../helpers'
+import { settleRating, boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
 import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckVoice, playCheckHaptic, playMoveHaptic, playGameOverHaptic } from '../../game/sound'
@@ -115,6 +115,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     startNewGame: (difficulty, playerSide, control) => {
     const { timerInterval } = get()
     if (timerInterval) clearInterval(timerInterval)
+    // 中止进行中的引擎搜索，避免旧局 bestmove 串到新局
+    get().engine?.stop()
 
     // 对局角色：未指定时按 playerSide 推导（单人机）
     const sideControl: SideControl = control ?? {
@@ -163,15 +165,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     }
 
     // 启动计时器 (红方先手)
-    const interval = setInterval(() => {
-      const { mode, board, redTime, blackTime } = get()
-      if (mode !== 'play') return
-      if (board.turn === 'w') {
-        set({ redTime: redTime + 100 })
-      } else {
-        set({ blackTime: blackTime + 100 })
-      }
-    }, 100)
+    const interval = startGameClock(set, get)
     set({ timerInterval: interval })
 
     // AI 先手时自动走棋（红方先手）
@@ -254,7 +248,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const newState = boardFromFen(ply.fenAfter)
 
     // 检查对局状态
-    const status = getGameStatus(newState, getFenSequence(updatedGame))
+    const status = getGameStatus(newState, getPositionStrings(updatedGame))
 
     set({
       game: updatedGame,
@@ -440,6 +434,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   /** 直接载入一个未入存储的棋谱（大师库浏览用，不写 localStorage） */
 
     loadGameObject: (game) => {
+    // 中止进行中的引擎搜索，避免旧局面结果写入新载入的棋谱
+    get().engine?.stop()
     const replayOrigin = get().mobilePage
     const replayOriginTab = get().activeTab
     const board = boardFromGame(game, game.plies.length)
@@ -478,6 +474,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       console.error('PGN 解析失败:', result.error)
       return false
     }
+    get().engine?.stop()
     const replayOrigin = get().mobilePage
     const replayOriginTab = get().activeTab
     const board = boardFromGame(result.game, result.game.plies.length)

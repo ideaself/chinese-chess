@@ -7,7 +7,7 @@ import { makeMove, boardFromFen, boardToFen, coordToPos } from '../../game/board
 import { chineseFromFen, pvToChinese } from '../../game/rules'
 import { createEmptyGame } from '../../game/model'
 import { getAllGames } from '../../game/storage'
-import { boardFromGame, parseMoveFromUci } from '../helpers'
+import { boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
 import { BOARD_HOME } from '../constants'
 import type { PuzzleItem } from '../../game/puzzles'
 import { recordPuzzleCorrect, recordPuzzleWrong, getDailyPuzzle, getPuzzles, puzzleAnswer, puzzleKey, puzzleDifficulty, puzzleTask, puzzleDropText } from '../../game/puzzles'
@@ -249,14 +249,14 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   },
 
     exitPuzzle: () => {
-    const { game, currentPlyIndex, replayOrigin, replayOriginTab } = get()
+    const { game, currentPlyIndex, replayOrigin, replayOriginTab, modeBeforeSetup } = get()
     activeMistakeKey = null
     // 题库题是单步合成棋局：还原进入前的对局，不要停在"假复盘"上
     const back = puzzleReturn
     puzzleReturn = null
     const restore = back
       ? { game: back.game, mode: back.mode, currentPlyIndex: back.currentPlyIndex, board: boardFromGame(back.game, back.currentPlyIndex) }
-      : { board: boardFromGame(game, currentPlyIndex) }
+      : { mode: modeBeforeSetup === 'puzzle' ? ('replay' as const) : modeBeforeSetup, board: boardFromGame(game, currentPlyIndex) }
     set({
       ...restore,
       endgameTraining: false,
@@ -274,6 +274,13 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       replayOrigin: null,
       replayOriginTab: null,
     })
+
+    // 回到进行中的对局时恢复棋钟（进入题目时已 clearInterval）
+    const st = get()
+    if (st.mode === 'play' && st.game.result === '*' && !st.timerInterval
+      && !st.openingTraining && !st.endgameTraining) {
+      set({ timerInterval: startGameClock(set, get) })
+    }
   },
 
   /** 重走尝试: 命中最佳着法 → 正确；否则提示再想想（不落子） */
@@ -450,15 +457,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       replayOriginTab,
     })
 
-    const interval = setInterval(() => {
-      const { mode, board, redTime, blackTime } = get()
-      if (mode !== 'play') return
-      if (board.turn === 'w') {
-        set({ redTime: redTime + 100 })
-      } else {
-        set({ blackTime: blackTime + 100 })
-      }
-    }, 100)
+    const interval = startGameClock(set, get)
     set({ timerInterval: interval })
   },
 

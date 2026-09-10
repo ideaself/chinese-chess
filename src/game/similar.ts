@@ -78,12 +78,17 @@ export async function loadMetaFor(gameIds: number[]): Promise<void> {
     metaLoading.add(file)
     try {
       const res = await fetch(`similar/${file}`)
-      if (!res.ok) continue
+      if (!res.ok) {
+        metaLoading.delete(file) // 失败允许下次重试（否则本会话永久跳过）
+        continue
+      }
       const data: { meta: Record<string, GameMeta> } = await res.json()
       for (const [k, v] of Object.entries(data.meta)) {
         metaCache.set(parseInt(k), v)
       }
-    } catch { /* 静默 */ }
+    } catch {
+      metaLoading.delete(file) // 静默，且允许重试
+    }
   }
 }
 
@@ -131,5 +136,6 @@ export function canOpenGame(gameId: number): boolean {
 export function _clearSimilarCache(): void {
   shardCache.clear()
   metaCache.clear()
+  metaLoading = new Set()
   openableMaxId = null
 }

@@ -300,6 +300,23 @@ export function moveToChinese(state: BoardState, move: Move): string {
 
   const name = pieceToChinese(piece, state.turn)
 
+  // 同列同类子 2~3 个：标准记谱用 前/中/后 前缀并省略列号，
+  // 否则「马4进6」这类记谱有歧义（解析侧会拒绝）
+  let subject = `${name}${fromColName}`
+  const sameColRows: number[] = []
+  for (let r = 0; r < ROWS; r++) {
+    if (state.board[move.from.col][r] === piece) sameColRows.push(r)
+  }
+  if (sameColRows.length >= 2 && sameColRows.length <= 3) {
+    // 前后顺序：红方 row 大者在前，黑方 row 小者在前（与解析侧一致）
+    const ordered = [...sameColRows].sort((a, b) => (isRedTurn ? b - a : a - b))
+    const idx = ordered.indexOf(move.from.row)
+    const prefix = ordered.length === 2
+      ? (idx === 0 ? '前' : '后')
+      : (idx === 0 ? '前' : idx === 1 ? '中' : '后')
+    subject = `${prefix}${name}`
+  }
+
   // 进: 红方向前 = row 增大；黑方向前 = row 减小
   const forward = isRedTurn ? rowDiff > 0 : rowDiff < 0
   const action = forward ? '进' : '退'
@@ -307,16 +324,16 @@ export function moveToChinese(state: BoardState, move: Move): string {
   if (colDiff === 0) {
     // 直线纵向移动（帅/车/炮/兵）: 用步数（红方中文数字，黑方阿拉伯数字）
     const steps = Math.abs(rowDiff)
-    return `${name}${fromColName}${action}${isRedTurn ? numToChinese(steps) : String(steps)}`
+    return `${subject}${action}${isRedTurn ? numToChinese(steps) : String(steps)}`
   }
 
   if (type === 'N' || type === 'B' || type === 'A') {
     // 斜走棋子（马/相/仕）: 用目标列号
-    return `${name}${fromColName}${action}${toColName}`
+    return `${subject}${action}${toColName}`
   }
 
   // 横线移动（平）
-  return `${name}${fromColName}平${toColName}`
+  return `${subject}平${toColName}`
 }
 
 /**

@@ -5,7 +5,7 @@
  * 支持"已掌握"标记与筛选，可发起重走训练。
  */
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import {
   getMistakes, getMasteredKeys, toggleMastered,
@@ -29,16 +29,20 @@ export const MistakeBook: React.FC = () => {
 
   const [filter, setFilter] = useState<Filter>('todo')
   const [version, setVersion] = useState(0) // 切换掌握状态后强制刷新
+  const savedGames = useStore(s => s.savedGames)
 
-  const all = getMistakes()
-  const masteredKeys = getMasteredKeys()
+  // 全库扫描 + JSON 解析开销大：只在棋谱库或掌握状态变化时重算
+  const { all, masteredKeys, quizMistakes, dueKeys } = useMemo(() => ({
+    all: getMistakes(),
+    masteredKeys: getMasteredKeys(),
+    quizMistakes: getQuizMistakes(),
+    dueKeys: new Set(dueMistakeKeys()),
+  }), [version, savedGames])
   const mistakes = all.filter(m =>
     filter === 'all' ? true : filter === 'mastered' ? masteredKeys.has(m.key) : !masteredKeys.has(m.key),
   )
-  const quizMistakes = getQuizMistakes()
   const replayQuizMistake = useStore(s => s.replayQuizMistake)
   // SRS：到期的错题排前面并给出数量（答对间隔 1→3→7→21→60 天，答错 10 分钟后再来）
-  const dueKeys = new Set(dueMistakeKeys())
   const dueCount = mistakes.filter(m => dueKeys.has(m.key)).length
   const ordered = [...mistakes].sort(
     (a, b) => Number(dueKeys.has(b.key)) - Number(dueKeys.has(a.key)),

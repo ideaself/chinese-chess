@@ -3,7 +3,7 @@
  */
 import type { Move, Turn } from '../game/board'
 import type { Game } from '../game/model'
-import type { Difficulty, LastRatingChange } from './types'
+import type { Difficulty, LastRatingChange, StoreSet, StoreGet } from './types'
 import type { BoardState } from '../game/board'
 import { boardFromFen } from '../game/board'
 import { getStateAtPly } from '../game/model'
@@ -52,4 +52,18 @@ export function parseMoveFromUci(uci: string, turn: Turn): Move {
     to: { col: uci.charCodeAt(2) - 97, row: parseInt(uci[3]) },
     turn,
   }
+}
+
+/**
+ * 启动棋钟：1 秒一跳。
+ * 界面只显示到秒，100ms 更新会让订阅时间的组件树以 10Hz 重渲染。
+ * 返回 interval id，调用方负责 clearInterval 并写入 timerInterval。
+ */
+export function startGameClock(set: StoreSet, get: StoreGet): ReturnType<typeof setInterval> {
+  return setInterval(() => {
+    const { mode, board, redTime, blackTime } = get()
+    if (mode !== 'play') return
+    if (board.turn === 'w') set({ redTime: redTime + 1000 })
+    else set({ blackTime: blackTime + 1000 })
+  }, 1000)
 }

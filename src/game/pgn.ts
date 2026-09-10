@@ -229,8 +229,9 @@ function parseChineseMove(token: string, fen: string): { from: { col: number; ro
   } else if (candidates.length === 1) {
     fromRow = candidates[0]
   } else {
-    // 同列多个但无前缀，取最前的
-    fromRow = ordered[0]
+    // 同列多个同类子却没有（或不足的）前/后/中前缀：歧义记谱
+    // 拒绝解析而不是猜"最前的"，否则导入棋谱会悄悄走错子
+    return null
   }
 
   // 目标位置

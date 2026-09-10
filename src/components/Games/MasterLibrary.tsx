@@ -82,7 +82,8 @@ export const MasterLibrary: React.FC = () => {
     setLoadingMore(true)
     try {
       await loadMoreGames()
-      setGames(getCachedLibrary() ?? [])
+      // 库缓存是原地 push 的同一数组，必须复制新引用才能触发 React 更新
+      setGames([...(getCachedLibrary() ?? [])])
       setInfo(getLibraryInfo())
     } catch (e) {
       showToast(`加载更多失败: ${e instanceof Error ? e.message : e}`)

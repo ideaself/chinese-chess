@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { boardFromFen } from '../board'
 import { getLegalMoves, getAllLegalMoves, getGameStatus, hasLegalMove } from '../rules'
+import { addPlyToGame, createEmptyGame, getPositionStrings } from '../model'
 
 const has = (moves: { col: number; row: number }[], c: number, r: number) =>
   moves.some(m => m.col === c && m.row === r)
@@ -114,5 +115,28 @@ describe('hasLegalMove（提前退出的将死判定）', () => {
       const st = boardFromFen(fen)
       expect(hasLegalMove(st), fen).toBe(getAllLegalMoves(st).length > 0)
     }
+  })
+})
+
+describe('三次重复局面（长将/长捉判和）', () => {
+  it('步数计数不同的同一局面也能判和（曾用带计数的 FEN 序列导致永不触发）', () => {
+    const startFen = '4k4/9/9/9/4P4/9/9/9/9/R3K4 w'
+    let game = createEmptyGame()
+    game.startFen = startFen
+    // 车帅往返两轮：起始局面在序列中出现 3 次（第 0/4/8 手后）
+    for (const uci of ['a0a1', 'e9e8', 'a1a0', 'e8e9', 'a0a1', 'e9e8', 'a1a0', 'e8e9']) {
+      const fenBefore = game.plies.length === 0
+        ? startFen
+        : game.plies[game.plies.length - 1].fenAfter
+      game = addPlyToGame(game, uci, fenBefore).game
+    }
+    const positions = getPositionStrings(game)
+    const startPos = startFen.split(' ').slice(0, 2).join(' ')
+    expect(positions.filter(p => p === startPos)).toHaveLength(3)
+
+    const status = getGameStatus(boardFromFen(startFen), positions)
+    expect(status.isGameOver).toBe(true)
+    expect(status.result).toBe('1/2-1/2')
+    expect(status.reason).toContain('重复')
   })
 })

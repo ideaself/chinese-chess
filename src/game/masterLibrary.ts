@@ -45,6 +45,7 @@ export function ensureManifest(): Promise<LibraryManifest | null> {
         manifest = (await m.json()) as LibraryManifest
         return manifest
       } catch {
+        manifestPromise = null // 失败不永久缓存，允许下次重试
         return null
       }
     })()
@@ -77,7 +78,10 @@ export function loadLibrary(): Promise<void> {
       }))
       cacheGames = shardGames.flat().map(g => ({ ...g, cls: classifyRecord(g) }))
       loadedShards = mf.shards.length
-    })()
+    })().catch(e => {
+      cachePromise = null // 失败不永久缓存，允许重试
+      throw e
+    })
   }
   return cachePromise
 }
@@ -87,14 +91,21 @@ export async function loadLibraryPrefix(n: number): Promise<void> {
   const mf = await ensureManifest()
   if (!mf) throw new Error('manifest 加载失败')
   if (cacheGames && loadedShards > 0) return // 已有进度，续载交给 loadMoreGames
-  cacheGames = []
   const take = mf.shards.slice(0, Math.max(1, Math.min(n, mf.shards.length)))
-  const shardGames = await Promise.all(take.map(async name => {
+  // 先并行拿响应，再逐片解析+分类，并在片间让出一帧：
+  // 数十分片一次性 JSON.parse + classify 会形成主线程长任务，打开列表明显卡顿
+  const responses = await Promise.all(take.map(async name => {
     const res = await fetch(`master-games/${name}`)
     if (!res.ok) throw new Error(`分片 ${name} 加载失败 (HTTP ${res.status})`)
-    return (await res.json()) as MasterRecord[]
+    return res
   }))
-  cacheGames = shardGames.flat().map(g => ({ ...g, cls: classifyRecord(g) }))
+  const games: LibraryGame[] = []
+  for (let i = 0; i < responses.length; i++) {
+    const recs = (await responses[i].json()) as MasterRecord[]
+    for (const g of recs) games.push({ ...g, cls: classifyRecord(g) })
+    if (i < responses.length - 1) await new Promise(resolve => setTimeout(resolve, 0))
+  }
+  cacheGames = games
   loadedShards = take.length
 }
 

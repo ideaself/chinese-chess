@@ -26,14 +26,20 @@ const PHASE_NAMES: Record<string, string> = {
 }
 
 export const StatsPanel: React.FC = () => {
-  const stats = getStats()
-  const weakness = getWeaknessAnalysis()
-  const winRateNum = stats.totalGames > 0 ? (stats.wins / stats.totalGames) * 100 : 0
   const setTab = useStore(s => s.setTab)
   const setGamesSubTab = useStore(s => s.setGamesSubTab)
   const setMobilePage = useStore(s => s.setMobilePage)
+  /** 棋谱库版本（引用变化时重算全库统计） */
+  const savedGames = useStore(s => s.savedGames)
   /** 棋力分版本号：终局结算后刷新卡片 */
   const ratingVersion = useStore(s => s.lastRatingChange?.after)
+
+  // 全库扫描开销大：只在棋谱库引用变化时重算（此前每次渲染都重新扫描）
+  const { stats, weakness } = useMemo(() => ({
+    stats: getStats(),
+    weakness: getWeaknessAnalysis(),
+  }), [savedGames])
+  const winRateNum = stats.totalGames > 0 ? (stats.wins / stats.totalGames) * 100 : 0
 
   // 棋力分状态（结算/重置后刷新）
   const [refresh, setRefresh] = useState(0)
@@ -47,10 +53,10 @@ export const StatsPanel: React.FC = () => {
       g => g.analysisStatus !== 'complete' && playerSideOfGame(g) !== null,
     ).length
     return generateTrainingPlan(weakness, getMistakes(), unanalyzed, winRateNum, stats.totalGames)
-  }, [weakness, winRateNum, stats.totalGames])
+  }, [weakness, winRateNum, stats.totalGames, savedGames])
 
   // 胜率走势（完整胜负序列）
-  const allOutcomes = useMemo(() => getOutcomeSeries(), [stats.totalGames])
+  const allOutcomes = useMemo(() => getOutcomeSeries(), [savedGames])
 
   const goAction = (type: string) => {
     if (type === 'retry-mistakes') { setGamesSubTab('mistakes'); setTab('games') }

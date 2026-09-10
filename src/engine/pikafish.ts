@@ -67,6 +67,8 @@ export class PikafishEngine {
   private ws: WebSocket | null = null
   private useWebSocket = false
   private wsFailed = false
+  /** 搜索看门狗：引擎迟迟不返回 bestmove 时强制结算，避免上层永久挂起 */
+  private searchTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: EngineOptions = {}) {
     this.depth = options.depth ?? 16
@@ -327,28 +329,16 @@ export class PikafishEngine {
 
   async go(fen: string, moves: string[] = [], depth?: number, ms?: number, onInfo?: (info: EngineInfo) => void): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
-    const d = depth ?? this.depth
-    this.status = 'thinking'
+    this.abortPendingSearch()
     this.onInfoCallback = onInfo ?? null
-    return new Promise<string>((resolve) => {
-      this.onBestMoveCallback = (move) => { this.status = 'idle'; resolve(move) }
-      this.setPosition(fen, moves)
-      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
-      this.sendCommand(ms ? `go movetime ${ms}` : `go depth ${d}`)
-    })
+    return this.beginSearch(fen, moves, depth ?? this.depth, ms, move => move)
   }
 
   analyze(fen: string, moves: string[] = [], depth?: number, onInfo?: (info: EngineInfo) => void, ms?: number): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
-    const d = depth ?? this.depth
-    this.status = 'thinking'
+    this.abortPendingSearch()
     this.onInfoCallback = onInfo ?? null
-    return new Promise<string>((resolve) => {
-      this.onBestMoveCallback = (move) => { this.status = 'idle'; resolve(move) }
-      this.setPosition(fen, moves)
-      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
-      this.sendCommand(ms ? `go movetime ${ms}` : `go depth ${d}`)
-    })
+    return this.beginSearch(fen, moves, depth ?? this.depth, ms, move => move)
   }
 
   /**
@@ -364,10 +354,10 @@ export class PikafishEngine {
     timeMs?: number,
   ): Promise<EngineInfo[]> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
+    this.abortPendingSearch()
     const sortLines = (m: Map<number, EngineInfo>) =>
       [...m.values()].sort((a, b) => (a.multipv ?? 1) - (b.multipv ?? 1))
 
-    this.status = 'thinking'
     this.sendCommand(`setoption name MultiPV value ${multiPV}`)
 
     const lines = new Map<number, EngineInfo>()
@@ -379,20 +369,67 @@ export class PikafishEngine {
       lines.set(key, merged)
       onUpdate?.(sortLines(lines))
     }
-    return new Promise<EngineInfo[]>((resolve) => {
-      this.onBestMoveCallback = () => {
-        this.status = 'idle'
-        // 恢复单 PV，避免影响对局/复盘分析
-        this.sendCommand('setoption name MultiPV value 1')
-        resolve(sortLines(lines))
-      }
-      this.setPosition(fen, moves)
-      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
-      this.sendCommand(timeMs ? `go movetime ${timeMs}` : `go depth ${depth}`)
+    return this.beginSearch(fen, moves, depth, timeMs, () => {
+      // 恢复单 PV，避免影响对局/复盘分析
+      this.sendCommand('setoption name MultiPV value 1')
+      return sortLines(lines)
     })
   }
 
-  stop() { this.sendCommand('stop'); this.status = 'idle' }
+  /** 启动一次搜索：统一挂看门狗，bestmove/超时/stop 三路都会结算 Promise */
+  private beginSearch<T>(
+    fen: string,
+    moves: string[],
+    depth: number,
+    ms: number | undefined,
+    finalize: (move: string) => T,
+  ): Promise<T> {
+    this.status = 'thinking'
+    return new Promise<T>((resolve) => {
+      this.onBestMoveCallback = (move) => {
+        const value = finalize(move)
+        this.clearSearch()
+        this.status = 'idle'
+        resolve(value)
+      }
+      // 时间预算搜索给 15s 宽限，纯深度搜索给 120s 上限
+      const budget = ms && ms > 0 ? ms + 15000 : 120000
+      this.searchTimer = setTimeout(() => {
+        console.warn(`[Pikafish] 搜索 ${budget}ms 无响应，强制结束`)
+        this.abortSearch()
+      }, budget)
+      this.setPosition(fen, moves)
+      // 优先用时间预算（保证尽快返回，避免长时间搜索卡死 UI）；否则按深度
+      this.sendCommand(ms ? `go movetime ${ms}` : `go depth ${depth}`)
+    })
+  }
+
+  /** 清掉看门狗与搜索回调 */
+  private clearSearch() {
+    if (this.searchTimer) { clearTimeout(this.searchTimer); this.searchTimer = null }
+    this.onBestMoveCallback = null
+    this.onInfoCallback = null
+  }
+
+  /** 强制结算当前挂起的搜索（超时/stop 用），结果走 (none) 兜底 */
+  private abortSearch() {
+    const cb = this.onBestMoveCallback
+    this.clearSearch()
+    this.status = 'idle'
+    cb?.('(none)')
+  }
+
+  /** 新搜索开始前，先把上一轮未结算的搜索收掉 */
+  private abortPendingSearch() {
+    if (this.onBestMoveCallback) this.abortSearch()
+  }
+
+  stop() {
+    this.sendCommand('stop')
+    // 不等待 bestmove（引擎无响应时那可能永不到来），直接结算挂起的搜索
+    if (this.onBestMoveCallback) this.abortSearch()
+    this.status = 'idle'
+  }
   quit() {
     if (this.useWebSocket) {
       this.ws?.close()

@@ -145,9 +145,12 @@ export async function buildOpeningLinesFromBook(): Promise<OpeningLine[]> {
 let buildPromise: Promise<void> | null = null
 export function ensureBookOpeningLines(): Promise<void> {
   if (!buildPromise) {
-    buildPromise = buildOpeningLinesFromBook()
+    const p = buildOpeningLinesFromBook()
       .then(lines => { if (lines.length > 0) dynamicLines = lines })
       .catch(() => { /* 保持内置定式 */ })
+    buildPromise = p
+    // 生成失败/为空时不永久缓存，下次进入训练可重试
+    void p.finally(() => { if (!dynamicLines) buildPromise = null })
   }
   return buildPromise
 }

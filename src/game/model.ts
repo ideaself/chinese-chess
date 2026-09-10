@@ -245,8 +245,8 @@ export function getFenSequence(game: Game): string[] {
   return rebuildFenSequence(game.startFen, game.plies)
 }
 
-/** 获取棋谱所有局面的字符串表示（用于三次重复判定） */
+/** 获取棋谱所有局面的字符串表示（用于三次重复判定，只保留棋盘+行棋方） */
 export function getPositionStrings(game: Game): string[] {
   const fens = getFenSequence(game)
-  return fens.map(fen => fen.replace(/\s+\d+ \d+$/, '')) // 去掉 halfmove/fullmove
+  return fens.map(fen => fen.split(' ').slice(0, 2).join(' '))
 }

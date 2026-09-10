@@ -11,7 +11,7 @@ vi.stubGlobal('localStorage', {
 })
 vi.stubGlobal('btoa', (s: string) => Buffer.from(s).toString('base64'))
 
-import { uploadBackup, downloadBackup, backupUrl, credFromSettings, BACKUP_FILENAME } from '../webdav'
+import { uploadBackup, downloadBackup, backupUrl, credFromSettings, credFromSettingsAsync, BACKUP_FILENAME } from '../webdav'
 import { saveSettings } from '../storage'
 
 const CRED = { url: 'https://dav.example.com/dav/xiangqi', user: 'u', password: 'p' }
@@ -148,8 +148,10 @@ describe('根路径 404 自动兜底子目录', () => {
     const r = await uploadBackup({ ...CRED, url: 'https://dav.example.com' })
     expect(r.ok).toBe(true)
     expect(r.message).toContain('/xiangqi')
-    // 设置已更新为兜底目录
-    expect(credFromSettings()?.url).toBe('https://dav.example.com/xiangqi')
+    // 设置已更新为兜底目录，密码保留在安全存储
+    const cred = await credFromSettingsAsync()
+    expect(cred?.url).toBe('https://dav.example.com/xiangqi')
+    expect(cred?.password).toBe('p')
   })
 
   it('下载：根路径 404 → 命中 /xiangqi 备份并回写设置', async () => {
@@ -160,7 +162,9 @@ describe('根路径 404 自动兜底子目录', () => {
         : { ok: false, status: 404, text: async () => '' })
     const r = await downloadBackup({ ...CRED, url: 'https://dav.example.com' })
     expect(r.ok).toBe(true)
-    expect(credFromSettings()?.url).toBe('https://dav.example.com/xiangqi')
+    const cred = await credFromSettingsAsync()
+    expect(cred?.url).toBe('https://dav.example.com/xiangqi')
+    expect(cred?.password).toBe('p')
   })
 })
 

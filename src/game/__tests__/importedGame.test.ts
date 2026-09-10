@@ -105,4 +105,17 @@ describe('导入棋谱的身份识别', () => {
     // 样本不足时返回 null；这里只验证不抛错且红方着法被纳入统计
     expect(weakness === null || weakness.middle.plies > 0 || weakness.opening.plies > 0 || weakness.endgame.plies > 0).toBe(true)
   })
+
+  it('平均每步损失只统计本人对局（不混入第三方棋谱）', () => {
+    setMyName('张三')
+    const mine = importedGame() // 红方（张三）一步损失 400
+    const other = importedGame()
+    other.id = 'other-1'
+    other.header.Red = '王五'
+    other.header.Black = '赵六'
+    other.plies[0].analysis!.moveLoss = 100 // 第三方棋谱不应计入
+    _setGamesForTest([mine, other])
+    // 修复前会把两局的 4 步一起平均 → 125；修复后只算张三的 400
+    expect(getStats().avgMoveLoss).toBe(400)
+  })
 })

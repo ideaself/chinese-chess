@@ -153,18 +153,18 @@ export function _setGamesForTest(games: Game[] | null): void {
   memoryGames = games
 }
 
-/** 保存棋谱（内存即时生效，异步落库） */
+/** 保存棋谱（内存即时生效，异步落库）；替换数组引用以便 React 订阅者刷新 */
 export function saveGame(game: Game): boolean {
-  if (!memoryGames) memoryGames = []
-  const idx = memoryGames.findIndex(g => g.id === game.id)
-  if (idx >= 0) {
-    memoryGames[idx] = game
-  } else {
-    memoryGames.unshift(game) // 新棋谱放最前面
-  }
+  const games = memoryGames ?? []
+  const idx = games.findIndex(g => g.id === game.id)
+  memoryGames = idx >= 0
+    ? games.map((g, i) => (i === idx ? game : g))
+    : [game, ...games] // 新棋谱放最前面
   if (!idbBroken) {
     idbPut(game).catch(e => {
       console.error('棋谱写入 IndexedDB 失败:', e)
+      idbBroken = true
+      fallbackPersist()
     })
   } else {
     fallbackPersist()
@@ -380,18 +380,17 @@ export function deleteGame(id: string): void {
   }
 }
 
-/** 切换收藏 */
+/** 切换收藏（替换数组引用以便 React 订阅者刷新） */
 export function toggleStar(id: string): void {
-  const game = (memoryGames ?? []).find(g => g.id === id)
-  if (game) {
-    game.starred = !game.starred
-    game.updatedAt = Date.now()
-    // 置顶新收藏（与旧行为一致：列表按数组顺序展示）
-    if (!idbBroken) {
-      idbPut(game).catch(() => {})
-    } else {
-      fallbackPersist()
-    }
+  const games = memoryGames ?? []
+  const idx = games.findIndex(g => g.id === id)
+  if (idx < 0) return
+  const game = { ...games[idx], starred: !games[idx].starred, updatedAt: Date.now() }
+  memoryGames = games.map((g, i) => (i === idx ? game : g))
+  if (!idbBroken) {
+    idbPut(game).catch(() => {})
+  } else {
+    fallbackPersist()
   }
 }
 
@@ -682,13 +681,13 @@ export interface GameStats {
  * 判定一局棋中"我"执哪一方（null = 不是我的对局）。
  * 内建对局看 header 的 '玩家' 标记；导入棋谱按设置里的「我的棋手名」匹配。
  */
-export function playerSideOfGame(g: Game): PlayerSide | null {
-  return resolvePlayerSide(g.header, getSettings().myPlayerName)
+export function playerSideOfGame(g: Game, myPlayerName?: string): PlayerSide | null {
+  return resolvePlayerSide(g.header, myPlayerName ?? getSettings().myPlayerName)
 }
 
 /** 判定一局棋中玩家的胜负 */
-function playerOutcome(g: Game): PlayerOutcome | null {
-  const side = playerSideOfGame(g)
+function playerOutcome(g: Game, myPlayerName?: string): PlayerOutcome | null {
+  const side = playerSideOfGame(g, myPlayerName)
   if (!side) return null // 不是我的对局（大师棋谱等）不计入
   if (g.result === '1/2-1/2') return 'draw'
   if (g.result === '1-0') return side === 'w' ? 'win' : 'loss'
@@ -699,11 +698,12 @@ function playerOutcome(g: Game): PlayerOutcome | null {
 /** 实时从棋谱库计算战绩 */
 export function getStats(): GameStats {
   const games = getAllGames()
+  const myPlayerName = getSettings().myPlayerName
   let wins = 0, losses = 0, draws = 0
   const recentResults: PlayerOutcome[] = []
 
   for (const g of games) {
-    const outcome = playerOutcome(g)
+    const outcome = playerOutcome(g, myPlayerName)
     if (!outcome) continue
     if (outcome === 'win') wins++
     else if (outcome === 'loss') losses++
@@ -715,10 +715,11 @@ export function getStats(): GameStats {
   let lossSum = 0, lossCount = 0
   for (const g of games) {
     if (g.analysisStatus !== 'complete') continue
-    const side = playerSideOfGame(g)
+    const side = playerSideOfGame(g, myPlayerName)
+    if (!side) continue
     for (const ply of g.plies) {
       if (!ply.analysis) continue
-      if (side && ply.turn !== side) continue
+      if (ply.turn !== side) continue
       lossSum += ply.analysis.moveLoss
       lossCount++
     }
@@ -735,8 +736,9 @@ export function getStats(): GameStats {
 /** 完整胜负序列（新→旧，不截断；胜率走势图用） */
 export function getOutcomeSeries(): PlayerOutcome[] {
   const out: PlayerOutcome[] = []
+  const myPlayerName = getSettings().myPlayerName
   for (const g of getAllGames()) {
-    const outcome = playerOutcome(g)
+    const outcome = playerOutcome(g, myPlayerName)
     if (outcome) out.push(outcome)
   }
   return out
@@ -783,9 +785,10 @@ export function getMistakes(): MistakeItem[] {
   const seen = new Set<string>()
 
   const games = [...getAllGames()].sort((a, b) => b.updatedAt - a.updatedAt)
+  const myPlayerName = getSettings().myPlayerName
   for (const g of games) {
     if (g.analysisStatus !== 'complete') continue
-    const playerTurn = playerSideOfGame(g)
+    const playerTurn = playerSideOfGame(g, myPlayerName)
     if (!playerTurn) continue // 不是我的对局不计入
 
     for (let i = 0; i < g.plies.length; i++) {
@@ -857,9 +860,10 @@ export function getWeaknessAnalysis(): WeaknessAnalysis | null {
   }
 
   let samples = 0
+  const myPlayerName = getSettings().myPlayerName
   for (const g of getAllGames()) {
     if (g.analysisStatus !== 'complete') continue
-    const playerTurn = playerSideOfGame(g)
+    const playerTurn = playerSideOfGame(g, myPlayerName)
     if (!playerTurn) continue
 
     for (let i = 0; i < g.plies.length; i++) {
