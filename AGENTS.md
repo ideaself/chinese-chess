@@ -5,14 +5,14 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.23.0（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.23.1（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（253 项）
+npm test                # vitest 单测（257 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
 npm run e2e             # 需先 build；e2e 冒烟（6 套件），E2E_SUITES=master 可过滤套件
@@ -70,7 +70,9 @@ fetchGameById 定点取局，大师库页渐进载入；dpxq 解析缓存移 .ca
 
 v1.22.0（本次发布）：教学向修复与闭环补全——评估分视角统一（AnalysisPanel/CoachPanel/AI 教练）、题库难度改按局面事实分档（600 题原全判高级）+ 任务类型（杀王/防守/找最佳着）+ 掉分文案；答题闭环（下一题/退出还原对局/引擎殊途同归改判/分级提示/后续变化线）；导入棋谱进闭环（我的棋手名）；SRS 间隔复习（1/3/7/21/60 天 + 今日复习队列）；开局训练改语料驱动（开局书生成线路 + 进度记录）；残局预设内容修正（单车 FEN 缺段、闷宫/铁门栓改为可胜的一步杀）+ mateSearch 强制取胜校验；导航可达性修复；Android 原生 Pikafish 引擎集成（jniLibs + 插件 + npm run android:engine）。
 
-v1.23.0（本次发布）：AI 收官纠偏——必胜局面下引擎反复将军不推进时（Pikafish 在近似赢法间摇摆，实测加时无改善），应用层从 MultiPV 候选换成分数接近（≤50cp）的非将军着（`src/game/aiEndgame.ts`，仅大师/特级大师生效）；桌面 WebSocket 桥修 cwd/权重发现（server 按二进制附近找 pikafish.nnue 并设为引擎 cwd，修复引擎加载不到权重直接退出的问题）。
+v1.23.0：AI 收官纠偏——必胜局面下引擎反复将军不推进时（Pikafish 在近似赢法间摇摆，实测加时无改善），应用层从 MultiPV 候选换成分数接近（≤50cp）的非将军着（`src/game/aiEndgame.ts`，仅大师/特级大师生效）；桌面 WebSocket 桥修 cwd/权重发现（server 按二进制附近找 pikafish.nnue 并设为引擎 cwd，修复引擎加载不到权重直接退出的问题）。
+
+v1.23.1（本次发布）：唯一合法着法跳过引擎——`rules.ts getSoleLegalMove`（找到第二手即提前退出）+ `aiMove` 直接落子，应将只能将走唯一位置等强制局面不再空搜 18s。
 
 ## 已评估搁置
 

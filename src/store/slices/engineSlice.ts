@@ -5,7 +5,7 @@ import type { AppState, StoreSet, StoreGet } from '../types'
 import type { Difficulty } from '../types'
 import type { Game } from '../../game/model'
 import { boardToFen } from '../../game/board'
-import { getAllLegalMoves, chineseFromFen, pvToChinese } from '../../game/rules'
+import { getAllLegalMoves, getSoleLegalMove, chineseFromFen, pvToChinese } from '../../game/rules'
 import {
   saveGame as storageSaveGame, getAllGames, getSettings, initGameStorage,
 } from '../../game/storage'
@@ -152,6 +152,13 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const expectedPlies = game.plies.length
     const currentBoard = boardFromGame(game, expectedPlies)
     if (current.sideControl[currentBoard.turn] !== 'ai') return
+
+    // 唯一合法着法（如应将只能将走唯一位置）：无需搜索，直接落子
+    const sole = getSoleLegalMove(currentBoard)
+    if (sole && get().tryMove(sole.from, sole.to)) {
+      console.log('[AI] 唯一合法着法，跳过引擎搜索')
+      return
+    }
 
     set({ isThinking: true })
     const ui = createUiCoalescer(patch => set(patch))

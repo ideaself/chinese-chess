@@ -151,6 +151,28 @@ export function hasLegalMove(state: BoardState): boolean {
   return false
 }
 
+/**
+ * 当前方是否只有唯一合法着法（如被将军时只能将走唯一位置、只能垫/吃唯一一手）。
+ *
+ * 唯一着法无需搜索，AI 可直接落子省去一次引擎调用；找到第二手即提前返回 null。
+ * 没有合法着法（将死/困毙）同样返回 null，由终局判定处理。
+ */
+export function getSoleLegalMove(state: BoardState): { from: Pos; to: Pos } | null {
+  let sole: { from: Pos; to: Pos } | null = null
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const piece = state.board[c][r]
+      if (piece === '.') continue
+      if (isRed(piece) !== (state.turn === 'w')) continue
+      for (const t of getLegalMoves(state, c, r)) {
+        if (sole) return null // 已存在第二手，非唯一
+        sole = { from: { col: c, row: r }, to: t }
+      }
+    }
+  }
+  return sole
+}
+
 export type GameEndReason = 'checkmate' | 'stalemate' | null
 
 /** 判断对局是否结束，返回结束原因 */

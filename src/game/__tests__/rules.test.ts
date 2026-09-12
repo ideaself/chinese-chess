@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { boardFromFen } from '../board'
-import { getLegalMoves, getAllLegalMoves, getGameStatus, hasLegalMove } from '../rules'
+import { getLegalMoves, getAllLegalMoves, getGameStatus, hasLegalMove, getSoleLegalMove } from '../rules'
 import { addPlyToGame, createEmptyGame, getPositionStrings } from '../model'
 
 const has = (moves: { col: number; row: number }[], c: number, r: number) =>
@@ -66,6 +66,30 @@ describe('终局判定', () => {
     expect(status.inCheck).toBe(false)
     expect(status.result).toBe('1-0')
     expect(status.reason).toBe('困毙（无子可动判负）')
+  })
+})
+
+describe('唯一合法着法（AI 跳过引擎搜索用）', () => {
+  it('只能将走唯一位置时返回该着法', () => {
+    // 红车 b9 + 炮 a9 双将，黑将 d9 仅能进到 d8
+    const st = boardFromFen('CR1k5/4a4/c2a5/4p4/8p/2B6/9/9/9/3AKAB2 b')
+    expect(getSoleLegalMove(st)).toEqual({ from: { col: 3, row: 9 }, to: { col: 3, row: 8 } })
+  })
+
+  it('开局（多着法）返回 null', () => {
+    const st = boardFromFen('rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w')
+    expect(getSoleLegalMove(st)).toBe(null)
+  })
+
+  it('将死/困毙（0 合法着）返回 null', () => {
+    expect(getSoleLegalMove(boardFromFen('R3k4/9/9/9/9/9/9/9/9/4K4 b'))).toBe(null)
+    expect(getSoleLegalMove(boardFromFen('4k4/3P1PR2/9/9/9/9/9/9/9/4K4 b'))).toBe(null)
+  })
+
+  it('有多个应将着法时返回 null', () => {
+    // 黑将被底车 e0 直线将军，可将走 d9/f9 两处，并非唯一
+    const st = boardFromFen('4k4/9/9/9/9/9/9/9/9/K3R4 b')
+    expect(getSoleLegalMove(st)).toBe(null)
   })
 })
 
