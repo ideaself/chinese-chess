@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.23.1（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.23.2（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -72,7 +72,9 @@ v1.22.0（本次发布）：教学向修复与闭环补全——评估分视角�
 
 v1.23.0：AI 收官纠偏——必胜局面下引擎反复将军不推进时（Pikafish 在近似赢法间摇摆，实测加时无改善），应用层从 MultiPV 候选换成分数接近（≤50cp）的非将军着（`src/game/aiEndgame.ts`，仅大师/特级大师生效）；桌面 WebSocket 桥修 cwd/权重发现（server 按二进制附近找 pikafish.nnue 并设为引擎 cwd，修复引擎加载不到权重直接退出的问题）。
 
-v1.23.1（本次发布）：唯一合法着法跳过引擎——`rules.ts getSoleLegalMove`（找到第二手即提前退出）+ `aiMove` 直接落子，应将只能将走唯一位置等强制局面不再空搜 18s。
+v1.23.1：唯一合法着法跳过引擎——`rules.ts getSoleLegalMove`（找到第二手即提前退出）+ `aiMove` 直接落子，应将只能将走唯一位置等强制局面不再空搜 18s。
+
+v1.23.2（本次发布）：应用图标换新——源图 `resources/icons/source/app-icon.png`（黄色山水将子插画）直接缩放，脚本改为纯 Node 面积平均重采样（`gen-icons.cjs`，不再依赖无头 Chrome/系统中文字体），自动裁白边+同半径圆角透明遮罩；自适应底色取画面边缘色，PWA 图标同步改 PNG（manifest/favicon）。
 
 ## 已评估搁置
 
