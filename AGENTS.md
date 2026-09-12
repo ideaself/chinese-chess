@@ -74,7 +74,7 @@ v1.23.0：AI 收官纠偏——必胜局面下引擎反复将军不推进时（P
 
 v1.23.1：唯一合法着法跳过引擎——`rules.ts getSoleLegalMove`（找到第二手即提前退出）+ `aiMove` 直接落子，应将只能将走唯一位置等强制局面不再空搜 18s。
 
-v1.23.2（本次发布）：应用图标换新——源图 `resources/icons/source/app-icon.png`（黄色山水将子插画）直接缩放，脚本改为纯 Node 面积平均重采样（`gen-icons.cjs`，不再依赖无头 Chrome/系统中文字体），自动裁白边+同半径圆角透明遮罩；自适应底色取画面边缘色，PWA 图标同步改 PNG（manifest/favicon）。
+v1.23.2（本次发布）：应用图标换新——源图 `resources/app-icon.png`（黄色山水将子插画）直接缩放，脚本改为纯 Node 面积平均重采样（`gen-icons.cjs`，不再依赖无头 Chrome/系统中文字体），自动裁白边+同半径圆角透明遮罩；自适应底色取画面边缘色，PWA 图标同步改 PNG（manifest/favicon）。
 
 ## 已评估搁置
 

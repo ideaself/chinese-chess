@@ -1,5 +1,5 @@
 /**
- * 生成应用图标：直接把 resources/icons/source/app-icon.png 缩放到各尺寸
+ * 生成应用图标：直接把 resources/app-icon.png 缩放到各尺寸
  *
  * 用法: npm run icons
  *
@@ -8,6 +8,8 @@
  *     避免白边/白角在启动器上露白
  *   - 面积平均重采样（大倍率缩小不糊不闪）；自适应图标前景铺满 108dp，
  *     底色取画面边缘平均色，视觉上与前景无缝
+ *   - 源图放 resources/ 根目录（resources/icons/ 是 android res 的镜像，CI 会整目录拷贝，
+ *     不能放非资源文件）
  * 产物: android res（本地构建）+ resources/icons（入库，CI 回填）+ public PWA 图标
  */
 const fs = require('fs')
@@ -18,7 +20,7 @@ const ROOT = path.join(__dirname, '..')
 const RES = path.join(ROOT, 'android', 'app', 'src', 'main', 'res')
 const ICONS_OUT = path.join(ROOT, 'resources', 'icons')
 const PUBLIC = path.join(ROOT, 'public')
-const SRC = path.join(ICONS_OUT, 'source', 'app-icon.png')
+const SRC = path.join(ROOT, 'resources', 'app-icon.png')
 
 const LEGACY = { 'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192 }
 const FORE = { 'mipmap-mdpi': 108, 'mipmap-hdpi': 162, 'mipmap-xhdpi': 216, 'mipmap-xxhdpi': 324, 'mipmap-xxxhdpi': 432 }
