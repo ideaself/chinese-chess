@@ -14,6 +14,7 @@ import type { EngineInfo } from '../../engine/pikafish'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, DIFFICULTY_SKILL, DIFFICULTY_MOVE_TIME, QUICK_EVAL_MOVE_TIME } from '../constants'
 import { boardFromGame } from '../helpers'
 import { classifyMove } from '../../game/masterPreanalysis'
+import { shouldCorrectRepeatedCheck, pickNonCheckingCandidate } from '../../game/aiEndgame'
 import { getBookMove, loadOpeningBook } from '../../game/book'
 import { resumeAudio } from '../../game/sound'
 
@@ -163,6 +164,8 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
       // 开局库优先（计划外增强: 提升开局质量与多样性）
       let bestUci: string | null = null
+      // 引擎搜索得到的评估（行棋方视角），收官纠偏用
+      let aiScore: number | null = null
       const bookMove = getBookMove(moveList)
       if (bookMove) {
         const legal = getAllLegalMoves(currentBoard)
@@ -188,8 +191,24 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           // 直到 AI 落子才更新（对战连贯性）。当前局面即「人走完后的局面」。
           const posFen = boardToFen(currentBoard)
           bestUci = await engine.go(engineFen, moveList, engineDepth, moveTime, (info) => {
+            aiScore = info.score
             ui.push({ evalBar: { score: info.score, fen: posFen, depth: info.depth, nodes: info.nodes, nps: info.nps } })
           })
+        }
+      }
+
+      // 收官纠偏：大优但引擎反复将军时，从 MultiPV 里换一手分数接近的非将军着
+      // （Pikafish 在近似赢法间摇摆，加时也无法改善，见 game/aiEndgame.ts）
+      if (bestUci && shouldCorrectRepeatedCheck(game, currentBoard, bestUci, aiScore)) {
+        try {
+          const lines = await engine.analyzeLines(engineFen, moveList, Math.min(engineDepth, 16), 6, undefined, 3000)
+          const alt = pickNonCheckingCandidate(lines, currentBoard, lines[0]?.score ?? null)
+          if (alt) {
+            console.log(`[AI] 收官纠偏: ${bestUci} → ${alt.move}（分差 ${(lines[0]?.score ?? 0) - alt.score}）`)
+            bestUci = alt.move
+          }
+        } catch (e) {
+          console.error('收官纠偏失败，保持引擎原着:', e)
         }
       }
 

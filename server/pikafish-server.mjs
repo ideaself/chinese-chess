@@ -58,6 +58,27 @@ function findBinary(hint) {
   return null
 }
 
+const NNUE_NAME = 'pikafish.nnue'
+
+/**
+ * 找 NNUE 权重：Pikafish 按 cwd 解析 EvalFile（默认 pikafish.nnue），
+ * 找不到会直接报错退出。兼容几种常见布局：
+ *   二进制同目录、二进制上一级（官方 release 的 Linux/ 子目录）、项目根、public/engine。
+ */
+function findNnue(binPath) {
+  const candidates = [
+    resolve(dirname(binPath), NNUE_NAME),
+    resolve(dirname(binPath), '..', NNUE_NAME),
+    resolve(__dirname, '..', NNUE_NAME),
+    resolve(__dirname, '..', 'public', 'engine', NNUE_NAME),
+    resolve(process.cwd(), NNUE_NAME),
+  ]
+  for (const p of candidates) {
+    if (existsSync(p) && statSync(p).isFile()) return p
+  }
+  return null
+}
+
 function isPortFree(port) {
   return new Promise((res) => {
     const srv = net.createServer().once('error', () => res(false)).once('listening', () => { srv.close(); res(true) }).listen(port)
@@ -96,9 +117,13 @@ try {
 
 const THREADS = cfg.threads || Math.max(1, Math.min(os.cpus().length, 8))
 const HASH = cfg.hash
+const nnuePath = findNnue(binPath)
+// 引擎找不到权重会直接退出；cwd 设为权重所在目录，保证 EvalFile=pikafish.nnue 能加载
+const engineCwd = nnuePath ? dirname(nnuePath) : dirname(binPath)
 
 console.log(`♟  Pikafish WebSocket Bridge`)
 console.log(`   引擎: ${binPath}`)
+console.log(`   权重: ${nnuePath ?? '⚠ 未找到 pikafish.nnue，引擎可能无法启动'}`)
 console.log(`   线程: ${THREADS}  Hash: ${HASH}MB`)
 console.log(`   端口: ${cfg.port}`)
 
@@ -108,10 +133,8 @@ const httpServer = createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
   // 健康检查
   if (req.url === '/health') {
-    const nnuePath = resolve(dirname(binPath), 'pikafish.nnue')
-    const hasNnue = existsSync(nnuePath)
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', binary: binPath, threads: THREADS, nnue: hasNnue }))
+    res.end(JSON.stringify({ status: 'ok', binary: binPath, threads: THREADS, nnue: !!nnuePath, nnuePath }))
     return
   }
   res.writeHead(404)
@@ -128,6 +151,7 @@ wss.on('connection', (ws, req) => {
   const proc = spawn(binPath, [], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env },
+    cwd: engineCwd,
   })
 
   let alive = true
