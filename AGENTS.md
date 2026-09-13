@@ -5,20 +5,21 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.23.3（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.23.4（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（263 项）
+npm test                # vitest 单测（265 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
 npm run e2e             # 需先 build；e2e 冒烟（6 套件），E2E_SUITES=master 可过滤套件
                         # 注意：移动套件 17 项按 v1.18 前旧导航编写已失效；角色 1 项（提示箭头）为基线旧失败
 npm run dpxq            # 语料 → public/master-games/ 分片（mtime 增量缓存 v2，UCI 格式）
 npm run book            # 语料 → public/opening-book.json 大数据开局书
+npm run challenges      # 东萍抓取天天象棋残局挑战历史存档 → public/weekly-challenges.json
 # Android 发布: build → npx cap sync android（必须仓库根目录执行）→ npm run android:engine（注入原生引擎）→ cd android && ./gradlew assembleRelease
 # 发布流程: 改三处版本号 → 构建 APK 拷入 releases/ → commit → push main + tag vX.Y.Z（CI 自动出 Release）
 ```
@@ -76,7 +77,9 @@ v1.23.1：唯一合法着法跳过引擎——`rules.ts getSoleLegalMove`（找�
 
 v1.23.2：应用图标换新——源图 `resources/app-icon.png`（黄色山水将子插画）直接缩放，脚本改为纯 Node 面积平均重采样（`gen-icons.cjs`，不再依赖无头 Chrome/系统中文字体），自动裁白边+同半径圆角透明遮罩；自适应底色取画面边缘色，PWA 图标同步改 PNG（manifest/favicon）。
 
-v1.23.3（本次发布）：移动端交互优化——AI 思考中实时最优（每层 pv[0] 动态箭头+浮标 `aiPreview`）；复盘页头返回键/常显评估条/走法列表自动跟随/「下一关键手」(`keyNav.ts`)/棋盘滑动翻步/大型 ◀▶/自动播放调速/落子评级角标(`moveTags.ts`)；复盘菜单加 AI 教练；求和改 AI 按形势应答 + 认输求和底部确认条；翻转信息条跟随并持久化；非法落点轻震、震动开关、落子动画开关生效；清底栏 54px 占位 + safe-area 适配 + 横屏复盘布局。
+v1.23.3：移动端交互优化——AI 思考中实时最优（每层 pv[0] 动态箭头+浮标 `aiPreview`）；复盘页头返回键/常显评估条/走法列表自动跟随/「下一关键手」(`keyNav.ts`)/棋盘滑动翻步/大型 ◀▶/自动播放调速/落子评级角标(`moveTags.ts`)；复盘菜单加 AI 教练；求和改 AI 按形势应答 + 认输求和底部确认条；翻转信息条跟随并持久化；非法落点轻震、震动开关、落子动画开关生效；清底栏 54px 占位 + safe-area 适配 + 横屏复盘布局。
+
+v1.23.4（本次发布）：箭头重绘（锥形笔刷箭头：圆头起笔、身收窄、去描边与编号球，AI 实时最优带呼吸动画）+ 天天象棋残局挑战历史入库——`scripts/weekly-challenges.mjs` 从东萍抓取 421 期（第26~504期，binit→FEN，全量规则校验）→ `public/weekly-challenges.json`；主页卡片 + 棋谱页「挑战」子页签（期号搜索/通关标记/下一期），挑战局红先 vs 引擎，结算弹窗区分挑战「下一期/挑战列表」；`npm run challenges` 可刷新数据。
 
 ## 已评估搁置
 

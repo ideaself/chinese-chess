@@ -7,6 +7,7 @@ import type { MobilePage } from '../../store/slices/uiSlice'
 import { loadPuzzles, PUZZLE_TYPES, puzzleDifficulty, getDailyPuzzle } from '../../game/puzzles'
 import type { PuzzleItem, PuzzleType } from '../../game/puzzles'
 import { getPuzzleStreak, isDailyDone } from '../../game/progress'
+import { loadChallenges } from '../../game/challenges'
 
 const MENU_ITEMS: { page: MobilePage; icon: string; label: string; desc: string }[] = [
   { page: 'play', icon: '♟', label: '对战', desc: '人机对战 / 双人对弈' },
@@ -30,6 +31,13 @@ export const MobileHome: React.FC = () => {
   const [daily, setDaily] = useState<{ type: PuzzleType; puzzle: PuzzleItem } | null>(null)
   const [streak, setStreak] = useState(() => getPuzzleStreak())
   const [done, setDone] = useState(false)
+  const [challengeCount, setChallengeCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    loadChallenges().then(list => { if (alive) setChallengeCount(list.length) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -53,6 +61,11 @@ export const MobileHome: React.FC = () => {
     setTrainingAutoStart('daily')
   }
 
+  const goChallenges = () => {
+    setGamesSubTab('challenges')
+    setMobilePage('games')
+  }
+
   return (
     <div className="mobile-home">
       <div className="mobile-home-title">♟ 中国象棋</div>
@@ -70,6 +83,16 @@ export const MobileHome: React.FC = () => {
           <span className="mobile-home-daily-go">{done ? '再看' : '去挑战'} →</span>
         </button>
       )}
+      <button className="mobile-home-daily mobile-home-challenge" onClick={goChallenges}>
+        <span className="mobile-home-daily-icon">🏆</span>
+        <span className="mobile-home-daily-main">
+          <span className="mobile-home-daily-label">天天象棋 · 残局挑战</span>
+          <span className="mobile-home-daily-desc">
+            {challengeCount ? `${challengeCount} 期历史存档，挑一期随时破局` : '历史存档，挑一期随时破局'}
+          </span>
+        </span>
+        <span className="mobile-home-daily-go">去挑战 →</span>
+      </button>
       <div className="mobile-home-menu">
         {MENU_ITEMS.map(item => (
           <button

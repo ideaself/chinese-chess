@@ -39,6 +39,7 @@ export const TrainingPanel: React.FC = () => {
   const engineReady = useStore(s => s.engineReady)
   const trainingAutoStart = useStore(s => s.trainingAutoStart)
   const setTrainingAutoStart = useStore(s => s.setTrainingAutoStart)
+  const setGamesSubTab = useStore(s => s.setGamesSubTab)
   const [puzzles, setPuzzles] = useState<Record<string, PuzzleItem[]> | null>(null)
   const [diff, setDiff] = useState<DiffFilter>(lastDiffFilter)
   const [streak, setStreak] = useState(() => getPuzzleStreak())
@@ -304,6 +305,15 @@ export const TrainingPanel: React.FC = () => {
       </div>
 
       {/* ── 残局训练 ── */}
+      <div className="ctrl-title" style={{ marginBottom: 8 }}>🏆 天天象棋残局挑战</div>
+      <div className="panel-hint" style={{ marginBottom: 8 }}>
+        历史期存档（第26~504期，红先、引擎执黑）：随时挑一期破局，通关自动标记。
+      </div>
+      <button className="btn btn-primary" style={{ width: '100%', marginBottom: 14 }}
+        onClick={() => setGamesSubTab('challenges')}>
+        打开挑战列表
+      </button>
+
       <div className="ctrl-title" style={{ marginBottom: 8 }}>♛ 残局杀王练习</div>
       <div className="panel-hint" style={{ marginBottom: 8 }}>
         选择一个经典残局，你执红先行，引擎执黑防守。

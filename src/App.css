@@ -2123,9 +2123,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .board-live-best .blb-score { color: #ffd166; font-family: 'SF Mono', monospace; font-weight: 700; }
 .board-live-best .blb-score.blb-neg { color: #9db8d8; }
 
-/* AI 实时最优箭头：橙色流动虚线 */
-.ai-arrow-shaft { stroke-dasharray: 11 7; animation: ai-arrow-flow 0.7s linear infinite; }
-@keyframes ai-arrow-flow { to { stroke-dashoffset: -36; } }
+/* AI 实时最优箭头：轻微呼吸提示 */
+.ai-arrow-path { animation: ai-arrow-breathe 1.2s ease-in-out infinite; }
+@keyframes ai-arrow-breathe { 0%, 100% { fill-opacity: 0.9; } 50% { fill-opacity: 0.66; } }
 
 /* 复盘棋盘评级角标（妙/软/漏…） */
 .board-move-tag .mt-best { fill: #7ec894; }
@@ -2197,3 +2197,40 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   }
   .mobile-play-bar .mpb-actions { flex-wrap: nowrap; }
 }
+
+/* ── 天天象棋残局挑战列表 ─────────────────────────────────────── */
+.weekly-challenges { display: flex; flex-direction: column; gap: 8px; }
+.wc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.wc-title { font-size: 15px; font-weight: bold; color: var(--gold); }
+.wc-search { max-width: 180px; }
+.wc-hint { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.wc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 62vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.wc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+.wc-row:active { background: rgba(255,255,255,0.08); }
+.wc-n { font-weight: bold; min-width: 74px; }
+.wc-n.wc-done { color: #7ec894; }
+.wc-date { color: var(--text-3); font-size: 12px; flex: 1; }
+.wc-go { color: var(--accent); font-size: 13px; flex-shrink: 0; }
+.wc-go.wc-cleared { color: #7ec894; }
+.wc-source { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.mobile-home-challenge { margin-top: 10px; }

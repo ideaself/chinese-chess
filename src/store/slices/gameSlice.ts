@@ -13,6 +13,7 @@ import { scheduleAutoSync } from '../../game/webdav'
 import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
 import { ENDGAME_PRESETS } from '../../game/endgames'
 import { recordEndgameResult } from '../../game/progress'
+import { recordChallengeCleared } from '../../game/challenges'
 import { settleRating, boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
@@ -288,15 +289,14 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       if (timerInterval) clearInterval(timerInterval)
       set({ timerInterval: null })
       playGameOverHaptic(settings.hapticEnabled)
-      // 残局训练结算进度（v1.21）
+      // 残局训练结算进度（v1.21）；天天象棋残局挑战按期号记录通关
       if (get().endgameTraining) {
+        const won =
+          (status.result === '1-0' && get().playerSide === 'w') ||
+          (status.result === '0-1' && get().playerSide === 'b')
         const preset = ENDGAME_PRESETS.find(p => p.fen === game.startFen)
-        if (preset) {
-          const won =
-            (status.result === '1-0' && get().playerSide === 'w') ||
-            (status.result === '0-1' && get().playerSide === 'b')
-          recordEndgameResult(preset.id, won)
-        }
+        if (preset) recordEndgameResult(preset.id, won)
+        else if (game.header.Event === '天天象棋残局挑战') recordChallengeCleared(Number(game.header.Round), won)
       }
       get().saveCurrentGame()
       return true

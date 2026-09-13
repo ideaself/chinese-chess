@@ -56,31 +56,51 @@ const GLYPHS: Record<string, string> = {
 }
 
 interface ArrowGeom {
-  shaft: { x1: number; y1: number; x2: number; y2: number }
-  head: string
+  /** 锥形箭身 path（天天象棋风格：圆头起笔、向箭头收窄） */
+  path: string
   n: number
   cx: number
   cy: number
 }
 
-/** 天天象棋风格箭头几何：起点圆心出发，尖端落在终点中心，带三角箭头与编号 */
+/** 天天象棋风格箭头几何：起点圆头、箭身向箭头收窄、三角箭头落在终点中心 */
 function arrowGeometry(from: { x: number; y: number }, to: { x: number; y: number }, n: number): ArrowGeom {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const len = Math.hypot(dx, dy) || 1
-  const headLen = Math.min(20, Math.max(13, len * 0.28))
-  const baseX = to.x - (dx / len) * headLen
-  const baseY = to.y - (dy / len) * headLen
-  const nx = -dy / len
-  const ny = dx / len
-  const headWidth = Math.min(11, Math.max(8, len * 0.16))
-  return {
-    shaft: { x1: from.x, y1: from.y, x2: to.x, y2: to.y },
-    head: `${baseX + nx * headWidth},${baseY + ny * headWidth} ${to.x},${to.y} ${baseX - nx * headWidth},${baseY - ny * headWidth}`,
-    n,
-    cx: from.x,
-    cy: from.y,
-  }
+  const ux = dx / len
+  const uy = dy / len
+  const nx = -uy
+  const ny = ux
+  const w = Math.min(20, Math.max(12, len * 0.24)) // 尾端全宽
+  const baseHalf = w * 0.5
+  const neckHalf = w * 0.28
+  const headHalf = w * 0.86
+  const headLen = Math.min(len * 0.45, Math.max(w * 1.9, len * 0.26))
+  const bx = from.x
+  const by = from.y
+  const hx = to.x - ux * headLen // 箭头基部中心
+  const hy = to.y - uy * headLen
+  const mx = (bx + hx) / 2
+  const my = (by + hy) / 2
+  // 尾部半圆帽（并入同一 path，避免叠加导致颜色深浅不一）
+  const capK = baseHalf * 0.5523
+  const blx = bx + nx * baseHalf
+  const bly = by + ny * baseHalf
+  const brx = bx - nx * baseHalf
+  const bry = by - ny * baseHalf
+  const path = [
+    `M ${blx} ${bly}`,
+    `Q ${mx + nx * baseHalf * 1.08} ${my + ny * baseHalf * 1.08} ${hx + nx * neckHalf} ${hy + ny * neckHalf}`,
+    `L ${hx + nx * headHalf} ${hy + ny * headHalf}`,
+    `L ${to.x} ${to.y}`,
+    `L ${hx - nx * headHalf} ${hy - ny * headHalf}`,
+    `L ${hx - nx * neckHalf} ${hy - ny * neckHalf}`,
+    `Q ${mx - nx * baseHalf * 1.08} ${my - ny * baseHalf * 1.08} ${brx} ${bry}`,
+    `C ${brx - ux * capK} ${bry - uy * capK} ${blx - ux * capK} ${bly - uy * capK} ${blx} ${bly}`,
+    'Z',
+  ].join(' ')
+  return { path, n, cx: from.x, cy: from.y }
 }
 
 /** 棋子字符 → 皮肤文件名 (w=红, b=黑) */
@@ -392,31 +412,13 @@ export const Board: React.FC = () => {
         )}
         {aiArrow && (
           <g className="ai-arrow" pointerEvents="none">
-            <line x1={aiArrow.shaft.x1} y1={aiArrow.shaft.y1} x2={aiArrow.shaft.x2} y2={aiArrow.shaft.y2}
-              stroke="rgba(0,0,0,0.25)" strokeWidth="12" strokeLinecap="round" />
-            <line className="ai-arrow-shaft" x1={aiArrow.shaft.x1} y1={aiArrow.shaft.y1} x2={aiArrow.shaft.x2} y2={aiArrow.shaft.y2}
-              stroke="#f39c12" strokeWidth="8" strokeLinecap="round" />
-            <polygon points={aiArrow.head} fill="#f39c12" />
+            <path className="ai-arrow-path" d={aiArrow.path} fill="#f5a623" fillOpacity="0.9" filter="url(#arrowShadow)" />
           </g>
         )}
         {hintArrows && (
           <g className="hint-arrows" pointerEvents="none">
-            {/* 先绘制所有箭杆，避免后一个编号圆覆盖前一个箭头的连接部分。 */}
             {hintArrows.map((a, i) => (
-              <g key={`arrow-${i}`}>
-                <line x1={a.shaft.x1} y1={a.shaft.y1} x2={a.shaft.x2} y2={a.shaft.y2}
-                  stroke="rgba(0,0,0,0.22)" strokeWidth="10" strokeLinecap="round" />
-                <line x1={a.shaft.x1} y1={a.shaft.y1} x2={a.shaft.x2} y2={a.shaft.y2}
-                  stroke="#16a34a" strokeWidth="7" strokeLinecap="round" opacity="0.92" />
-                <polygon points={a.head} fill="#16a34a" opacity="0.95" />
-              </g>
-            ))}
-            {/* 编号最后绘制，只标记每步起点，不参与箭杆层级。 */}
-            {hintArrows.map((a, i) => (
-              <g key={`arrow-label-${i}`}>
-                <circle cx={a.cx} cy={a.cy} r="13" fill="#16a34a" stroke="#fff" strokeWidth="2" />
-                <text x={a.cx} y={a.cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
-              </g>
+              <path key={`arrow-${i}`} d={a.path} fill="#22c55e" fillOpacity="0.88" filter="url(#arrowShadow)" />
             ))}
           </g>
         )}

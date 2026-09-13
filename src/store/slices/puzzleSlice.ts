@@ -14,6 +14,7 @@ import { recordPuzzleCorrect, recordPuzzleWrong, getDailyPuzzle, getPuzzles, puz
 import { recordPuzzleAnswer, recordMistakeRetry, isMistakeAutoMastered, amendPuzzleWrongToRight } from '../../game/progress'
 import { toggleMastered } from '../../game/storage'
 import { engineEvalOnce, acquireEngineSlot, releaseEngineSlot } from '../../game/masterPreanalysis'
+import { getChallenge } from '../../game/challenges'
 
 /** 殊途同归判定的搜索深度（与题库生成口径一致） */
 const PUZZLE_JUDGE_DEPTH = 12
@@ -89,7 +90,7 @@ async function judgePuzzleAlternative(
 }
 
 export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-  'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'puzzleHintLevel' | 'puzzleLine' | 'puzzleLineLoading' | 'puzzleSource' | 'endgameTraining' | 'startPuzzle' | 'startLibraryPuzzle' | 'nextLibraryPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleHint' | 'revealPuzzleAnswer' | 'loadPuzzleLine' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'exitEndgameTraining' | 'replayQuizMistake'> {
+  'puzzlePlyIndex' | 'puzzleAttempts' | 'puzzleResult' | 'puzzleRevealed' | 'puzzleHintLevel' | 'puzzleLine' | 'puzzleLineLoading' | 'puzzleSource' | 'endgameTraining' | 'startPuzzle' | 'startLibraryPuzzle' | 'nextLibraryPuzzle' | 'exitPuzzle' | 'puzzleTryMove' | 'revealPuzzleHint' | 'revealPuzzleAnswer' | 'loadPuzzleLine' | 'startPuzzleFromGame' | 'startEndgameTraining' | 'startWeeklyChallenge' | 'exitEndgameTraining' | 'replayQuizMistake'> {
   return {
   endgameTraining: false,
 
@@ -459,6 +460,30 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     const interval = startGameClock(set, get)
     set({ timerInterval: interval })
+  },
+
+  /** 天天象棋残局挑战：以存档第 n 期局面开局（红先，AI 执黑） */
+    startWeeklyChallenge: (n) => {
+    const item = getChallenge(n)
+    if (!item) {
+      get().showToast('该期局面未收录')
+      return
+    }
+    get().startEndgameTraining(item.fen, `残局挑战 第${n}期`)
+    const g = get().game
+    set({
+      game: {
+        ...g,
+        header: {
+          ...g.header,
+          Event: '天天象棋残局挑战',
+          Round: String(n),
+          Date: item.date || g.header.Date,
+          Red: '玩家',
+          Black: `残局挑战第${n}期`,
+        },
+      },
+    })
   },
 
 

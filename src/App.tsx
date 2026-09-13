@@ -18,6 +18,7 @@ import type { DiagStep } from './game/webdav'
 import type { AppSettings } from './game/storage'
 import { getRank } from './game/rating'
 import { ENDGAME_PRESETS } from './game/endgames'
+import { getNextChallenge } from './game/challenges'
 import { resumeAudio } from './game/sound'
 import { fetchModels } from './game/coach/aiCoach'
 import { APP_VERSION } from './version'
@@ -477,8 +478,19 @@ const GameOverModal: React.FC<{
   const endgameTraining = useStore(s => s.endgameTraining)
   const startEndgameTraining = useStore(s => s.startEndgameTraining)
   const exitEndgameTraining = useStore(s => s.exitEndgameTraining)
+  const startWeeklyChallenge = useStore(s => s.startWeeklyChallenge)
   const setGamesSubTab = useStore(s => s.setGamesSubTab)
   const setMobilePage = useStore(s => s.setMobilePage)
+
+  // 天天象棋残局挑战：结算后进入下一期 / 返回挑战列表（而非普通残局的下一关）
+  const isChallenge = game.header.Event === '天天象棋残局挑战'
+  const challengeN = isChallenge ? Number(game.header.Round) : 0
+  const nextChallenge = isChallenge ? getNextChallenge(challengeN) : null
+  const backToChallenges = () => {
+    // 走残局退出的统一清理（还原来源页并清 endgameTraining），再定位到挑战列表
+    exitEndgameTraining()
+    setGamesSubTab('challenges')
+  }
 
   const handleReview = () => {
     loadGame(game.id)
@@ -533,7 +545,17 @@ const GameOverModal: React.FC<{
           </div>
         </div>
         <div className="game-over-actions">
-          {endgameTraining ? (
+          {isChallenge ? (
+            <>
+              {nextChallenge && (
+                <button className="btn btn-primary" onClick={() => startWeeklyChallenge(nextChallenge.n)}>
+                  下一期（第{nextChallenge.n}期）→
+                </button>
+              )}
+              <button className={`btn ${nextChallenge ? 'btn-secondary' : 'btn-primary'}`} onClick={backToChallenges}>挑战列表</button>
+              <button className="btn btn-secondary" onClick={handleReview}>复盘本局</button>
+            </>
+          ) : endgameTraining ? (
             <>
               <button className="btn btn-primary" onClick={nextEndgame}>下一关 →</button>
               <button className="btn btn-secondary" onClick={backToTraining}>返回训练</button>

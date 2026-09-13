@@ -137,8 +137,8 @@ export interface AppState {
   endgameTraining: boolean
 
   /** 棋谱页子导航（供训练计划等外部跳转） */
-  gamesSubTab: 'list' | 'library' | 'mistakes' | 'training'
-  setGamesSubTab: (t: 'list' | 'library' | 'mistakes' | 'training') => void
+  gamesSubTab: 'list' | 'library' | 'mistakes' | 'training' | 'challenges'
+  setGamesSubTab: (t: 'list' | 'library' | 'mistakes' | 'training' | 'challenges') => void
 
   /** 应用设置（响应式：改皮肤/主题即时生效） */
   settings: AppSettings
@@ -328,6 +328,8 @@ export interface AppState {
   startPuzzleFromGame: (gameId: string, plyIndex: number) => void
   /** 残局训练：以指定 FEN 开局，玩家执红 vs 引擎 */
   startEndgameTraining: (fen: string, name: string, side?: 'w' | 'b') => void
+  /** 天天象棋残局挑战：以存档中第 n 期局面开局（红先 vs 引擎） */
+  startWeeklyChallenge: (n: number) => void
   /** 退出残局训练：回到进入前的页面并开新对局 */
   exitEndgameTraining: () => void
   /** 重演拆解错题局面（执提问方行棋 vs 引擎） */
