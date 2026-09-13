@@ -16,7 +16,7 @@ import { recordEndgameResult } from '../../game/progress'
 import { settleRating, boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
-import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckVoice, playCheckHaptic, playMoveHaptic, playGameOverHaptic } from '../../game/sound'
+import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckVoice, playCheckHaptic, playMoveHaptic, playGameOverHaptic, playIllegalHaptic } from '../../game/sound'
 
 /** 复盘/棋谱走子音效：前进时按吃子判定，后退时轻响 */
 function playReplayStep(game: Game, plyIndex: number, forward: boolean) {
@@ -80,7 +80,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     sideControl: { w: 'human', b: 'ai' },
 
-    boardFlipped: false,
+    boardFlipped: getSettings().boardFlipped,
 
     lastRatingChange: null,
 
@@ -202,6 +202,10 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (selected) {
       const result = get().tryMove(selected, pos)
       if (result) return
+      // 无效目标（空格/对方子）轻震提示；点己方其他子是换选，不震
+      const moverRed = board.turn === 'w'
+      const ownPiece = piece !== '.' && (piece === piece.toUpperCase()) === moverRed
+      if (!ownPiece) playIllegalHaptic(getSettings().hapticEnabled)
     }
 
     if (piece !== '.') {
@@ -365,7 +369,11 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     get().startNewGame(difficulty, playerSide, sideControl)
   },
 
-    flipBoard: () => set(s => ({ boardFlipped: !s.boardFlipped })),
+    flipBoard: () => {
+      const next = !get().boardFlipped
+      set({ boardFlipped: next })
+      get().updateSettings({ boardFlipped: next })
+    },
 
     resign: () => {
     const { game, sideControl, mode, timerInterval } = get()
@@ -388,19 +396,50 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
   },
 
     offerDraw: () => {
-    const { game, sideControl, mode, timerInterval } = get()
+    const { game, sideControl, mode, timerInterval, engine, engineReady } = get()
     if (mode !== 'play' || game.result !== '*') return
     // AI 演示不适用
     if (sideControl.w === 'ai' && sideControl.b === 'ai') return
-    if (timerInterval) clearInterval(timerInterval)
-    const updatedGame = { ...game, result: '1/2-1/2', updatedAt: Date.now() }
-    set({ game: updatedGame, timerInterval: null })
-    // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
-    if (updatedGame.plies.length > 0) {
-      const change = settleRating(updatedGame)
-      if (change) set({ lastRatingChange: change })
+
+    /** 立即判和并保存 */
+    const acceptDraw = () => {
+      const st = get()
+      if (st.game.id !== game.id || st.game.result !== '*') return
+      if (timerInterval) clearInterval(timerInterval)
+      const updatedGame = { ...st.game, result: '1/2-1/2', updatedAt: Date.now() }
+      set({ game: updatedGame, timerInterval: null })
+      // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
+      if (updatedGame.plies.length > 0) {
+        const change = settleRating(updatedGame)
+        if (change) set({ lastRatingChange: change })
+      }
+      get().saveCurrentGame()
     }
-    get().saveCurrentGame()
+
+    const aiSide: Turn | null = sideControl.w === 'ai' ? 'w' : sideControl.b === 'ai' ? 'b' : null
+    // 双人/无引擎：直接判和；引擎忙：不打断，提示稍后再试
+    if (!aiSide || !engine || !engineReady) { acceptDraw(); return }
+    if (get().isThinking || get().engineOccupied) {
+      get().showToast('引擎思考中，请稍后再求和')
+      return
+    }
+
+    // AI 按形势应答：快速评估（行棋方视角），AI 明显占优则拒绝
+    const aiTurn = get().board.turn === aiSide
+    let score: number | null = null
+    set({ engineOccupied: true })
+    engine.analyze(game.startFen, game.plies.map(p => p.move), Math.min(get().engineDepth, 12), (info) => {
+      score = info.score
+    }, 800).catch(() => {}).finally(() => {
+      set({ engineOccupied: false })
+      const aiScore = score === null ? 0 : (aiTurn ? score : -score)
+      if (aiScore >= 150) {
+        get().showToast('对方拒绝求和')
+        return
+      }
+      acceptDraw()
+      get().showToast('对方接受和棋')
+    })
   },
 
     saveCurrentGame: () => {

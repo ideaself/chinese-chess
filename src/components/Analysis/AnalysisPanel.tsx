@@ -9,7 +9,7 @@
  *   - 优势曲线
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { getStateAtPly } from '../../game/model'
 import { boardToFen } from '../../game/board'
@@ -18,6 +18,7 @@ import { redScoreFromFen, toRedScore, fenTurn } from '../../game/evalScore'
 import { generateGameSummary } from '../../game/summary'
 import { getSettings, saveSettings } from '../../game/storage'
 import { acquireEngineSlot, releaseEngineSlot } from '../../game/masterPreanalysis'
+import { moveTag } from '../../game/moveTags'
 import { EvalCurve } from './EvalCurve'
 import { KeyMoments } from './KeyMoments'
 import { SimilarPanel } from './SimilarPanel'
@@ -27,21 +28,6 @@ function formatScore(score: number): string {
   if (score <= -100000) return `败势 (${-score - 100000}步被杀)`
   const pawns = (score / 100).toFixed(1)
   return score >= 0 ? `红优 +${pawns}` : `黑优 ${pawns}`
-}
-
-/** 每步着法评级徽标（复用整盘分析的分类结果，爱棋谱式好/恶手标注） */
-const MOVE_TAGS: Record<string, { t: string; c: string }> = {
-  best: { t: '正', c: 'mt-best' },
-  excellent: { t: '妙', c: 'mt-excellent' },
-  good: { t: '好', c: 'mt-good' },
-  inaccuracy: { t: '软', c: 'mt-inaccuracy' },
-  mistake: { t: '次', c: 'mt-mistake' },
-  blunder: { t: '劣', c: 'mt-blunder' },
-  blunder2: { t: '漏', c: 'mt-blunder2' },
-}
-function moveTag(cls?: string): { t: string; c: string } | null {
-  if (!cls) return null
-  return MOVE_TAGS[cls] ?? null
 }
 
 export const AnalysisPanel: React.FC = () => {
@@ -66,6 +52,17 @@ export const AnalysisPanel: React.FC = () => {
 
   // 切换局面时清空候选
   React.useEffect(() => { setCands(null) }, [currentPlyIndex])
+
+  // 走法记录自动滚动跟随当前手（复盘跳步/自动播放时不迷路）
+  const historyRef = useRef<HTMLDivElement>(null)
+  const activeMoveRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const box = historyRef.current
+    const el = activeMoveRef.current
+    if (!box || !el) return
+    const top = el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2
+    box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+  }, [currentPlyIndex, game.plies])
 
   const requestCandidates = async () => {
     if (!engine || !engineReady || isThinking) return
@@ -287,11 +284,12 @@ export const AnalysisPanel: React.FC = () => {
         {game.plies.length > 0 && (
           <div className="move-list" style={{ marginTop: 12 }}>
             <div className="info-label" style={{ marginBottom: 4 }}>走法记录</div>
-            <div className="history-list" style={{ maxHeight: 150, overflow: 'auto' }}>
+            <div className="history-list" ref={historyRef} style={{ maxHeight: 150, overflow: 'auto' }}>
                {game.plies.map((ply, i) => {
                  const tag = moveTag(ply.analysis?.classification)
                  return (
-                 <span key={i} className={`history-move ${i === currentPlyIndex - 1 ? 'btn-active' : ''}`}
+                 <span key={i} ref={i === currentPlyIndex - 1 ? activeMoveRef : undefined}
+                   className={`history-move ${i === currentPlyIndex - 1 ? 'btn-active' : ''}`}
                    onClick={() => useStore.getState().goToPly(i + 1)}
                    style={{ cursor: 'pointer' }}>
                    {i % 2 === 0 ? `${Math.floor(i / 2) + 1}. ` : ''}{ply.moveCn}

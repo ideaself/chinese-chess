@@ -10,11 +10,12 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import type { Pos } from '../../game/board'
-import { isRed } from '../../game/board'
-import { isInCheck, findKing } from '../../game/rules'
+import { isRed, boardToFen } from '../../game/board'
+import { isInCheck, findKing, chineseFromFen } from '../../game/rules'
 import { useMediaQuery, MOBILE_QUERY } from '../../utils/useMediaQuery'
 import { EvalBar } from './EvalBar'
 import { boardSkinGrids, DEFAULT_BOARD_GRID, type BoardGrid } from '../../game/boardSkinGrids'
+import { moveTag } from '../../game/moveTags'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -54,6 +55,34 @@ const GLYPHS: Record<string, string> = {
   N: '马', n: '马', R: '车', r: '车', C: '炮', c: '炮', P: '兵', p: '卒',
 }
 
+interface ArrowGeom {
+  shaft: { x1: number; y1: number; x2: number; y2: number }
+  head: string
+  n: number
+  cx: number
+  cy: number
+}
+
+/** 天天象棋风格箭头几何：起点圆心出发，尖端落在终点中心，带三角箭头与编号 */
+function arrowGeometry(from: { x: number; y: number }, to: { x: number; y: number }, n: number): ArrowGeom {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy) || 1
+  const headLen = Math.min(20, Math.max(13, len * 0.28))
+  const baseX = to.x - (dx / len) * headLen
+  const baseY = to.y - (dy / len) * headLen
+  const nx = -dy / len
+  const ny = dx / len
+  const headWidth = Math.min(11, Math.max(8, len * 0.16))
+  return {
+    shaft: { x1: from.x, y1: from.y, x2: to.x, y2: to.y },
+    head: `${baseX + nx * headWidth},${baseY + ny * headWidth} ${to.x},${to.y} ${baseX - nx * headWidth},${baseY - ny * headWidth}`,
+    n,
+    cx: from.x,
+    cy: from.y,
+  }
+}
+
 /** 棋子字符 → 皮肤文件名 (w=红, b=黑) */
 function pieceSkinFile(piece: string): string {
   const side = isRed(piece) ? 'w' : 'b'
@@ -66,12 +95,15 @@ export const Board: React.FC = () => {
   const legalTargets = useStore(s => s.legalTargets)
   const lastMove = useStore(s => s.lastMove)
   const hintInfo = useStore(s => s.hintInfo)
+  const aiPreview = useStore(s => s.aiPreview)
   const boardFlipped = useStore(s => s.boardFlipped)
   const selectPiece = useStore(s => s.selectPiece)
   const isThinking = useStore(s => s.isThinking)
   const mode = useStore(s => s.mode)
+  const variation = useStore(s => s.variation)
   const sideControl = useStore(s => s.sideControl)
   const game = useStore(s => s.game)
+  const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
   const isMobile = useMediaQuery(MOBILE_QUERY)
@@ -89,6 +121,12 @@ export const Board: React.FC = () => {
   const blackRole = mode === 'play'
     ? (sideControl.b === 'human' ? '玩家' : 'AI')
     : (blackName || (sideControl.b === 'human' ? '玩家' : 'AI'))
+
+  // 翻转棋盘时上下玩家信息条跟随（顶=背面方，底=己方）
+  const topSide: 'w' | 'b' = boardFlipped ? 'w' : 'b'
+  const bottomSide: 'w' | 'b' = boardFlipped ? 'b' : 'w'
+  const sideLabel = (side: 'w' | 'b') => side === 'w' ? `红方（${redRole}）` : `黑方（${blackRole}）`
+  const sideTime = (side: 'w' | 'b') => side === 'w' ? redTime : blackTime
 
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')
@@ -111,10 +149,11 @@ export const Board: React.FC = () => {
   }, [boardSkin, settings.boardStyle])
 
   // 走子动画：挂载即从起点播放 keyframes 到终点，结束后由 onAnimationEnd 清除
+  // （设置里关闭「落子动画」后跳过，仅记录棋盘快照）
   useEffect(() => {
-    if (!lastMove || mode !== 'play') { prevBoardRef.current = board.board.map(c => c.join('')).join(''); return }
-    const prev = prevBoardRef.current
     const curr = board.board.map(c => c.join('')).join('')
+    if (!lastMove || mode !== 'play' || settings.animationEnabled === false) { prevBoardRef.current = curr; return }
+    const prev = prevBoardRef.current
     if (prev && prev !== curr) {
       const from = posToSvg(lastMove.from, boardFlipped, grid)
       const to = posToSvg(lastMove.to, boardFlipped, grid)
@@ -132,7 +171,7 @@ export const Board: React.FC = () => {
       return () => clearTimeout(t)
     }
     prevBoardRef.current = curr
-  }, [board, lastMove, boardFlipped, mode, grid])
+  }, [board, lastMove, boardFlipped, mode, grid, settings.animationEnabled])
 
   const getSvgCoords = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current
@@ -165,6 +204,26 @@ export const Board: React.FC = () => {
     if (mode !== 'play') return
     selectPiece(pos)
   }, [getSvgCoords, grid])
+
+  // 复盘：棋盘左右滑动翻步（右滑=上一步，左滑=下一步）；其余模式仅记录不处理
+  const swipeRef = useRef<{ x: number; y: number } | null>(null)
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    const s = useStore.getState()
+    if (s.mode === 'replay' && !s.variation) swipeRef.current = { x: e.clientX, y: e.clientY }
+    handlePointer(e)
+  }, [handlePointer])
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const start = swipeRef.current
+    swipeRef.current = null
+    if (!start) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (Math.abs(dx) <= 50 || Math.abs(dx) <= Math.abs(dy) * 1.5) return
+    const s = useStore.getState()
+    if (s.mode !== 'replay' || s.variation) return
+    if (dx > 0) s.goBack()
+    else s.goForward()
+  }, [])
 
   // ── 棋盘网格 ──
   const gridLines = React.useMemo(() => {
@@ -258,39 +317,39 @@ export const Board: React.FC = () => {
      return moves.map((uci, i) => {
        const fromPos = { col: uci.charCodeAt(0) - 97, row: Number(uci[1]) }
        const toPos = { col: uci.charCodeAt(2) - 97, row: Number(uci[3]) }
-        const from = posToSvg(fromPos, boardFlipped, grid)
-        const to = posToSvg(toPos, boardFlipped, grid)
-       const dx = to.x - from.x
-       const dy = to.y - from.y
-       const len = Math.hypot(dx, dy) || 1
-      // 天天象棋风格：提示线从起点交叉点/棋子中心出发，尖端落在终点中心。
-      const startX = from.x
-      const startY = from.y
-      const tipX = to.x
-      const tipY = to.y
-       const headLen = Math.min(20, Math.max(13, len * 0.28))
-       const baseX = tipX - (dx / len) * headLen
-       const baseY = tipY - (dy / len) * headLen
-       // 单位法线（垂直于行进方向）
-       const nx = -dy / len
-       const ny = dx / len
-       const headWidth = Math.min(11, Math.max(8, len * 0.16))
-       return {
-         shaft: { x1: startX, y1: startY, x2: tipX, y2: tipY },
-         head: `${baseX + nx * headWidth},${baseY + ny * headWidth} ${tipX},${tipY} ${baseX - nx * headWidth},${baseY - ny * headWidth}`,
-         n: i + 1, cx: from.x, cy: from.y,
-       }
+       return arrowGeometry(
+         posToSvg(fromPos, boardFlipped, grid),
+         posToSvg(toPos, boardFlipped, grid),
+         i + 1,
+       )
      })
-    }, [hintInfo, boardFlipped, grid])
+   }, [hintInfo, boardFlipped, grid])
+
+   // ── AI 思考中实时最优箭头（橙色流动虚线，随搜索加深更新，仿天天象棋动态提示）──
+   const aiArrow = React.useMemo(() => {
+     if (!aiPreview || mode !== 'play' || !aiPreview.move || aiPreview.move.length < 4) return null
+     const fromPos = { col: aiPreview.move.charCodeAt(0) - 97, row: Number(aiPreview.move[1]) }
+     const toPos = { col: aiPreview.move.charCodeAt(2) - 97, row: Number(aiPreview.move[3]) }
+     return arrowGeometry(posToSvg(fromPos, boardFlipped, grid), posToSvg(toPos, boardFlipped, grid), 0)
+   }, [aiPreview, mode, boardFlipped, grid])
+
+   // ── 复盘：最后一手的评级角标（正/妙/软/次/劣/漏）──
+   const boardTag = React.useMemo(() => {
+     if (mode !== 'replay' || currentPlyIndex <= 0 || !lastMove) return null
+     const tag = moveTag(game.plies[currentPlyIndex - 1]?.analysis?.classification)
+     if (!tag) return null
+     const to = posToSvg(lastMove.to, boardFlipped, grid)
+     return { tag, x: to.x, y: to.y }
+   }, [mode, currentPlyIndex, lastMove, game, boardFlipped, grid])
 
   return (
     <div className="board-container">
       {isPlay ? (
         <>
           <EvalBar />
-          <div className="player-info black-info">
-            <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
-            <span className="timer">{formatTime(blackTime)}</span>
+          <div className={`player-info ${topSide === 'w' ? 'red-info' : 'black-info'}`}>
+            <span className="player-name">{board.turn === topSide ? '● ' : ''}{sideLabel(topSide)}</span>
+            <span className="timer">{formatTime(sideTime(topSide))}</span>
           </div>
         </>
       ) : !isMobile ? (
@@ -305,9 +364,13 @@ export const Board: React.FC = () => {
             <span className="timer">{formatTime(redTime)}</span>
           </span>
         </div>
+      ) : mode === 'replay' && !variation ? (
+        // 复盘也常显评估条（有整盘分析/预分析数据时显示该局面分数）
+        <EvalBar />
       ) : null}
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
-        onPointerDown={handlePointer}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
         style={{ touchAction: 'none', cursor: 'pointer' }}>
         <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         <defs>
@@ -320,6 +383,22 @@ export const Board: React.FC = () => {
            否则会与皮肤网格重叠产生「双线」且因 slice 裁切导致越偏越大 */}
         {!boardSkin && <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="18" style={{ userSelect: 'none' }}>楚河 汉界</text>}
         {!boardSkin && gridLines}{lastMoveMarks}{targetMarks}{pieces}
+        {boardTag && (
+          <g className="board-move-tag" pointerEvents="none">
+            <circle cx={boardTag.x + 24} cy={boardTag.y - 24} r="13" fill="rgba(18,18,26,0.82)" />
+            <text className={boardTag.tag.c} x={boardTag.x + 24} y={boardTag.y - 19}
+              textAnchor="middle" fontSize="14" fontWeight="700">{boardTag.tag.t}</text>
+          </g>
+        )}
+        {aiArrow && (
+          <g className="ai-arrow" pointerEvents="none">
+            <line x1={aiArrow.shaft.x1} y1={aiArrow.shaft.y1} x2={aiArrow.shaft.x2} y2={aiArrow.shaft.y2}
+              stroke="rgba(0,0,0,0.25)" strokeWidth="12" strokeLinecap="round" />
+            <line className="ai-arrow-shaft" x1={aiArrow.shaft.x1} y1={aiArrow.shaft.y1} x2={aiArrow.shaft.x2} y2={aiArrow.shaft.y2}
+              stroke="#f39c12" strokeWidth="8" strokeLinecap="round" />
+            <polygon points={aiArrow.head} fill="#f39c12" />
+          </g>
+        )}
         {hintArrows && (
           <g className="hint-arrows" pointerEvents="none">
             {/* 先绘制所有箭杆，避免后一个编号圆覆盖前一个箭头的连接部分。 */}
@@ -373,9 +452,20 @@ export const Board: React.FC = () => {
         })()}
       </svg>
       {isPlay && (
-        <div className="player-info red-info">
-          <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
-          <span className="timer">{formatTime(redTime)}</span>
+        <div className={`player-info ${bottomSide === 'w' ? 'red-info' : 'black-info'}`}>
+          <span className="player-name">{board.turn === bottomSide ? '● ' : ''}{sideLabel(bottomSide)}</span>
+          <span className="timer">{formatTime(sideTime(bottomSide))}</span>
+        </div>
+      )}
+      {/* AI 思考中实时最优：覆在棋盘左上，随搜索加深更新（不占布局、不挡棋盘交互） */}
+      {aiPreview && mode === 'play' && (
+        <div className="board-live-best" title="AI 思考中实时最优着（随搜索加深更新，分数为 AI 方视角）">
+          <span className="blb-pulse" />
+          <span className="blb-move">{chineseFromFen(boardToFen(board), aiPreview.move)}</span>
+          <span className="blb-meta">d{aiPreview.depth}</span>
+          <span className={`blb-score ${aiPreview.score < 0 ? 'blb-neg' : ''}`}>
+            {(aiPreview.score / 100 >= 0 ? '+' : '') + (aiPreview.score / 100).toFixed(2)}
+          </span>
         </div>
       )}
       {hintInfo && (

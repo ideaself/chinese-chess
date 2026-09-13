@@ -87,7 +87,7 @@ async function waitForEngineIdle(get: StoreGet, maxMs = 10000): Promise<boolean>
 
 
 export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'engine' | 'engineReady' | 'isThinking' | 'engineOccupied' | 'engineDepth' | 'analysis' | 'hintInfo' | 'analysisProgress' | 'evalBar' | 'setDifficulty' | 'init' | 'aiMove' | 'aiHint' | 'quickEval' | 'analyzePosition' | 'analyzeCurrentGame' | 'cancelAnalysis'> {
+    'engine' | 'engineReady' | 'isThinking' | 'engineOccupied' | 'engineDepth' | 'analysis' | 'hintInfo' | 'aiPreview' | 'analysisProgress' | 'evalBar' | 'setDifficulty' | 'init' | 'aiMove' | 'aiHint' | 'quickEval' | 'analyzePosition' | 'analyzeCurrentGame' | 'cancelAnalysis'> {
   return {
     engine: null,
 
@@ -102,6 +102,8 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     analysis: null,
 
     hintInfo: null,
+
+    aiPreview: null,
 
     analysisProgress: null,
 
@@ -160,7 +162,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       return
     }
 
-    set({ isThinking: true })
+    set({ isThinking: true, aiPreview: null })
     const ui = createUiCoalescer(patch => set(patch))
 
     try {
@@ -190,7 +192,15 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           const posFen = boardToFen(currentBoard)
           const cands = await engine.analyzeLines(engineFen, moveList, Math.min(engineDepth, 12), skill.topN, (lines) => {
             const top = lines[0]
-            if (top) ui.push({ evalBar: { score: top.score, fen: posFen, depth: top.depth, nodes: top.nodes, nps: top.nps } })
+            if (top) {
+              const patch: Partial<AppState> = {
+                evalBar: { score: top.score, fen: posFen, depth: top.depth, nodes: top.nodes, nps: top.nps },
+              }
+              if (top.move && top.move.length >= 4) {
+                patch.aiPreview = { move: top.move, score: top.score, depth: top.depth }
+              }
+              ui.push(patch)
+            }
           }, moveTime)
           bestUci = pickSkillMove(cands, difficulty)
         } else {
@@ -199,7 +209,14 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           const posFen = boardToFen(currentBoard)
           bestUci = await engine.go(engineFen, moveList, engineDepth, moveTime, (info) => {
             aiScore = info.score
-            ui.push({ evalBar: { score: info.score, fen: posFen, depth: info.depth, nodes: info.nodes, nps: info.nps } })
+            const patch: Partial<AppState> = {
+              evalBar: { score: info.score, fen: posFen, depth: info.depth, nodes: info.nodes, nps: info.nps },
+            }
+            // 实时最优着：每层搜索的 pv[0]，棋盘上画箭头/显示（仿天天象棋动态更新）
+            if (info.move && info.move.length >= 4) {
+              patch.aiPreview = { move: info.move, score: info.score, depth: info.depth }
+            }
+            ui.push(patch)
           })
         }
       }
@@ -240,7 +257,7 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       console.error('AI 走棋失败:', e)
     } finally {
       ui.flush()
-      set({ isThinking: false })
+      set({ isThinking: false, aiPreview: null })
       // AI 走完轮到玩家时自动评估局面（供评估条显示）；演示模式（下一方仍为 AI）
       // 不触发 quickEval，避免与下一步 engine.go 在同一引擎上并发搜索而中断链。
       const st = get()

@@ -99,6 +99,8 @@ export interface AppState {
 
   /** 局面评估条（对战页棋盘上方，分数为行棋方视角） */
   evalBar: { score: number; fen: string; depth?: number; nodes?: number; nps?: number } | null
+  /** AI 思考中实时最优着（棋盘箭头 + 文案，随搜索加深动态更新；思考结束清除） */
+  aiPreview: { move: string; score: number; depth: number } | null
   /** 轮到玩家且引擎空闲时快速评估当前局面 */
   quickEval: () => Promise<void>
 

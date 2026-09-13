@@ -272,6 +272,8 @@ export const App: React.FC = () => {
       <header className="app-header">
         {isMobile && mode === 'replay' && !variation ? (
           <div className="replay-header">
+            <button className="mobile-page-back replay-back" aria-label="返回"
+              onClick={() => useStore.getState().navigateBack()}>←</button>
             <span className="replay-title" ref={titleRef}>
               <span className={`replay-title-inner ${titleScroll ? 'scrolling' : ''}`}
                 style={titleScroll ? ({ '--marquee-dist': `${titleScroll.dist}px`, '--marquee-dur': `${titleScroll.dur}s` } as React.CSSProperties) : undefined}>
@@ -653,6 +655,11 @@ const SettingsPanel: React.FC = () => {
             <span>自动局面评估</span>
             <input type="checkbox" checked={settings.autoEval !== false}
               onChange={e => update({ autoEval: e.target.checked })} />
+          </div>
+          <div className="settings-row">
+            <span title="落子、将军、终局与非法落点的震动反馈（移动端）">震动反馈</span>
+            <input type="checkbox" checked={settings.hapticEnabled !== false}
+              onChange={e => update({ hapticEnabled: e.target.checked })} />
           </div>
         </div>
         <div className="settings-group">

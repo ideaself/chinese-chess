@@ -38,16 +38,26 @@ export const EvalBar: React.FC = () => {
   const mode = useStore(s => s.mode)
   const evalBar = useStore(s => s.evalBar)
   const analysis = useStore(s => s.analysis)
+  const game = useStore(s => s.game)
+  const currentPlyIndex = useStore(s => s.currentPlyIndex)
 
   const curFen = useMemo(() => {
     // 仅取前两段做比较（计数器不影响局面）
     try { return boardToFen(board).split(' ').slice(0, 2).join(' ') } catch { return '' }
   }, [board])
 
+  // 复盘：当前局面已缓存的分析分（整盘分析/大师局预分析写入 ply.analysis）
+  const stored = useMemo(() => {
+    if (mode !== 'replay') return null
+    const a = game.plies[currentPlyIndex]?.analysis
+    if (!a) return null
+    return { score: a.score, depth: a.depth, nodes: undefined as number | undefined, nps: undefined as number | undefined }
+  }, [mode, game, currentPlyIndex])
+
   // 保留上一次有效评估，用于局面切换时避免分数条归零（保持连贯）
   const last = useRef<{ scoreRed: number; redPct: number; label: string; depth?: number; nodes?: number; nps?: number } | null>(null)
 
-  // 数据源: evalBar 优先（对战自动评估），其次单局面分析
+  // 数据源: evalBar 优先（对战自动评估），其次单局面分析，再次复盘缓存分析
   const src = useMemo(() => {
     if (evalBar && evalBar.fen.split(' ').slice(0, 2).join(' ') === curFen) {
       return { score: evalBar.score, depth: evalBar.depth, nodes: evalBar.nodes, nps: evalBar.nps }
@@ -55,8 +65,9 @@ export const EvalBar: React.FC = () => {
     if (analysis && analysis.fen.split(' ').slice(0, 2).join(' ') === curFen) {
       return { score: analysis.score, depth: analysis.depth, nodes: undefined, nps: undefined }
     }
+    if (stored) return stored
     return null
-  }, [evalBar, analysis, curFen])
+  }, [evalBar, analysis, curFen, stored])
 
   if (mode !== 'play' && mode !== 'replay') return null
 

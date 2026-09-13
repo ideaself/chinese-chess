@@ -176,3 +176,8 @@ export function playCheckHaptic(enabled: boolean = true) {
 export function playGameOverHaptic(enabled: boolean = true) {
   if (enabled) vibrate([50, 60, 50, 60, 80])
 }
+
+/** 非法落点轻震（点空格/对方子等无效目标） */
+export function playIllegalHaptic(enabled: boolean = true) {
+  if (enabled) vibrate(18)
+}

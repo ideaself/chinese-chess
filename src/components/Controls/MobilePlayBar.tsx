@@ -10,11 +10,11 @@
 import React, { useEffect, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { SideControl } from '../../store/useStore'
-import { getSettings } from '../../game/storage'
 import { exportPGN } from '../../game/pgn'
 import { boardToFen } from '../../game/board'
 import { exportGameImage } from '../../game/imageExport'
 import { BOARD_HOME } from '../../store/constants'
+import { findNextKeyPly, findPrevKeyPly } from '../../game/keyNav'
 import { TriRight } from '../ui/icons'
 
 export const MobilePlayBar: React.FC = () => {
@@ -45,9 +45,13 @@ export const MobilePlayBar: React.FC = () => {
   const setAutoPlay = useStore(s => s.setAutoPlaying)
   const startReplayVariation = useStore(s => s.startReplayVariation)
 
-  const [autoPlaySpeed, setAutoPlaySpeed] = useState(() => getSettings().autoPlaySpeed)
+  // 自动播放速度读写设置（复盘导航弹层内可直接调）
+  const settings = useStore(s => s.settings)
+  const updateSettings = useStore(s => s.updateSettings)
+  const autoPlaySpeed = settings.autoPlaySpeed
   const [menuOpen, setMenuOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  const [confirmKind, setConfirmKind] = useState<null | 'resign' | 'draw'>(null)
 
   const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
   const demo = sideControl.w === 'ai' && sideControl.b === 'ai'
@@ -72,6 +76,19 @@ export const MobilePlayBar: React.FC = () => {
   const exitVar = () => {
     exitVariation()
     setSelfAnalysis(false)
+  }
+
+  /** 跳到上一/下一关键手（失误级着法）；没有则提示先做整盘分析 */
+  const jumpKey = (dir: 'prev' | 'next') => {
+    const s = useStore.getState()
+    const target = dir === 'next'
+      ? findNextKeyPly(s.game, s.currentPlyIndex)
+      : findPrevKeyPly(s.game, s.currentPlyIndex)
+    if (target === null) {
+      showToast(dir === 'next' ? '后面没有关键手了（可先做整盘分析）' : '前面没有关键手了')
+      return
+    }
+    s.goToPly(target)
   }
 
   // 分支推演（试走变化）：棋盘常驻可见，直接点子落子；本操作条提供前进/后退与退出/分支列表
@@ -140,6 +157,7 @@ export const MobilePlayBar: React.FC = () => {
                 void exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })
               }}>🖼 分享局面</button>
               <button onClick={() => { setMenuOpen(false); enterSelfAnalysis() }}>🔍 自我分析</button>
+              <button onClick={() => { setMenuOpen(false); setSheetTab('controls') }}>🤖 AI 教练</button>
             </div>
           </>
         )}
@@ -159,15 +177,27 @@ export const MobilePlayBar: React.FC = () => {
                   {autoPlay ? '⏸ 暂停' : '▶ 自动播放'}
                 </button>
               </div>
+              <div className="mpb-nav-row">
+                <span className="mpb-nav-pos">速度</span>
+                {([[2000, '慢'], [1000, '中'], [500, '快'], [200, '极快']] as [number, string][]).map(([v, l]) => (
+                  <button key={v} className={`filter-btn ${autoPlaySpeed === v ? 'btn-active' : ''}`}
+                    onClick={() => updateSettings({ autoPlaySpeed: v })}>{l}</button>
+                ))}
+              </div>
+              <div className="mpb-nav-row">
+                <button className="mpb-btn" onClick={() => jumpKey('prev')} title="上一关键手">⏮ 上一关键</button>
+                <button className="mpb-btn" onClick={() => jumpKey('next')} title="下一关键手">⏭ 下一关键</button>
+              </div>
             </div>
           </>
         )}
         <div className="mpb-actions mpb-five">
           <button className="mpb-btn" onClick={() => setMenuOpen(true)} title="菜单">☰ 菜单</button>
           <button className="mpb-btn" onClick={() => setNavOpen(true)} title="棋谱导航">⇲ 导航</button>
-          <button className="mpb-btn" onClick={goBack} disabled={currentPlyIndex <= 0} title="上一步">◀</button>
-          <button className={`mpb-btn mpb-main`} onClick={goForward} disabled={currentPlyIndex >= game.plies.length} title="下一步"><TriRight /></button>
-          <button className="mpb-btn mpb-analyze" onClick={enterSelfAnalysis} title="自我分析">📈 自我分析</button>
+          <button className="mpb-btn mpb-step" onClick={goBack} disabled={currentPlyIndex <= 0} title="上一步">◀</button>
+          <button className={`mpb-btn mpb-main mpb-step`} onClick={goForward} disabled={currentPlyIndex >= game.plies.length} title="下一步"><TriRight /></button>
+          <button className="mpb-btn" onClick={() => jumpKey('next')} title="下一关键手">⚑ 关键</button>
+          <button className="mpb-btn mpb-analyze" onClick={enterSelfAnalysis} title="自我分析">📈 分析</button>
         </div>
       </div>
     )
@@ -185,16 +215,36 @@ export const MobilePlayBar: React.FC = () => {
           disabled={!engineReady || isThinking || demo} title={isThinking ? '思考中' : '提示'}>
           💡 提示</button>
         {singleHuman && (
-          <button className="mpb-btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }}
+          <button className="mpb-btn" onClick={() => setConfirmKind('resign')}
             disabled={over} title="认输">🏳</button>
         )}
         {singleHuman && !over && (
-          <button className="mpb-btn" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }}
+          <button className="mpb-btn" onClick={() => setConfirmKind('draw')}
             title="求和">🤝</button>
         )}
         <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
         <button className="mpb-btn" onClick={() => setSheetTab('controls')} title="更多设置">⚙</button>
       </div>
+      {/* 认输/求和：统一底部确认条（替代原生 confirm） */}
+      {confirmKind && (
+        <div className="mpb-confirm-backdrop" onClick={() => setConfirmKind(null)}>
+          <div className="mpb-confirm" onClick={e => e.stopPropagation()}>
+            <div className="mpb-confirm-title">{confirmKind === 'resign' ? '确定认输？' : '请求和棋？'}</div>
+            <div className="mpb-confirm-desc">
+              {confirmKind === 'resign' ? '本局将判负并保存战绩。' : '对方将根据当前形势决定是否接受。'}
+            </div>
+            <div className="mpb-confirm-actions">
+              <button className="mpb-btn" onClick={() => setConfirmKind(null)}>取消</button>
+              <button className="mpb-btn mpb-main" onClick={() => {
+                const kind = confirmKind
+                setConfirmKind(null)
+                if (kind === 'resign') resign()
+                else offerDraw()
+              }}>{confirmKind === 'resign' ? '认输' : '求和'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

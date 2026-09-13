@@ -2085,3 +2085,115 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   color: var(--text-2);
   white-space: nowrap;
 }
+
+/* ══ 移动端交互优化（v1.23.3） ══════════════════════════════════ */
+
+/* 复盘页头显式返回键 */
+.replay-back { flex: 0 0 auto; }
+
+/* AI 思考中实时最优（覆在棋盘左上，不占布局、不挡交互） */
+.board-live-best {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 12px);
+  padding: 3px 9px;
+  border-radius: 12px;
+  background: rgba(18, 18, 26, 0.74);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.board-live-best .blb-pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #f39c12;
+  animation: blb-pulse 0.9s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes blb-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
+.board-live-best .blb-move { font-weight: 700; letter-spacing: 0.5px; }
+.board-live-best .blb-meta { color: rgba(255,255,255,0.72); font-family: 'SF Mono', monospace; }
+.board-live-best .blb-score { color: #ffd166; font-family: 'SF Mono', monospace; font-weight: 700; }
+.board-live-best .blb-score.blb-neg { color: #9db8d8; }
+
+/* AI 实时最优箭头：橙色流动虚线 */
+.ai-arrow-shaft { stroke-dasharray: 11 7; animation: ai-arrow-flow 0.7s linear infinite; }
+@keyframes ai-arrow-flow { to { stroke-dashoffset: -36; } }
+
+/* 复盘棋盘评级角标（妙/软/漏…） */
+.board-move-tag .mt-best { fill: #7ec894; }
+.board-move-tag .mt-excellent { fill: #2ecc71; }
+.board-move-tag .mt-good { fill: #5fd089; }
+.board-move-tag .mt-inaccuracy { fill: #f0a93b; }
+.board-move-tag .mt-mistake { fill: #e67e22; }
+.board-move-tag .mt-blunder { fill: #ff7a6b; }
+.board-move-tag .mt-blunder2 { fill: #ff5e4d; }
+
+/* 认输/求和底部确认条（替代原生 confirm） */
+.mpb-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: mpb-fade 0.15s ease;
+}
+@keyframes mpb-fade { from { opacity: 0; } to { opacity: 1; } }
+.mpb-confirm {
+  width: 100%;
+  max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  animation: sheet-in 0.2s ease;
+}
+.mpb-confirm-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+.mpb-confirm-desc { font-size: 13px; color: var(--text-2); margin-bottom: 14px; }
+.mpb-confirm-actions { display: flex; gap: 10px; }
+.mpb-confirm-actions .mpb-btn { flex: 1; height: 44px; }
+
+@media (max-width: 860px) {
+  /* 触摸目标放大：主操作条/关键手/走法列表 */
+  .mpb-btn { height: 44px; }
+  .mpb-step { flex: 1.35; font-size: 18px; }
+  .filter-btn { padding: 7px 13px; }
+  .btn-sm { height: 32px; }
+  .key-moment-retry { height: 32px; }
+  .history-move { padding: 5px 8px; font-size: 12px; }
+
+  /* 顶部安全区（刘海屏） */
+  .app-header { padding-top: calc(6px + env(safe-area-inset-top)); }
+  .mobile-overlay-header { padding-top: calc(10px + env(safe-area-inset-top)); }
+
+  /* 底栏已移除：覆盖层铺到屏幕底，只留安全区 */
+  .mobile-overlay {
+    bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 横屏复盘：棋盘在左、局势图/列表在右（天天象棋横屏打谱布局） */
+@media (max-width: 860px) and (orientation: landscape) {
+  .app-main:has(.replay-tabs) { flex-direction: row; align-items: stretch; }
+  .app-main:has(.replay-tabs) .board-area { flex: 1 1 55%; padding: 4px; }
+  .app-main:has(.replay-tabs) .board-container { width: 100%; height: 100%; }
+  .app-main:has(.replay-tabs) .replay-tabs {
+    flex: 0 0 42%;
+    max-width: 42%;
+    max-height: none;
+    border-top: none;
+    border-left: 1px solid var(--line);
+  }
+  .mobile-play-bar .mpb-actions { flex-wrap: nowrap; }
+}
