@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.23.4（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.23.5（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -79,7 +79,9 @@ v1.23.2：应用图标换新——源图 `resources/app-icon.png`（黄色山水
 
 v1.23.3：移动端交互优化——AI 思考中实时最优（每层 pv[0] 动态箭头+浮标 `aiPreview`）；复盘页头返回键/常显评估条/走法列表自动跟随/「下一关键手」(`keyNav.ts`)/棋盘滑动翻步/大型 ◀▶/自动播放调速/落子评级角标(`moveTags.ts`)；复盘菜单加 AI 教练；求和改 AI 按形势应答 + 认输求和底部确认条；翻转信息条跟随并持久化；非法落点轻震、震动开关、落子动画开关生效；清底栏 54px 占位 + safe-area 适配 + 横屏复盘布局。
 
-v1.23.4（本次发布）：箭头重绘（锥形笔刷箭头：圆头起笔、身收窄、去描边与编号球，AI 实时最优带呼吸动画）+ 天天象棋残局挑战历史入库——`scripts/weekly-challenges.mjs` 从东萍抓取 421 期（第26~504期，binit→FEN，全量规则校验）→ `public/weekly-challenges.json`；主页卡片 + 棋谱页「挑战」子页签（期号搜索/通关标记/下一期），挑战局红先 vs 引擎，结算弹窗区分挑战「下一期/挑战列表」；`npm run challenges` 可刷新数据。
+v1.23.4：箭头重绘 + 天天象棋残局挑战历史入库——`scripts/weekly-challenges.mjs` 从东萍抓取 421 期（第26~504期，binit→FEN，全量规则校验）→ `public/weekly-challenges.json`；主页卡片 + 棋谱页「挑战」子页签（期号搜索/通关标记/下一期），挑战局红先 vs 引擎，结算弹窗区分挑战「下一期/挑战列表」；`npm run challenges` 可刷新数据。
+
+v1.23.5（本次发布）：箭头手感微调——箭杆改为细尾、前段近等宽、近箭头处渐宽后收窄接三角头（三次贝塞尔侧边），三角头缩短（约箭长 16%）；起点编号球保留，AI 实时最优箭头仍无编号。
 
 ## 已评估搁置
 

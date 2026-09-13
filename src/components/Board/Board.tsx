@@ -63,7 +63,7 @@ interface ArrowGeom {
   cy: number
 }
 
-/** 天天象棋风格箭头几何：起点圆头、箭身向箭头收窄、三角箭头落在终点中心 */
+/** 天天象棋风格箭头几何：细尾起笔、箭杆向头部渐宽、三角箭头落在终点中心 */
 function arrowGeometry(from: { x: number; y: number }, to: { x: number; y: number }, n: number): ArrowGeom {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -72,31 +72,35 @@ function arrowGeometry(from: { x: number; y: number }, to: { x: number; y: numbe
   const uy = dy / len
   const nx = -uy
   const ny = ux
-  const w = Math.min(20, Math.max(12, len * 0.24)) // 尾端全宽
-  const baseHalf = w * 0.5
-  const neckHalf = w * 0.28
-  const headHalf = w * 0.86
-  const headLen = Math.min(len * 0.45, Math.max(w * 1.9, len * 0.26))
+  const w = Math.min(17, Math.max(11, len * 0.2)) // 头部最宽基准
+  const tailHalf = w * 0.05 // 箭尾极细
+  const neckHalf = w * 0.45 // 与箭头相接处（细杆接三角头，居中）
+  const headHalf = w * 0.98 // 三角头最宽
+  const headLen = Math.min(len * 0.3, Math.max(w * 1.5, len * 0.16))
   const bx = from.x
   const by = from.y
   const hx = to.x - ux * headLen // 箭头基部中心
   const hy = to.y - uy * headLen
-  const mx = (bx + hx) / 2
-  const my = (by + hy) / 2
-  // 尾部半圆帽（并入同一 path，避免叠加导致颜色深浅不一）
-  const capK = baseHalf * 0.5523
-  const blx = bx + nx * baseHalf
-  const bly = by + ny * baseHalf
-  const brx = bx - nx * baseHalf
-  const bry = by - ny * baseHalf
+  // 三次贝塞尔侧边：细尾渐宽，靠近箭头处收窄成细杆再接三角头
+  const c1x = bx + (hx - bx) * 0.3
+  const c1y = by + (hy - by) * 0.3
+  const c2x = bx + (hx - bx) * 0.8
+  const c2y = by + (hy - by) * 0.8
+  const c1Half = tailHalf * 1.6
+  const c2Half = neckHalf * 0.75
+  const capK = tailHalf * 0.5523
+  const blx = bx + nx * tailHalf
+  const bly = by + ny * tailHalf
+  const brx = bx - nx * tailHalf
+  const bry = by - ny * tailHalf
   const path = [
     `M ${blx} ${bly}`,
-    `Q ${mx + nx * baseHalf * 1.08} ${my + ny * baseHalf * 1.08} ${hx + nx * neckHalf} ${hy + ny * neckHalf}`,
+    `C ${c1x + nx * c1Half} ${c1y + ny * c1Half} ${c2x + nx * c2Half} ${c2y + ny * c2Half} ${hx + nx * neckHalf} ${hy + ny * neckHalf}`,
     `L ${hx + nx * headHalf} ${hy + ny * headHalf}`,
     `L ${to.x} ${to.y}`,
     `L ${hx - nx * headHalf} ${hy - ny * headHalf}`,
     `L ${hx - nx * neckHalf} ${hy - ny * neckHalf}`,
-    `Q ${mx - nx * baseHalf * 1.08} ${my - ny * baseHalf * 1.08} ${brx} ${bry}`,
+    `C ${c2x - nx * c2Half} ${c2y - ny * c2Half} ${c1x - nx * c1Half} ${c1y - ny * c1Half} ${brx} ${bry}`,
     `C ${brx - ux * capK} ${bry - uy * capK} ${blx - ux * capK} ${bly - uy * capK} ${blx} ${bly}`,
     'Z',
   ].join(' ')
@@ -419,6 +423,13 @@ export const Board: React.FC = () => {
           <g className="hint-arrows" pointerEvents="none">
             {hintArrows.map((a, i) => (
               <path key={`arrow-${i}`} d={a.path} fill="#22c55e" fillOpacity="0.88" filter="url(#arrowShadow)" />
+            ))}
+            {/* 起点编号球（多步提示按 1/2/3 顺序） */}
+            {hintArrows.map((a, i) => (
+              <g key={`arrow-label-${i}`}>
+                <circle cx={a.cx} cy={a.cy} r="12" fill="#15803d" stroke="#fff" strokeWidth="2" />
+                <text x={a.cx} y={a.cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff">{a.n}</text>
+              </g>
             ))}
           </g>
         )}
