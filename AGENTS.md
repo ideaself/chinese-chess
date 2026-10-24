@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.24.0（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.24.1（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -92,6 +92,8 @@ v1.24.0（本次发布，移动端手感/视觉向天天象棋靠拢）：
 - **页头/布局**：对战页加返回首页键（此前手机上无法回大厅），走棋方状态做成页头胶囊、不再单独占一行状态栏；双方信息条加大棋子徽标、轮到方金色高亮、AI「思考中」三点动画；评估条压到 9px 且只在有真实评分时显示深度/广度。
 - **首页/新对局**：去掉与首页大标题重复的顶栏；首页改棋子徽标 + 标题 + 副标题，卡片/菜单图标全部内联化；新对局面板同步去 emoji。
 - 回归：`npx tsc --noEmit` 通过、`npm test` 265 项全绿、`vite build` 通过；e2e 移动套件仍是 v1.18 前旧导航，未纳入本次验证。
+
+v1.24.1（本次发布）：修复走子时棋盘上下抖动——评估条第二行（红优/深度/广度）此前只在有实时评分时渲染，走子后 FEN 变化会先消失再出现，把居中的棋盘推上推下（实测 9.5px）。现改为**常驻一行（`min-height:16px`）+ 用 `last` 缓存兜底显示上一次分数**，实测连续走两步 `svg.y` 恒为 208.6。注意：新增「常驻占位」后无数据时该行留空，不要再改回条件渲染。
 
 ## 已评估搁置
 

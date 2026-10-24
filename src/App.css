@@ -257,6 +257,8 @@ html[data-theme='light'] .eval-bar-label.label-black { color: #35608f; }
   align-items: center;
   gap: 4px 10px;
   margin-top: 3px;
+  /* 固定行高：评估数据到达/清空时不改变高度，避免棋盘上下跳 */
+  min-height: 16px;
   font-family: 'SF Mono', ui-monospace, monospace;
   font-size: 10px;
   line-height: 16px;

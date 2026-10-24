@@ -79,7 +79,7 @@ export const EvalBar: React.FC = () => {
     ? (Math.abs(rawScoreRed) >= 100000
         ? (rawScoreRed >= 0 ? `红杀 ${rawScoreRed - 100000} 步` : `黑杀 ${-rawScoreRed - 100000} 步`)
         : `${rawScoreRed >= 0 ? '红优' : '黑优'}${Math.abs(Math.round(rawScoreRed))}分`)
-    : (last.current?.label ?? '—')
+    : (last.current?.label ?? '')
   const depth = live ? src!.depth : last.current?.depth
   const nodes = live ? src!.nodes : last.current?.nodes
   const nps = live ? src!.nps : last.current?.nps
@@ -89,6 +89,11 @@ export const EvalBar: React.FC = () => {
     last.current = { scoreRed: rawScoreRed, redPct, label, depth, nodes, nps }
   }
 
+  // 新一代评分还没回来时继续显示上一局的分数（而不是清空），
+  // 这样「走子 → 评估刷新」期间不会因为多出/少掉一行而让棋盘上下跳。
+  const showMeta = live || last.current !== null
+  const metaScore = live ? rawScoreRed : (last.current?.scoreRed ?? 0)
+
   return (
     <div className="eval-bar" title="局面评估（点击可刷新分析）">
       <div className="eval-bar-track">
@@ -96,14 +101,17 @@ export const EvalBar: React.FC = () => {
         <div className="eval-bar-black" style={{ width: `${100 - redPct}%` }} />
         <div className="eval-bar-notch" />
       </div>
-      {live && (
-        <div className="eval-bar-meta">
-          <span className={`eval-score ${rawScoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
-          <span className="eval-meta">深度 {depth ?? '—'}</span>
-          <span className="eval-meta">广度 {fmtNodes(nodes)}</span>
-          <span className="eval-meta">速度 {fmtNps(nps)}</span>
-        </div>
-      )}
+      {/* 常驻一行（无数据时也占位），否则每次评估刷新都会改变高度、把棋盘推上推下 */}
+      <div className={`eval-bar-meta${showMeta ? '' : ' eval-bar-meta-empty'}`}>
+        {showMeta && (
+          <>
+            <span className={`eval-score ${metaScore >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
+            <span className="eval-meta">深度 {depth ?? '—'}</span>
+            <span className="eval-meta">广度 {fmtNodes(nodes)}</span>
+            <span className="eval-meta">速度 {fmtNps(nps)}</span>
+          </>
+        )}
+      </div>
     </div>
   )
 }
