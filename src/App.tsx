@@ -29,6 +29,7 @@ import { MobileHome } from './components/Controls/MobileHome'
 import { ReplayTabs } from './components/Analysis/ReplayTabs'
 import { SelfAnalysisBanner } from './components/Analysis/SelfAnalysisBanner'
 import { BOARD_HOME } from './store/constants'
+import { Icon } from './components/ui/icons'
 import { initBackNav, syncLayers } from './game/backNav'
 import { Capacitor } from '@capacitor/core'
 import './App.css'
@@ -244,6 +245,19 @@ export const App: React.FC = () => {
     const t = Math.floor(ms / 1000)
     return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
   }
+  // 当前状态文案（对战页把它收进页头，省掉单独一行状态栏）
+  const turnText = variation
+    ? '主变推演'
+    : mode === 'setup'
+      ? '摆棋模式'
+      : mode === 'puzzle'
+        ? '错误重走'
+        : openingTraining
+          ? '开局训练'
+          : mode === 'replay'
+            ? `第 ${currentPlyIndex}/${game.plies.length} 步`
+            : board.turn === 'w' ? '红方走棋' : '黑方走棋'
+  const mobilePlayHeader = isMobile && mobilePage === 'play' && mode !== 'replay'
   // 退出复盘 → 回到可下棋的对战棋盘（复盘已替换对局内容，重开一局）
   const exitReplay = () => {
     const s = useStore.getState()
@@ -269,7 +283,8 @@ export const App: React.FC = () => {
           <button className="btn btn-sm" onClick={() => setUpdateReady(false)}>✕</button>
         </div>
       )}
-      {/* 顶部导航（移动端仅标题，Tab 移至底部） */}
+      {/* 顶部导航（移动端仅标题，Tab 移至底部）；首页自带大标题，不再重复一行 */}
+      {!(isMobile && mobilePage === 'home') && (
       <header className="app-header">
         {isMobile && mode === 'replay' && !variation ? (
           <div className="replay-header">
@@ -282,6 +297,16 @@ export const App: React.FC = () => {
               </span>
             </span>
             <span className="replay-players">黑 {fmtTime(blackTime)} vs 红 {fmtTime(redTime)}</span>
+          </div>
+        ) : isMobile && mobilePage === 'play' && mode !== 'replay' ? (
+          <div className="mobile-header-row">
+            <button className="mobile-page-back" aria-label="返回首页"
+              onClick={() => setMobilePage('home')}>←</button>
+            <span className="app-title">中国象棋</span>
+            <span className={`turn-chip ${board.turn === 'w' ? 'turn-chip-red' : 'turn-chip-black'}`}>
+              {turnText}
+            </span>
+            {inCheck && <span className="check-badge">将军</span>}
           </div>
         ) : (
           <h1 className="app-title">♟ 中国象棋</h1>
@@ -297,23 +322,16 @@ export const App: React.FC = () => {
           </nav>
         )}
       </header>
+      )}
 
-      {/* 状态栏（移动端复盘隐藏：步数与胜负已在标题和局势图中，给棋盘腾空间） */}
+      {/* 状态栏（移动端复盘隐藏：步数与胜负已在标题和局势图中，给棋盘腾空间；
+          对战场合状态收进页头，避免两行小字占高度） */}
       {!(isMobile && mobilePage === 'home') &&
-        !(isMobile && mode === 'replay' && !variation) && (
+        !(isMobile && mode === 'replay' && !variation) &&
+        !mobilePlayHeader && (
         <div className="status-bar">
           <span className={`turn-indicator ${board.turn === 'w' ? 'turn-red' : 'turn-black'}`}>
-            {variation
-              ? '主变推演'
-              : mode === 'setup'
-                ? '摆棋模式'
-                : mode === 'puzzle'
-                  ? '错误重走'
-                  : openingTraining
-                    ? '开局训练'
-                    : mode === 'replay'
-                      ? `第 ${currentPlyIndex}/${game.plies.length} 步`
-                      : board.turn === 'w' ? '红方走棋' : '黑方走棋'}
+            {turnText}
           </span>
           {inCheck && <span className="check-badge">将军!</span>}
           {game.result !== '*' && (
@@ -347,6 +365,13 @@ export const App: React.FC = () => {
           {/* 对战页：棋盘 + 操控栏（保持现有布局） */}
           {mobilePage === 'play' && (
             <>
+              {mode !== 'replay' && (
+                <div className="landscape-hint" aria-hidden="true">
+                  <Icon name="rotate" size={38} />
+                  <span>请竖屏使用</span>
+                  <span className="lh-sub">横屏下棋盘会缩得太小，影响落子手感</span>
+                </div>
+              )}
               <main className="app-main">
                 {variation && selfAnalysis && <SelfAnalysisBanner />}
                 <div className="board-area">
@@ -672,6 +697,11 @@ const SettingsPanel: React.FC = () => {
             <span>落子动画</span>
             <input type="checkbox" checked={settings.animationEnabled}
               onChange={e => update({ animationEnabled: e.target.checked })} />
+          </div>
+          <div className="settings-row">
+            <span title="按住棋子直接拖到目标格落子；默认关闭，保持天天象棋的「点棋子 → 点目标」手感">拖动走子</span>
+            <input type="checkbox" checked={settings.dragToMove === true}
+              onChange={e => update({ dragToMove: e.target.checked })} />
           </div>
           <div className="settings-row">
             <span>自动局面评估</span>

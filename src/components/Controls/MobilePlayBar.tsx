@@ -1,21 +1,37 @@
 /**
  * 移动端棋盘主页操作条
  *
- * 全屏棋盘下方常驻的细操作条：
- * - 复盘模式（仿天天象棋分析页）：菜单 / 棋谱导航 / 上一步 / 下一步 / 自我分析
- * - 对战等模式：新对局 / 悔棋 / 提示 / 认输 / 求和 / 翻转 / ⚙
+ * 全屏棋盘下方常驻的细操作条（图标 + 文字，单行，仿天天象棋）：
+ * - 对战等模式：悔棋 / 提示 / 认输 / 求和 / 更多（新对局·翻转·设置）
+ * - 复盘模式：菜单 / 导航 / 上一步 / 下一步 / 关键手 / 分析
  * 桌面端不使用（桌面有右侧栏）。
  */
 
 import React, { useEffect, useState } from 'react'
 import { useStore } from '../../store/useStore'
-import type { SideControl } from '../../store/useStore'
 import { exportPGN } from '../../game/pgn'
 import { boardToFen } from '../../game/board'
 import { exportGameImage } from '../../game/imageExport'
 import { BOARD_HOME } from '../../store/constants'
 import { findNextKeyPly, findPrevKeyPly } from '../../game/keyNav'
-import { TriRight } from '../ui/icons'
+import { Icon, type IconName } from '../ui/icons'
+
+interface BarItem {
+  icon: IconName
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  primary?: boolean
+  title?: string
+}
+
+const BarButton: React.FC<BarItem> = ({ icon, label, onClick, disabled, primary, title }) => (
+  <button className={`mpb-ibtn${primary ? ' mpb-primary' : ''}`} onClick={onClick} disabled={disabled}
+    title={title ?? label} aria-label={label}>
+    <Icon name={icon} size={23} />
+    <span>{label}</span>
+  </button>
+)
 
 export const MobilePlayBar: React.FC = () => {
   const mode = useStore(s => s.mode)
@@ -51,6 +67,7 @@ export const MobilePlayBar: React.FC = () => {
   const autoPlaySpeed = settings.autoPlaySpeed
   const [menuOpen, setMenuOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [confirmKind, setConfirmKind] = useState<null | 'resign' | 'draw'>(null)
 
   const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
@@ -112,18 +129,17 @@ export const MobilePlayBar: React.FC = () => {
     }
 
     return (
-      <div className="mobile-play-bar">
-        <div className="mpb-transport">
-          <button className="mpb-btn" onClick={() => variationGo(0)} title="起点">⏮</button>
-          <button className="mpb-btn" onClick={() => variationGo(index - 1)} disabled={index <= 0} title="上一步">◀</button>
-          <button className={`mpb-btn mpb-main`} onClick={() => variationGo(index + 1)} disabled={index >= moves.length} title="下一步"><TriRight /></button>
-          <button className="mpb-btn" onClick={() => variationGo(moves.length)} title="终点">⏭</button>
-          {selfAnalysis && <button className="mpb-btn" onClick={() => { void aiMoveOnce() }} disabled={!engineReady || isThinking} title="AI 替走一手">🤖</button>}
-        </div>
-        <div className="mpb-actions">
-          <button className="mpb-btn" onClick={() => setSheetTab('variation')} title="分支列表">📑 分支 {branchCount}</button>
-          <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
-          <button className="mpb-btn wide" onClick={exitVar}>✕ 退出{selfAnalysis ? '自我分析' : '推演'}</button>
+      <div className="mobile-play-bar mpb-play">
+        <div className="mpb-icons">
+          <BarButton icon="start" label="开局" onClick={() => variationGo(0)} />
+          <BarButton icon="prev" label="上一步" onClick={() => variationGo(index - 1)} disabled={index <= 0} />
+          <BarButton icon="next" label="下一步" onClick={() => variationGo(index + 1)} disabled={index >= moves.length} primary />
+          <BarButton icon="end" label="末局" onClick={() => variationGo(moves.length)} />
+          <BarButton icon="branch" label={`分支 ${branchCount}`} onClick={() => setSheetTab('variation')} />
+          {selfAnalysis && (
+            <BarButton icon="chart" label="AI替走" onClick={() => { void aiMoveOnce() }} disabled={!engineReady || isThinking} />
+          )}
+          <BarButton icon="close" label="退出" onClick={exitVar} />
         </div>
         {!selfAnalysis && <div className="mpb-hint">点棋子试走；同局面可走不同手形成多分支，自动评对比主变</div>}
       </div>
@@ -132,7 +148,7 @@ export const MobilePlayBar: React.FC = () => {
 
   if (mode === 'replay') {
     return (
-      <div className="mobile-play-bar">
+      <div className="mobile-play-bar mpb-play">
         {menuOpen && (
           <>
             <div className="mpb-pop-backdrop" onClick={() => setMenuOpen(false)} />
@@ -143,21 +159,21 @@ export const MobilePlayBar: React.FC = () => {
                 s.restart()
                 s.setTab('play')
                 s.setSheetTab(BOARD_HOME)
-              }}>↩ 退出复盘</button>
-              <button onClick={() => { setMenuOpen(false); flipBoard() }}>⇅ 翻转</button>
-              <button onClick={() => { setMenuOpen(false); const s = useStore.getState(); s.setTab('games'); s.setSheetTab('games') }}>📚 棋谱库</button>
-              <button onClick={() => { setMenuOpen(false); startReplayVariation() }}>🌿 试走变化</button>
+              }}><Icon name="close" size={18} /> 退出复盘</button>
+              <button onClick={() => { setMenuOpen(false); flipBoard() }}><Icon name="flip" size={18} /> 翻转棋盘</button>
+              <button onClick={() => { setMenuOpen(false); const s = useStore.getState(); s.setTab('games'); s.setSheetTab('games') }}><Icon name="list" size={18} /> 棋谱库</button>
+              <button onClick={() => { setMenuOpen(false); startReplayVariation() }}><Icon name="branch" size={18} /> 试走变化</button>
               <button onClick={() => {
                 setMenuOpen(false)
                 void navigator.clipboard?.writeText(exportPGN(game))
                 showToast('棋谱 PGN 已复制到剪贴板')
-              }}>↗ 分享棋谱</button>
+              }}><Icon name="menu" size={18} /> 分享棋谱</button>
               <button onClick={() => {
                 setMenuOpen(false)
                 void exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })
-              }}>🖼 分享局面</button>
-              <button onClick={() => { setMenuOpen(false); enterSelfAnalysis() }}>🔍 自我分析</button>
-              <button onClick={() => { setMenuOpen(false); setSheetTab('controls') }}>🤖 AI 教练</button>
+              }}><Icon name="chart" size={18} /> 分享局面</button>
+              <button onClick={() => { setMenuOpen(false); enterSelfAnalysis() }}><Icon name="chart" size={18} /> 自我分析</button>
+              <button onClick={() => { setMenuOpen(false); setSheetTab('controls') }}><Icon name="hint" size={18} /> AI 教练</button>
             </div>
           </>
         )}
@@ -166,15 +182,15 @@ export const MobilePlayBar: React.FC = () => {
             <div className="mpb-pop-backdrop" onClick={() => setNavOpen(false)} />
             <div className="mpb-pop-nav">
               <div className="mpb-nav-row">
-                <button className="mpb-btn" onClick={goToStart} title="开局">⏮</button>
+                <button className="mpb-btn" onClick={goToStart} title="开局"><Icon name="start" size={18} /></button>
                 <input type="range" min={0} max={game.plies.length} value={currentPlyIndex}
                   onChange={(e) => { const s = useStore.getState(); s.goToPly(parseInt(e.target.value)) }} />
-                <button className="mpb-btn" onClick={goToEnd} title="末局">⏭</button>
+                <button className="mpb-btn" onClick={goToEnd} title="末局"><Icon name="end" size={18} /></button>
               </div>
               <div className="mpb-nav-row">
                 <span className="mpb-nav-pos">{currentPlyIndex}/{game.plies.length}</span>
                 <button className={`mpb-btn ${autoPlay ? 'mpb-playing' : ''}`} onClick={() => setAutoPlay(!autoPlay)}>
-                  {autoPlay ? '⏸ 暂停' : '▶ 自动播放'}
+                  <Icon name={autoPlay ? 'pause' : 'play'} size={16} /> {autoPlay ? '暂停' : '自动播放'}
                 </button>
               </div>
               <div className="mpb-nav-row">
@@ -185,45 +201,68 @@ export const MobilePlayBar: React.FC = () => {
                 ))}
               </div>
               <div className="mpb-nav-row">
-                <button className="mpb-btn" onClick={() => jumpKey('prev')} title="上一关键手">⏮ 上一关键</button>
-                <button className="mpb-btn" onClick={() => jumpKey('next')} title="下一关键手">⏭ 下一关键</button>
+                <button className="mpb-btn" onClick={() => jumpKey('prev')} title="上一关键手"><Icon name="flag" size={16} /> 上一关键</button>
+                <button className="mpb-btn" onClick={() => jumpKey('next')} title="下一关键手"><Icon name="flag" size={16} /> 下一关键</button>
               </div>
             </div>
           </>
         )}
-        <div className="mpb-actions mpb-five">
-          <button className="mpb-btn" onClick={() => setMenuOpen(true)} title="菜单">☰ 菜单</button>
-          <button className="mpb-btn" onClick={() => setNavOpen(true)} title="棋谱导航">⇲ 导航</button>
-          <button className="mpb-btn mpb-step" onClick={goBack} disabled={currentPlyIndex <= 0} title="上一步">◀</button>
-          <button className={`mpb-btn mpb-main mpb-step`} onClick={goForward} disabled={currentPlyIndex >= game.plies.length} title="下一步"><TriRight /></button>
-          <button className="mpb-btn" onClick={() => jumpKey('next')} title="下一关键手">⚑ 关键</button>
-          <button className="mpb-btn mpb-analyze" onClick={enterSelfAnalysis} title="自我分析">📈 分析</button>
+        <div className="mpb-icons">
+          <BarButton icon="menu" label="菜单" onClick={() => setMenuOpen(true)} />
+          <BarButton icon="nav" label="导航" onClick={() => setNavOpen(true)} />
+          <BarButton icon="prev" label="上一步" onClick={goBack} disabled={currentPlyIndex <= 0} />
+          <BarButton icon="next" label="下一步" onClick={goForward} disabled={currentPlyIndex >= game.plies.length} primary />
+          <BarButton icon="flag" label="关键手" onClick={() => jumpKey('next')} />
+          <BarButton icon="chart" label="分析" onClick={enterSelfAnalysis} />
         </div>
       </div>
     )
   }
 
   // 对战 / 摆棋 / 错题 / 拆解 / 训练等模式：棋盘下常驻核心操作
+  const openGame = () => {
+    setMoreOpen(false)
+    setSheetTab('newgame')
+  }
+
   return (
-    <div className="mobile-play-bar">
-        <div className="mpb-actions">
-          <button className="mpb-btn wide" onClick={() => setSheetTab('newgame')}>🎮 新对局</button>
-        <button className="mpb-btn" onClick={undo}
-          disabled={isThinking || currentPlyIndex < 1 || over || demo}
-          title={demo ? '演示模式不可悔棋' : over ? '对局已结束' : '悔棋'}>↺ 悔棋</button>
-        <button className={`mpb-btn${isThinking ? ' mpb-thinking' : ''}`} onClick={() => aiHint()}
-          disabled={!engineReady || isThinking || demo} title={isThinking ? '思考中' : '提示'}>
-          💡 提示</button>
-        {singleHuman && (
-          <button className="mpb-btn" onClick={() => setConfirmKind('resign')}
-            disabled={over} title="认输">🏳</button>
+    <div className="mobile-play-bar mpb-play">
+      {moreOpen && (
+        <>
+          <div className="mpb-pop-backdrop" onClick={() => setMoreOpen(false)} />
+          <div className="mpb-pop-menu mpb-more-menu">
+            <button onClick={openGame}><Icon name="plus" size={18} /> 新对局</button>
+            <button onClick={() => { setMoreOpen(false); flipBoard() }}><Icon name="flip" size={18} /> 翻转棋盘</button>
+            <button onClick={() => {
+              setMoreOpen(false)
+              void navigator.clipboard?.writeText(exportPGN(game))
+              showToast('棋谱 PGN 已复制到剪贴板')
+            }}><Icon name="list" size={18} /> 复制棋谱</button>
+            <button onClick={() => { setMoreOpen(false); setSheetTab('controls') }}><Icon name="gear" size={18} /> 设置</button>
+          </div>
+        </>
+      )}
+      <div className="mpb-icons">
+        {singleHuman ? (
+          <>
+            <BarButton icon="undo" label="悔棋" onClick={undo}
+              disabled={isThinking || currentPlyIndex < 1 || over} title={over ? '对局已结束' : '悔棋'} />
+            <BarButton icon="hint" label="提示" onClick={() => aiHint()}
+              disabled={!engineReady || isThinking || demo} title={isThinking ? '思考中' : '提示'} />
+            <BarButton icon="flag" label="认输" onClick={() => setConfirmKind('resign')} disabled={over} />
+            <BarButton icon="draw" label="求和" onClick={() => setConfirmKind('draw')} disabled={over} />
+          </>
+        ) : (
+          <>
+            <BarButton icon="undo" label="悔棋" onClick={undo}
+              disabled={isThinking || currentPlyIndex < 1 || over || demo} title={demo ? '演示模式不可悔棋' : '悔棋'} />
+            <BarButton icon="hint" label="提示" onClick={() => aiHint()}
+              disabled={!engineReady || isThinking || demo} />
+            <BarButton icon="flip" label="翻转" onClick={flipBoard} />
+            <BarButton icon="plus" label="新对局" onClick={() => setSheetTab('newgame')} />
+          </>
         )}
-        {singleHuman && !over && (
-          <button className="mpb-btn" onClick={() => setConfirmKind('draw')}
-            title="求和">🤝</button>
-        )}
-        <button className="mpb-btn" onClick={flipBoard} title="翻转棋盘">⇅</button>
-        <button className="mpb-btn" onClick={() => setSheetTab('controls')} title="更多设置">⚙</button>
+        <BarButton icon="more" label="更多" onClick={() => setMoreOpen(true)} />
       </div>
       {/* 认输/求和：统一底部确认条（替代原生 confirm） */}
       {confirmKind && (

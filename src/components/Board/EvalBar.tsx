@@ -96,12 +96,14 @@ export const EvalBar: React.FC = () => {
         <div className="eval-bar-black" style={{ width: `${100 - redPct}%` }} />
         <div className="eval-bar-notch" />
       </div>
-      <div className="eval-bar-meta">
-        <span className={`eval-score ${rawScoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
-        <span className="eval-meta">深度 {depth ?? '—'}</span>
-        <span className="eval-meta">广度 {fmtNodes(nodes)}</span>
-        <span className="eval-meta">速度 {fmtNps(nps)}</span>
-      </div>
+      {live && (
+        <div className="eval-bar-meta">
+          <span className={`eval-score ${rawScoreRed >= 0 ? 'label-red' : 'label-black'}`}>{label}</span>
+          <span className="eval-meta">深度 {depth ?? '—'}</span>
+          <span className="eval-meta">广度 {fmtNodes(nodes)}</span>
+          <span className="eval-meta">速度 {fmtNps(nps)}</span>
+        </div>
+      )}
     </div>
   )
 }

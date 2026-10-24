@@ -206,12 +206,12 @@ body { overflow: hidden; }
 .eval-bar {
   position: relative;
   width: 100%;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
 .eval-bar-track {
   display: flex;
-  height: 14px;
-  border-radius: 7px;
+  height: 9px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid var(--line);
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
@@ -279,14 +279,45 @@ html[data-theme='light'] .eval-bar-meta .eval-score.label-black { color: #35608f
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 7px 16px;
+  padding: 6px 12px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  margin: 7px 0;
+  border-radius: 12px;
+  margin: 5px 0;
   width: 100%;
   max-width: 520px;
+  transition: box-shadow 0.2s, background 0.2s;
 }
+/* 轮到该方：左侧高亮竖条 + 稍亮的底 */
+.player-info.side-active {
+  background: linear-gradient(90deg, rgba(240,199,74,0.10), var(--panel-2) 55%);
+  box-shadow: inset 3px 0 0 rgba(240,199,74,0.85);
+}
+.pi-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pi-badge {
+  flex: 0 0 auto;
+  width: 25px; height: 25px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600;
+  font-family: 'STKaiti', 'KaiTi', 'Kaiti SC', 'Noto Serif CJK SC', serif;
+  line-height: 1;
+}
+.pi-badge-red { color: #ffb3ac; background: rgba(224,85,85,0.16); border: 1px solid rgba(224,85,85,0.5); }
+.pi-badge-black { color: #cfdcee; background: rgba(150,175,210,0.12); border: 1px solid rgba(150,175,210,0.4); }
+.player-info .player-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 对方思考中：三点呼吸 */
+.pi-thinking {
+  display: inline-flex; align-items: center; gap: 2px;
+  margin-left: 2px; font-size: 11px; color: var(--gold); opacity: 0.95;
+}
+.pi-thinking i {
+  width: 3px; height: 3px; border-radius: 50%; background: currentColor;
+  animation: pi-dot 1s infinite ease-in-out;
+}
+.pi-thinking i:nth-child(2) { animation-delay: 0.15s; }
+.pi-thinking i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pi-dot { 0%, 60%, 100% { opacity: 0.25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
 
 .player-name { font-size: 13px; font-weight: bold; }
 .black-info .player-name { color: #6aa5e8; }
@@ -1480,47 +1511,80 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    padding: 40px 32px;
+    gap: 16px;
+    padding: 24px 28px calc(24px + env(safe-area-inset-bottom));
     min-height: 0;
+    background: radial-gradient(120% 60% at 50% 8%, rgba(74,144,226,0.10) 0%, rgba(22,22,42,0) 60%);
+  }
+  .mobile-home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .mobile-home-emblem {
+    width: 56px; height: 56px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 28px;
+    font-weight: 600;
+    color: #b3261e;
+    font-family: 'STKaiti', 'KaiTi', 'Kaiti SC', 'Noto Serif CJK SC', serif;
+    background: radial-gradient(circle at 35% 30%, #fffdf5, #f3e3c0 62%, #dfc38d);
+    border: 2px solid #c9a45c;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.7);
+    margin-bottom: 4px;
   }
   .mobile-home-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: bold;
     color: var(--gold);
-    letter-spacing: 2px;
-    margin-bottom: 20px;
+    letter-spacing: 4px;
+    margin-bottom: 0;
+  }
+  .mobile-home-sub {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-3);
   }
   .mobile-home-menu {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
     width: 100%;
-    max-width: 320px;
+    max-width: 340px;
+    margin-top: 4px;
   }
   .mobile-home-btn {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     width: 100%;
-    padding: 20px 24px;
+    padding: 13px 16px;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: 14px;
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
+    color: var(--text);
   }
   .mobile-home-btn:active {
     transform: scale(0.97);
     background: var(--panel-2);
   }
   .mobile-home-icon {
-    font-size: 32px;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 11px;
+    background: rgba(240,199,74,0.10);
+    border: 1px solid rgba(240,199,74,0.28);
+    color: var(--gold);
   }
   .mobile-home-label {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: bold;
     color: var(--text);
     display: block;
@@ -1531,6 +1595,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     display: block;
     margin-top: 2px;
   }
+  .mobile-home-chevron {
+    margin-left: auto;
+    color: var(--text-3);
+    font-size: 20px;
+    line-height: 1;
+    padding-left: 6px;
+  }
 
   /* ── 移动端首页·每日一题卡片 ── */
   .mobile-home-daily {
@@ -1538,21 +1609,26 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     align-items: center;
     gap: 12px;
     width: 100%;
-    max-width: 320px;
-    padding: 14px 18px;
+    max-width: 340px;
+    padding: 13px 16px;
     background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%);
     border: 1px solid var(--gold, #c9a45c);
-    border-radius: 16px;
+    border-radius: 14px;
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
+    color: var(--text);
   }
   .mobile-home-daily:active {
     transform: scale(0.97);
   }
   .mobile-home-daily-icon {
-    font-size: 26px;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    background: rgba(240,199,74,0.12);
+    color: var(--gold);
   }
   .mobile-home-daily-main {
     flex: 1;
@@ -1560,7 +1636,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   }
   .mobile-home-daily-label {
     display: block;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: bold;
     color: var(--gold);
   }
@@ -1569,12 +1645,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     font-size: 12px;
     color: var(--text-3);
     margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .mobile-home-daily-go {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-2);
     flex-shrink: 0;
   }
+  .mobile-home-daily-go::after { content: ' ›'; color: var(--text-3); }
 
   /* ── 移动端子页面（棋谱/设置全屏）── */
   .mobile-page {
@@ -1607,6 +1687,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
     padding: 4px 8px;
     cursor: pointer;
   }
+  /* 对战页页头：返回键 + 标题（天天象棋式，随时能回大厅） */
+  .mobile-header-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+  }
+  .mobile-header-row .app-title { font-size: 16px; color: var(--gold); }
+  .mobile-header-row .mobile-page-back { margin-left: -6px; }
+  .mobile-header-pad { width: 30px; flex: 0 0 auto; }
   .mobile-page-title {
     font-size: 17px;
     font-weight: bold;
@@ -2234,3 +2324,129 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .wc-go.wc-cleared { color: #7ec894; }
 .wc-source { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .mobile-home-challenge { margin-top: 10px; }
+
+/* ══ v1.24 移动端手感 / 视觉（仿天天象棋） ═══════════════════════ */
+
+/* 棋子选中：四角框淡入（不做缩放，避免 SVG 变换原点错位） */
+.sel-brackets { animation: sel-brackets-in 0.12s ease-out; }
+@keyframes sel-brackets-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* 对局页：棋盘与双方信息贴合，减少无谓留白 */
+.board-container.board-play { gap: 0; height: 100%; justify-content: center; }
+.board-container.board-play .player-info { margin: 6px 0; padding: 7px 12px; }
+.board-container.board-play svg { border-radius: 10px; }
+/* 棋盘区域背景：轻微径向渐变，避免大片纯色显得空 */
+.board-area:has(.board-play) {
+  background:
+    radial-gradient(120% 70% at 50% 38%, rgba(64,54,40,0.30) 0%, rgba(22,22,42,0) 62%),
+    var(--bg);
+}
+/* 页头状态胶囊（对战页状态从状态栏收进页头） */
+.turn-chip {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.turn-chip-red { color: #ffa3a3; background: rgba(224,85,85,0.15); }
+.turn-chip-black { color: #a9c6e8; background: rgba(90,140,220,0.16); }
+.mobile-header-row .check-badge { font-size: 11px; padding: 2px 7px; margin-left: 4px; animation: none; }
+/* 评估条的深度/广度/速度在手机上太挤，只留分数和深度 */
+@media (max-width: 720px) {
+  .eval-bar-meta .eval-meta:nth-child(n+3) { display: none; }
+}
+
+/* 高屏手机：双方信息条放大头像，把上下留白用得更有信息量 */
+@media (max-width: 720px) and (min-height: 740px) {
+  .board-container.board-play .player-info { padding: 8px 12px; margin: 7px 0; }
+  .pi-badge { width: 34px; height: 34px; font-size: 17px; }
+}
+
+/* 底部操作条：单行图标 + 文字 */
+.mobile-play-bar.mpb-play {
+  gap: 4px;
+  padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
+}
+.mpb-icons {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 1px;
+}
+.mpb-ibtn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 54px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.08s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mpb-ibtn span {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.mpb-ibtn:active:not(:disabled) { background: var(--panel-2); transform: scale(0.96); }
+.mpb-ibtn:disabled { opacity: 0.3; }
+.mpb-ibtn.mpb-primary { color: var(--gold); }
+.mpb-ibtn.mpb-primary svg { filter: drop-shadow(0 0 6px rgba(240,199,74,0.25)); }
+
+/* 弹出菜单条目统一图标对齐 */
+.mpb-pop-menu button { display: flex; align-items: center; gap: 10px; }
+.mpb-pop-menu button svg { flex: 0 0 auto; opacity: 0.9; }
+.mpb-more-menu { left: auto; right: 10px; }
+
+/* 认输/求和确认条：主按钮用金色，与操作条一致 */
+.mpb-confirm-actions .mpb-main { background: var(--gold); border-color: var(--gold); color: #241a05; }
+
+/* 大屏横屏时操作条不要被拉得过宽 */
+@media (min-width: 720px) {
+  .mpb-icons { width: 100%; max-width: 520px; margin: 0 auto; }
+}
+
+/* 新对局面板：图标 + 文案对齐，红黑方用棋色圆点 */
+.ng-role { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.side-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
+}
+.dot-red { background: radial-gradient(circle at 35% 30%, #ff9d94, #b3261e); }
+.dot-black { background: radial-gradient(circle at 35% 30%, #7a7a88, #1a1a20); }
+
+/* 横屏手机：10 行棋盘按高度缩放后棋子太小，引导竖屏（复盘有专门的横屏布局，不拦） */
+.landscape-hint { display: none; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .landscape-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: var(--bg);
+    color: var(--text-2);
+    font-size: 15px;
+    letter-spacing: 1px;
+  }
+  .landscape-hint svg { color: var(--gold); }
+  .landscape-hint .lh-sub { font-size: 12px; color: var(--text-3); letter-spacing: 0; }
+}

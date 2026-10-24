@@ -10,6 +10,7 @@ import { useStore, DIFFICULTY_LABELS } from '../../store/useStore'
 import type { Difficulty } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { BOARD_HOME } from '../../store/constants'
+import { Icon } from '../ui/icons'
 
 export const NewGamePanel: React.FC = () => {
   const difficulty = useStore(s => s.difficulty)
@@ -53,17 +54,31 @@ export const NewGamePanel: React.FC = () => {
 
       <div className="ctrl-title">对局角色</div>
       <div className="action-grid cols-2">
-        <button className="btn" onClick={() => startRole('red')}>🔴 玩家执红 · AI执黑</button>
-        <button className="btn" onClick={() => startRole('black')}>⚫ 玩家执黑 · AI执红</button>
-        <button className="btn" onClick={() => startRole('random')}>🎲 随机执子（玩家）</button>
-        <button className="btn" onClick={() => startRole('hotseat')}>👥 双人对战（玩家 vs 玩家）</button>
-        <button className="btn" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}>🤖 AI 演示（AI vs AI）</button>
+        <button className="btn ng-role" onClick={() => startRole('red')}>
+          <span className="side-dot dot-red" /> 玩家执红 · AI执黑
+        </button>
+        <button className="btn ng-role" onClick={() => startRole('black')}>
+          <span className="side-dot dot-black" /> 玩家执黑 · AI执红
+        </button>
+        <button className="btn ng-role" onClick={() => startRole('random')}>
+          <Icon name="swap" size={17} /> 随机执子（玩家）
+        </button>
+        <button className="btn ng-role" onClick={() => startRole('hotseat')}>
+          <Icon name="people" size={17} /> 双人对战（玩家 vs 玩家）
+        </button>
+        <button className="btn ng-role" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}>
+          <Icon name="robot" size={17} /> AI 演示（AI vs AI）
+        </button>
       </div>
 
       <div className="ctrl-title" style={{ marginTop: 8 }}>快捷</div>
       <div className="action-grid cols-2">
-        <button className="btn" onClick={startDefault}>⭐ 按默认设置</button>
-        <button className="btn" onClick={() => { restart(); close() }}>🔄 重开本局</button>
+        <button className="btn ng-role" onClick={startDefault}>
+          <Icon name="star" size={17} /> 按默认设置
+        </button>
+        <button className="btn ng-role" onClick={() => { restart(); close() }}>
+          <Icon name="undo" size={17} /> 重开本局
+        </button>
       </div>
     </div>
   )

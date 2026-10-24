@@ -167,6 +167,11 @@ export function playMoveHaptic(enabled: boolean = true) {
   if (enabled) vibrate(12)
 }
 
+/** 拿起棋子/选中：极轻一触（拖动起手反馈） */
+export function playPickHaptic(enabled: boolean = true) {
+  if (enabled) vibrate(6)
+}
+
 /** 将军警示震 */
 export function playCheckHaptic(enabled: boolean = true) {
   if (enabled) vibrate([30, 40, 30])

@@ -573,6 +573,8 @@ export interface AppSettings {
   // 操作
   showLegalMoves: boolean
   animationEnabled: boolean
+  /** 按住棋子拖动走子（关闭后只保留「点棋子→点目标」） */
+  dragToMove: boolean
   autoPlaySpeed: number // ms per move
   // 音效与触感
   soundMove: boolean
@@ -624,6 +626,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   boardFlipped: false,
   showLegalMoves: true,
   animationEnabled: true,
+  // 天天象棋的默认手感是「点棋子 → 点目标」，拖动作为可选增强，默认关闭
+  dragToMove: false,
   autoPlaySpeed: 1000,
   soundMove: true,
   soundCapture: true,

@@ -8,11 +8,12 @@ import { loadPuzzles, PUZZLE_TYPES, puzzleDifficulty, getDailyPuzzle } from '../
 import type { PuzzleItem, PuzzleType } from '../../game/puzzles'
 import { getPuzzleStreak, isDailyDone } from '../../game/progress'
 import { loadChallenges } from '../../game/challenges'
+import { Icon, type IconName } from '../ui/icons'
 
-const MENU_ITEMS: { page: MobilePage; icon: string; label: string; desc: string }[] = [
-  { page: 'play', icon: '♟', label: '对战', desc: '人机对战 / 双人对弈' },
-  { page: 'games', icon: '📖', label: '棋谱', desc: '大师棋局 / 复盘分析' },
-  { page: 'settings', icon: '⚙', label: '设置', desc: '外观 / 音效 / 引擎' },
+const MENU_ITEMS: { page: MobilePage; icon: IconName; label: string; desc: string }[] = [
+  { page: 'play', icon: 'swords', label: '对战', desc: '人机对战 / 双人对弈' },
+  { page: 'games', icon: 'book', label: '棋谱', desc: '大师棋局 / 复盘分析' },
+  { page: 'settings', icon: 'gear', label: '设置', desc: '外观 / 音效 / 引擎' },
 ]
 
 /** 首个有题的每日挑战（按固定顺序，同一天稳定） */
@@ -68,10 +69,14 @@ export const MobileHome: React.FC = () => {
 
   return (
     <div className="mobile-home">
-      <div className="mobile-home-title">♟ 中国象棋</div>
+      <div className="mobile-home-hero">
+        <span className="mobile-home-emblem">象</span>
+        <div className="mobile-home-title">中国象棋</div>
+        <div className="mobile-home-sub">棋力 · 复盘 · 名局拆解</div>
+      </div>
       {daily && (
         <button className="mobile-home-daily" onClick={goDaily}>
-          <span className="mobile-home-daily-icon">☀️</span>
+          <span className="mobile-home-daily-icon"><Icon name="hint" size={22} /></span>
           <span className="mobile-home-daily-main">
             <span className="mobile-home-daily-label">
               每日一题 · {daily.type}{done ? ' ✓ 已完成' : ''}
@@ -80,18 +85,18 @@ export const MobileHome: React.FC = () => {
               {puzzleDifficulty(daily.puzzle)} · {streak.count > 0 ? `🔥 连对 ${streak.count} 题` : '找出实战最佳着'}
             </span>
           </span>
-          <span className="mobile-home-daily-go">{done ? '再看' : '去挑战'} →</span>
+          <span className="mobile-home-daily-go">{done ? '再看' : '去挑战'}</span>
         </button>
       )}
       <button className="mobile-home-daily mobile-home-challenge" onClick={goChallenges}>
-        <span className="mobile-home-daily-icon">🏆</span>
+        <span className="mobile-home-daily-icon"><Icon name="trophy" size={22} /></span>
         <span className="mobile-home-daily-main">
           <span className="mobile-home-daily-label">天天象棋 · 残局挑战</span>
           <span className="mobile-home-daily-desc">
             {challengeCount ? `${challengeCount} 期历史存档，挑一期随时破局` : '历史存档，挑一期随时破局'}
           </span>
         </span>
-        <span className="mobile-home-daily-go">去挑战 →</span>
+        <span className="mobile-home-daily-go">去挑战</span>
       </button>
       <div className="mobile-home-menu">
         {MENU_ITEMS.map(item => (
@@ -100,9 +105,10 @@ export const MobileHome: React.FC = () => {
             className="mobile-home-btn"
             onClick={() => setMobilePage(item.page)}
           >
-            <span className="mobile-home-icon">{item.icon}</span>
+            <span className="mobile-home-icon"><Icon name={item.icon} size={24} /></span>
             <span className="mobile-home-label">{item.label}</span>
             <span className="mobile-home-desc">{item.desc}</span>
+            <span className="mobile-home-chevron">›</span>
           </button>
         ))}
       </div>

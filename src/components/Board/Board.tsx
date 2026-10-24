@@ -1,10 +1,12 @@
 /**
- * 棋盘组件 - 点击走棋
+ * 棋盘组件 - 拖拽走子 + 点选走子
  *
- * 纯点击交互:
- *   1. 点击己方棋子 → 选中，高亮合法走法
- *   2. 点击合法目标格 → 走棋
- *   3. 点击其他位置 → 取消选择
+ * 交互（与天天象棋一致）:
+ *   1. 按住己方棋子直接拖动 → 棋子跟手，落在合法点上即走子
+ *   2. 点己方棋子 → 选中并高亮合法走法；再点目标格 → 走子
+ *   3. 拖动未落在合法点 → 棋子归位，保留选中
+ *   4. 点空白/非法点 → 取消选择（带轻震反馈）
+ * 复盘模式保留左右滑动翻步。
  */
 
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react'
@@ -16,6 +18,7 @@ import { useMediaQuery, MOBILE_QUERY } from '../../utils/useMediaQuery'
 import { EvalBar } from './EvalBar'
 import { boardSkinGrids, DEFAULT_BOARD_GRID, type BoardGrid } from '../../game/boardSkinGrids'
 import { moveTag } from '../../game/moveTags'
+import { playPickHaptic } from '../../game/sound'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -24,6 +27,12 @@ const BOARD_PADDING = 40
 const BOARD_WIDTH = BOARD_PADDING * 2 + (BOARD_COLS - 1) * CELL
 const BOARD_HEIGHT = BOARD_PADDING * 2 + (BOARD_ROWS - 1) * CELL
 const PIECE_RADIUS = 26
+/** 拖动时棋子相对手指上移的距离（SVG 单位），避免手指挡住棋子 */
+const DRAG_LIFT = 22
+/** 拖动起手判定阈值（CSS 像素）——低于此值仍按点击处理，避免手抖被误判成拖动 */
+const DRAG_START_DIST = 8
+
+const KAI_FONT = "'STKaiti','KaiTi','Kaiti SC','Noto Serif CJK SC','Songti SC',serif"
 
 interface AnimState {
   piece: string
@@ -32,6 +41,23 @@ interface AnimState {
   /** 位移增量（CSS 变量 --dx/--dy 驱动 keyframes） */
   dx: number
   dy: number
+}
+
+interface DragState {
+  from: Pos
+  piece: string
+  x: number
+  y: number
+  over: Pos | null
+}
+
+interface DragSession {
+  pointerId: number
+  from: Pos
+  startX: number
+  startY: number
+  active: boolean
+  over: Pos | null
 }
 
 function posToSvg(pos: Pos, flipped: boolean, grid: BoardGrid): { x: number; y: number } {
@@ -113,6 +139,36 @@ function pieceSkinFile(piece: string): string {
   return `${side}${piece.toLowerCase()}`
 }
 
+/**
+ * 四角框（天天象棋选中/上一手标记）：只画四个角的 L 形，不遮挡棋子。
+ * 角点带圆角，线条收尾略收细。
+ */
+function cornerBrackets(cx: number, cy: number, half: number, arm: number, radius = 5): string {
+  const x1 = cx - half, x2 = cx + half, y1 = cy - half, y2 = cy + half
+  const r = Math.min(radius, arm / 2)
+  const corner = (x: number, y: number, sx: number, sy: number) =>
+    `M ${x + sx * arm} ${y} L ${x + sx * r} ${y} Q ${x} ${y} ${x} ${y + sy * r} L ${x} ${y + sy * arm}`
+  return [
+    corner(x1, y1, 1, 1),
+    corner(x2, y1, -1, 1),
+    corner(x1, y2, 1, -1),
+    corner(x2, y2, -1, -1),
+  ].join(' ')
+}
+
+/** 拖动落点吸附：取指针附近最近的合法着点（≤0.62 格） */
+function nearestTarget(x: number, y: number, targets: Pos[], flipped: boolean, grid: BoardGrid): Pos | null {
+  const limit = Math.min(grid.xstep, grid.ystep) * 0.62
+  let best: Pos | null = null
+  let bestD = Infinity
+  for (const t of targets) {
+    const p = posToSvg(t, flipped, grid)
+    const d = Math.hypot(p.x - x, p.y - y)
+    if (d <= limit && d < bestD) { best = t; bestD = d }
+  }
+  return best
+}
+
 export const Board: React.FC = () => {
   const board = useStore(s => s.board)
   const selected = useStore(s => s.selected)
@@ -155,6 +211,10 @@ export const Board: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')
   const [anim, setAnim] = useState<AnimState | null>(null)
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const dragRef = useRef<DragSession | null>(null)
+  /** 拖拽落子已经「看到」目标位置，跳过滑行动画，避免回跳 */
+  const skipAnimRef = useRef(false)
   // 响应式设置：改皮肤立即生效
   const settings = useStore(s => s.settings)
   const inCheck = isInCheck(board)
@@ -179,6 +239,11 @@ export const Board: React.FC = () => {
     if (!lastMove || mode !== 'play' || settings.animationEnabled === false) { prevBoardRef.current = curr; return }
     const prev = prevBoardRef.current
     if (prev && prev !== curr) {
+      if (skipAnimRef.current) {
+        skipAnimRef.current = false
+        prevBoardRef.current = curr
+        return
+      }
       const from = posToSvg(lastMove.from, boardFlipped, grid)
       const to = posToSvg(lastMove.to, boardFlipped, grid)
       const piece = board.board[lastMove.to.col][lastMove.to.row]
@@ -231,44 +296,159 @@ export const Board: React.FC = () => {
 
   // 复盘：棋盘左右滑动翻步（右滑=上一步，左滑=下一步）；其余模式仅记录不处理
   const swipeRef = useRef<{ x: number; y: number } | null>(null)
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const s = useStore.getState()
     if (s.mode === 'replay' && !s.variation) swipeRef.current = { x: e.clientX, y: e.clientY }
-    handlePointer(e)
-  }, [handlePointer])
+    if (e.button !== 0 || s.isThinking) return
+
+    const coords = getSvgCoords(e.clientX, e.clientY)
+    if (!coords) return
+    const pos = svgToPos(coords.x, coords.y, s.boardFlipped, grid)
+    if (pos.col < 0 || pos.col >= BOARD_COLS || pos.row < 0 || pos.row >= BOARD_ROWS) return
+
+    // 只对「行棋方的棋子」起手拖动；其余交给点击逻辑
+    const piece = s.board.board[pos.col][pos.row]
+    const canDrag = piece !== '.'
+      && s.settings.dragToMove === true
+      && (s.mode === 'play' || s.mode === 'puzzle' || (s.mode === 'replay' && !!s.variation))
+      && isRed(piece) === (s.board.turn === 'w')
+      && (s.mode !== 'play' || s.openingTraining || s.sideControl[s.board.turn] === 'human')
+
+    if (canDrag) {
+      dragRef.current = {
+        pointerId: e.pointerId,
+        from: pos,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+        over: null,
+      }
+      try { svgRef.current?.setPointerCapture(e.pointerId) } catch { /* 旧 WebView 可能不支持 */ }
+    }
+    // 其余情况一律等 pointerup 再按「点击」处理：
+    // 若在 down 里就处理，up 时会再处理一次，吃子后会误把刚走过去的子重新选中。
+  }, [getSvgCoords, grid, handlePointer])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const sess = dragRef.current
+    if (!sess || sess.pointerId !== e.pointerId) return
+    // 未超过阈值：还可能是"点选"，不做任何事
+    if (!sess.active) {
+      if (Math.hypot(e.clientX - sess.startX, e.clientY - sess.startY) < DRAG_START_DIST) return
+      sess.active = true
+      const s0 = useStore.getState()
+      const sel = s0.selected
+      // 拖动即选中（已选中则不重复调用，避免被 toggle 取消）
+      if (!sel || sel.col !== sess.from.col || sel.row !== sess.from.row) s0.selectPiece(sess.from)
+      playPickHaptic(s0.settings.hapticEnabled)
+    }
+    const coords = getSvgCoords(e.clientX, e.clientY)
+    if (!coords) return
+    const s = useStore.getState()
+    const targets = s.legalTargets
+    const over = targets.length
+      ? nearestTarget(coords.x, coords.y - DRAG_LIFT, targets, s.boardFlipped, grid)
+      : null
+    sess.over = over
+    const piece = s.board.board[sess.from.col][sess.from.row]
+    if (piece === '.') return
+    setDrag({ from: sess.from, piece, x: coords.x, y: coords.y, over })
+  }, [getSvgCoords, grid])
+
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const start = swipeRef.current
     swipeRef.current = null
-    if (!start) return
-    const dx = e.clientX - start.x
-    const dy = e.clientY - start.y
-    if (Math.abs(dx) <= 50 || Math.abs(dx) <= Math.abs(dy) * 1.5) return
-    const s = useStore.getState()
-    if (s.mode !== 'replay' || s.variation) return
-    if (dx > 0) s.goBack()
-    else s.goForward()
+
+    const sess = dragRef.current
+    if (sess && sess.pointerId === e.pointerId) {
+      dragRef.current = null
+      try { svgRef.current?.releasePointerCapture(e.pointerId) } catch { /* noop */ }
+
+      if (sess.active) {
+        setDrag(null)
+        if (sess.over) {
+          skipAnimRef.current = true
+          // 落子失败（极少见：拖到非法点/对局已结束）时恢复动画，避免下一次走子被吞
+          const ok = useStore.getState().tryMove(sess.from, sess.over)
+          if (!ok) skipAnimRef.current = false
+        }
+        return
+      }
+      // 未拖动 = 点击：走原来的点选逻辑（选中/切换/取消）
+    }
+
+    if (start) {
+      const dx = e.clientX - start.x
+      const dy = e.clientY - start.y
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        const s = useStore.getState()
+        if (s.mode === 'replay' && !s.variation) {
+          if (dx > 0) s.goBack()
+          else s.goForward()
+          return
+        }
+      }
+    }
+    handlePointer(e)
+  }, [handlePointer])
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent) => {
+    const sess = dragRef.current
+    if (sess && sess.pointerId === e.pointerId) {
+      dragRef.current = null
+      setDrag(null)
+      try { svgRef.current?.releasePointerCapture(e.pointerId) } catch { /* noop */ }
+    }
+    swipeRef.current = null
   }, [])
+
+  // ── 经典棋盘：兵/炮位的十字定位刻度（天天象棋棋盘都有）──
+  const positionTicks = useMemo(() => {
+    if (boardSkin) return null
+    const pts: { c: number; r: number }[] = []
+    for (const r of [3, 6]) for (const c of [0, 2, 4, 6, 8]) pts.push({ c, r })
+    for (const r of [2, 7]) for (const c of [1, 7]) pts.push({ c, r })
+    const segs: string[] = []
+    for (const { c, r } of pts) {
+      const x = BOARD_PADDING + c * CELL
+      const y = BOARD_PADDING + (9 - r) * CELL
+      const sides = [
+        [c !== 0 ? -1 : 0, -1], [c !== 8 ? 1 : 0, -1],
+        [c !== 0 ? -1 : 0, 1], [c !== 8 ? 1 : 0, 1],
+      ]
+      for (const [sx, sy] of sides) {
+        if (!sx || !sy) continue
+        segs.push(`M ${x + sx * 5} ${y + sy * 10} L ${x + sx * 5} ${y + sy * 5} L ${x + sx * 10} ${y + sy * 5}`)
+      }
+    }
+    return <path d={segs.join(' ')} stroke="#8a5a2a" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.8" />
+  }, [boardSkin])
 
   // ── 棋盘网格 ──
   const gridLines = React.useMemo(() => {
     const lines: React.ReactNode[] = []
     for (let r = 0; r < BOARD_ROWS; r++) {
       const y = BOARD_PADDING + r * CELL
-      lines.push(<line key={`h${r}`} x1={BOARD_PADDING} y1={y} x2={BOARD_WIDTH - BOARD_PADDING} y2={y} stroke="#8B5A2B" strokeWidth="1.5" />)
+      lines.push(<line key={`h${r}`} x1={BOARD_PADDING} y1={y} x2={BOARD_WIDTH - BOARD_PADDING} y2={y} stroke="#7a4a22" strokeWidth={r === 0 || r === 9 ? 2 : 1.3} strokeLinecap="round" />)
     }
     for (let c = 0; c < BOARD_COLS; c++) {
       const x = BOARD_PADDING + c * CELL
-      lines.push(<line key={`vt${c}`} x1={x} y1={BOARD_PADDING} x2={x} y2={BOARD_PADDING + 4 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
-      lines.push(<line key={`vb${c}`} x1={x} y1={BOARD_PADDING + 5 * CELL} x2={x} y2={BOARD_PADDING + 9 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
+      const edge = c === 0 || c === 8
+      lines.push(<line key={`vt${c}`} x1={x} y1={BOARD_PADDING} x2={x} y2={BOARD_PADDING + 4 * CELL} stroke="#7a4a22" strokeWidth={edge ? 2 : 1.3} strokeLinecap="round" />)
+      lines.push(<line key={`vb${c}`} x1={x} y1={BOARD_PADDING + 5 * CELL} x2={x} y2={BOARD_PADDING + 9 * CELL} stroke="#7a4a22" strokeWidth={edge ? 2 : 1.3} strokeLinecap="round" />)
     }
     const diags = [[3, 0, 5, 2], [5, 0, 3, 2], [3, 7, 5, 9], [5, 7, 3, 9]]
     diags.forEach(([x1, y1, x2, y2], i) => {
-      lines.push(<line key={`d${i}`} x1={BOARD_PADDING + x1 * CELL} y1={BOARD_PADDING + y1 * CELL} x2={BOARD_PADDING + x2 * CELL} y2={BOARD_PADDING + y2 * CELL} stroke="#8B5A2B" strokeWidth="1.5" />)
+      lines.push(<line key={`d${i}`} x1={BOARD_PADDING + x1 * CELL} y1={BOARD_PADDING + y1 * CELL} x2={BOARD_PADDING + x2 * CELL} y2={BOARD_PADDING + y2 * CELL} stroke="#7a4a22" strokeWidth="1.3" strokeLinecap="round" />)
     })
     return lines
   }, [])
 
   // ── 棋子 ──
+  // 拖动期间只隐藏「拿起的那一颗」：依赖用 drag.from 对象（拖动中引用不变），
+  // 避免每次 pointermove 都重建 32 颗棋子，手机上更稳。
+  const dragFrom = drag ? drag.from : null
   const pieces = React.useMemo(() => {
     const nodes: React.ReactNode[] = []
     for (let c = 0; c < BOARD_COLS; c++) {
@@ -280,22 +460,30 @@ export const Board: React.FC = () => {
         const { x, y } = posToSvg({ col: c, row: r }, boardFlipped, grid)
         const isSel = selected?.col === c && selected?.row === r
         const isCheck = kingPos?.col === c && kingPos?.row === r
-        const color = isRed(piece) ? 'red' : 'black'
+        const red = isRed(piece)
+        const ink = red ? '#b3261e' : '#26221d'
         const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(piece)}.webp` : null
+        // 拖动中的棋子由 ghost 绘制，原位置隐藏（保留占位不塌陷）
+        const isDragging = !!dragFrom && dragFrom.col === c && dragFrom.row === r
         nodes.push(
-          <g key={`p${c}${r}`} className={isSel ? 'piece-lift' : undefined}>
-            {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 6} fill="none" stroke="#e74c3c" strokeWidth="3" opacity="0.8">
-              <animate attributeName="r" values={`${PIECE_RADIUS + 4};${PIECE_RADIUS + 8};${PIECE_RADIUS + 4}`} dur="1s" repeatCount="indefinite" />
+          <g key={`p${c}${r}`} className={isSel && !drag ? 'piece-lift' : undefined}
+            style={isDragging ? { opacity: 0 } : undefined}>
+            {!skinFile && <ellipse cx={x} cy={y + 20} rx={21} ry={5.5} fill="rgba(58,34,10,0.22)" />}
+            {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 5} fill="none" stroke="#e74c3c" strokeWidth="2.5" opacity="0.85">
+              <animate attributeName="r" values={`${PIECE_RADIUS + 3};${PIECE_RADIUS + 8};${PIECE_RADIUS + 3}`} dur="1s" repeatCount="indefinite" />
             </circle>}
-            {isSel && <circle cx={x} cy={y} r={PIECE_RADIUS + 4} fill="rgba(0,150,255,0.3)" stroke="#4a9eff" strokeWidth="2" />}
             {skinFile ? (
               <image href={skinFile} x={x - PIECE_RADIUS} y={y - PIECE_RADIUS} width={PIECE_RADIUS * 2} height={PIECE_RADIUS * 2}
                 style={{ pointerEvents: 'none' }} />
             ) : (
               <>
-                <circle cx={x} cy={y} r={PIECE_RADIUS} fill={color === 'red' ? '#f8e8c8' : '#2c2c2c'} stroke={color === 'red' ? '#c41e1e' : '#666'} strokeWidth="2.5" />
-                <circle cx={x} cy={y} r={PIECE_RADIUS - 5} fill="none" stroke={color === 'red' ? '#c41e1e' : '#777'} strokeWidth="1" />
-                <text x={x} y={y + 8} textAnchor="middle" fontSize="26" fontWeight="bold" fill={color === 'red' ? '#c41e1e' : '#eee'} style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                <circle cx={x} cy={y} r={PIECE_RADIUS} fill="url(#pieceIvory)"
+                  stroke={red ? '#9d2a1f' : '#3b352c'} strokeWidth="1.6" />
+                <circle cx={x} cy={y} r={PIECE_RADIUS - 4.5} fill="none"
+                  stroke={red ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
+                <text x={x} y={y + 9.5} textAnchor="middle" fontSize="27" fontWeight="600"
+                  fontFamily={KAI_FONT} fill={ink}
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}>
                   {GLYPHS[piece]}
                 </text>
               </>
@@ -305,74 +493,148 @@ export const Board: React.FC = () => {
       }
     }
     return nodes
-  }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin, grid])
+  }, [board, selected, lastMove, boardFlipped, kingPos, anim, pieceSkin, grid, dragFrom])
 
-  // ── 上一手标记：起点虚线圈（空格也可见）+ 落点棋子高亮环 ──
+  // ── 上一手标记：起点/落点四角框（天天象棋风格），落点淡色底衬 ──
   const lastMoveMarks = React.useMemo(() => {
     if (!lastMove) return null
     const from = posToSvg(lastMove.from, boardFlipped, grid)
     const to = posToSvg(lastMove.to, boardFlipped, grid)
+    const half = Math.min(grid.xstep, grid.ystep) * 0.42
+    const arm = Math.min(grid.xstep, grid.ystep) * 0.2
     return (
-      <g>
-        <circle cx={from.x} cy={from.y} r={PIECE_RADIUS - 6} fill="none"
-          stroke="#16a34a" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.95" />
-        <circle cx={to.x} cy={to.y} r={PIECE_RADIUS + 5} fill="rgba(22,163,74,0.28)"
-          stroke="#16a34a" strokeWidth="3" />
+      <g pointerEvents="none">
+        <rect x={to.x - half} y={to.y - half} width={half * 2} height={half * 2} rx="6"
+          fill="rgba(240,199,74,0.22)" />
+        <path d={cornerBrackets(from.x, from.y, half, arm)} stroke="rgba(240,199,74,0.65)" strokeWidth="2.4"
+          fill="none" strokeLinecap="round" />
+        <path d={cornerBrackets(to.x, to.y, half, arm)} stroke="#f0c74a" strokeWidth="3"
+          fill="none" strokeLinecap="round" />
       </g>
     )
   }, [lastMove, boardFlipped, grid])
 
-  // ── 合法走法标记 ──
-  const targetMarks = React.useMemo(() =>
-    settings.showLegalMoves ? legalTargets.map((pos, i) => {
+  // ── 合法走法标记：空点=实心小圆点；敌子=四角框（不遮挡棋子）──
+  const targetMarks = React.useMemo(() => {
+    if (!settings.showLegalMoves) return []
+    const half = Math.min(grid.xstep, grid.ystep) * 0.42
+    const arm = Math.min(grid.xstep, grid.ystep) * 0.18
+    return legalTargets.map((pos, i) => {
       const { x, y } = posToSvg(pos, boardFlipped, grid)
-      return board.board[pos.col][pos.row] !== '.' ? (
-        <circle key={i} cx={x} cy={y} r={PIECE_RADIUS + 4} fill="none" stroke="#e74c3c" strokeWidth="2.5" strokeDasharray="6 3" />
+      const occupied = board.board[pos.col][pos.row] !== '.'
+      return occupied ? (
+        <path key={i} d={cornerBrackets(x, y, half, arm)} fill="none"
+          stroke="rgba(214,72,55,0.95)" strokeWidth="2.6" strokeLinecap="round" />
       ) : (
-        <circle key={i} cx={x} cy={y} r="9" fill="rgba(76,175,80,0.4)" />
+        <g key={i}>
+          <circle cx={x} cy={y} r="7.5" fill="rgba(40,26,10,0.34)" stroke="rgba(255,248,230,0.6)" strokeWidth="1.2" />
+        </g>
       )
-    }) : []
-  , [legalTargets, board, boardFlipped, settings.showLegalMoves, grid])
+    })
+  }, [legalTargets, board, boardFlipped, settings.showLegalMoves, grid])
 
-   // ── 提示箭头（天天象棋风格：起点编号 + 圆头粗线 + 三角箭头）──
-   const hintArrows = React.useMemo(() => {
-     const moves = hintInfo?.movesUci
-     if (!moves || moves.length === 0) return null
-     return moves.map((uci, i) => {
-       const fromPos = { col: uci.charCodeAt(0) - 97, row: Number(uci[1]) }
-       const toPos = { col: uci.charCodeAt(2) - 97, row: Number(uci[3]) }
-       return arrowGeometry(
-         posToSvg(fromPos, boardFlipped, grid),
-         posToSvg(toPos, boardFlipped, grid),
-         i + 1,
-       )
-     })
-   }, [hintInfo, boardFlipped, grid])
+  // ── 拖动悬停目标：金色光环，提示这一格会落下（半径大于棋子，投影态下也看得见）──
+  const dragOverMark = useMemo(() => {
+    if (!drag?.over) return null
+    const { x, y } = posToSvg(drag.over, boardFlipped, grid)
+    return (
+      <g pointerEvents="none">
+        <circle cx={x} cy={y} r={PIECE_RADIUS + 11} fill="rgba(240,199,74,0.14)"
+          stroke="#ffd24a" strokeWidth="3.5" />
+        <circle cx={x} cy={y} r={PIECE_RADIUS + 4} fill="none"
+          stroke="rgba(255,248,220,0.55)" strokeWidth="1.4" />
+      </g>
+    )
+  }, [drag, boardFlipped, grid])
 
-   // ── AI 思考中实时最优箭头（橙色流动虚线，随搜索加深更新，仿天天象棋动态提示）──
-   const aiArrow = React.useMemo(() => {
-     if (!aiPreview || mode !== 'play' || !aiPreview.move || aiPreview.move.length < 4) return null
-     const fromPos = { col: aiPreview.move.charCodeAt(0) - 97, row: Number(aiPreview.move[1]) }
-     const toPos = { col: aiPreview.move.charCodeAt(2) - 97, row: Number(aiPreview.move[3]) }
-     return arrowGeometry(posToSvg(fromPos, boardFlipped, grid), posToSvg(toPos, boardFlipped, grid), 0)
-   }, [aiPreview, mode, boardFlipped, grid])
+  // ── 选中棋子：四角框 ──
+  const dragging = !!drag
+  const selectionMark = useMemo(() => {
+    if (!selected || dragging) return null
+    const { x, y } = posToSvg(selected, boardFlipped, grid)
+    const half = Math.min(grid.xstep, grid.ystep) * 0.5
+    const arm = Math.min(grid.xstep, grid.ystep) * 0.24
+    const d = cornerBrackets(x, y, half, arm, 7)
+    return (
+      <g pointerEvents="none" className="sel-brackets">
+        {/* 深色描边衬底：木色/浅色棋盘上都能看清 */}
+        <path d={d} fill="none" stroke="rgba(90,52,12,0.45)" strokeWidth="5.6" strokeLinecap="round" />
+        <path d={d} fill="none" stroke="#ffcf4a" strokeWidth="3.4" strokeLinecap="round" />
+      </g>
+    )
+  }, [selected, dragging, boardFlipped, grid])
 
-   // ── 复盘：最后一手的评级角标（正/妙/软/次/劣/漏）──
-   const boardTag = React.useMemo(() => {
-     if (mode !== 'replay' || currentPlyIndex <= 0 || !lastMove) return null
-     const tag = moveTag(game.plies[currentPlyIndex - 1]?.analysis?.classification)
-     if (!tag) return null
-     const to = posToSvg(lastMove.to, boardFlipped, grid)
-     return { tag, x: to.x, y: to.y }
-   }, [mode, currentPlyIndex, lastMove, game, boardFlipped, grid])
+  // ── 提示箭头（天天象棋风格：起点编号 + 圆头粗线 + 三角箭头）──
+  const hintArrows = React.useMemo(() => {
+    const moves = hintInfo?.movesUci
+    if (!moves || moves.length === 0) return null
+    return moves.map((uci, i) => {
+      const fromPos = { col: uci.charCodeAt(0) - 97, row: Number(uci[1]) }
+      const toPos = { col: uci.charCodeAt(2) - 97, row: Number(uci[3]) }
+      return arrowGeometry(
+        posToSvg(fromPos, boardFlipped, grid),
+        posToSvg(toPos, boardFlipped, grid),
+        i + 1,
+      )
+    })
+  }, [hintInfo, boardFlipped, grid])
+
+  // ── AI 思考中实时最优箭头（橙色流动虚线，随搜索加深更新，仿天天象棋动态提示）──
+  const aiArrow = React.useMemo(() => {
+    if (!aiPreview || mode !== 'play' || !aiPreview.move || aiPreview.move.length < 4) return null
+    const fromPos = { col: aiPreview.move.charCodeAt(0) - 97, row: Number(aiPreview.move[1]) }
+    const toPos = { col: aiPreview.move.charCodeAt(2) - 97, row: Number(aiPreview.move[3]) }
+    return arrowGeometry(posToSvg(fromPos, boardFlipped, grid), posToSvg(toPos, boardFlipped, grid), 0)
+  }, [aiPreview, mode, boardFlipped, grid])
+
+  // ── 复盘：最后一手的评级角标（正/妙/软/次/劣/漏）──
+  const boardTag = React.useMemo(() => {
+    if (mode !== 'replay' || currentPlyIndex <= 0 || !lastMove) return null
+    const tag = moveTag(game.plies[currentPlyIndex - 1]?.analysis?.classification)
+    if (!tag) return null
+    const to = posToSvg(lastMove.to, boardFlipped, grid)
+    return { tag, x: to.x, y: to.y }
+  }, [mode, currentPlyIndex, lastMove, game, boardFlipped, grid])
+
+  const renderPieceBody = (piece: string, x: number, y: number, ghost = false) => {
+    const red = isRed(piece)
+    const ink = red ? '#b3261e' : '#26221d'
+    const skinFile = pieceSkin ? `${pieceSkin}/${pieceSkinFile(piece)}.webp` : null
+    return (
+      <>
+        {!skinFile && <ellipse cx={x} cy={y + 22} rx={22} ry={7} fill="rgba(40,22,5,0.32)" />}
+        {skinFile ? (
+          <image href={skinFile} x={x - PIECE_RADIUS} y={y - PIECE_RADIUS} width={PIECE_RADIUS * 2} height={PIECE_RADIUS * 2}
+            style={{ pointerEvents: 'none' }} />
+        ) : (
+          <>
+            <circle cx={x} cy={y} r={PIECE_RADIUS} fill="url(#pieceIvory)"
+              stroke={ghost ? '#f2c14e' : red ? '#9d2a1f' : '#3b352c'} strokeWidth={ghost ? 2 : 1.6} />
+            <circle cx={x} cy={y} r={PIECE_RADIUS - 4.5} fill="none"
+              stroke={red ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
+            <text x={x} y={y + 9.5} textAnchor="middle" fontSize="27" fontWeight="600"
+              fontFamily={KAI_FONT} fill={ink} style={{ userSelect: 'none', pointerEvents: 'none' }}>
+              {GLYPHS[piece]}
+            </text>
+          </>
+        )}
+      </>
+    )
+  }
+
+  const thinkingSide = isPlay && isThinking && sideControl[board.turn] === 'ai' ? board.turn : null
 
   return (
-    <div className="board-container">
+    <div className={`board-container${isPlay ? ' board-play' : ''}`}>
       {isPlay ? (
         <>
           <EvalBar />
-          <div className={`player-info ${topSide === 'w' ? 'red-info' : 'black-info'}`}>
-            <span className="player-name">{board.turn === topSide ? '● ' : ''}{sideLabel(topSide)}</span>
+          <div className={`player-info ${topSide === 'w' ? 'red-info' : 'black-info'}${board.turn === topSide ? ' side-active' : ''}`}>
+            <span className="pi-left">
+              <span className={`pi-badge ${topSide === 'w' ? 'pi-badge-red' : 'pi-badge-black'}`}>{topSide === 'w' ? '帅' : '将'}</span>
+              <span className="player-name">{sideLabel(topSide)}</span>
+              {thinkingSide === topSide && <span className="pi-thinking">思考中<i /><i /><i /></span>}
+            </span>
             <span className="timer">{formatTime(sideTime(topSide))}</span>
           </div>
         </>
@@ -394,19 +656,59 @@ export const Board: React.FC = () => {
       ) : null}
       <svg ref={svgRef} width={BOARD_WIDTH} height={BOARD_HEIGHT} viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
         onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onContextMenu={e => e.preventDefault()}
         style={{ touchAction: 'none', cursor: 'pointer' }}>
-        <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
         <defs>
+          <linearGradient id="boardWood" x1="0" y1="0" x2="0.85" y2="1">
+            <stop offset="0" stopColor="#f4dfb4" />
+            <stop offset="0.45" stopColor="#ecd09a" />
+            <stop offset="1" stopColor="#ddb877" />
+          </linearGradient>
+          <radialGradient id="pieceIvory" cx="0.36" cy="0.3" r="0.85">
+            <stop offset="0" stopColor="#fffdf5" />
+            <stop offset="0.6" stopColor="#f8ebcb" />
+            <stop offset="1" stopColor="#e4cc9b" />
+          </radialGradient>
           <filter id="arrowShadow" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.35" />
           </filter>
+          <filter id="ghostShadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="8" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
+          </filter>
         </defs>
+        {boardSkin ? (
+          <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="#e8c87e" rx="8" />
+        ) : (
+          <>
+            <rect x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} fill="url(#boardWood)" rx="10" />
+            {/* 木框：外粗内细两道 */}
+            <rect x="22" y="22" width={BOARD_WIDTH - 44} height={BOARD_HEIGHT - 44} rx="4"
+              fill="none" stroke="#7a4a22" strokeWidth="2.4" opacity="0.85" />
+            <rect x="27" y="27" width={BOARD_WIDTH - 54} height={BOARD_HEIGHT - 54} rx="3"
+              fill="none" stroke="#7a4a22" strokeWidth="0.9" opacity="0.5" />
+            {/* 内阴影，做出纸面/木面厚度 */}
+            <rect x="2" y="2" width={BOARD_WIDTH - 4} height={BOARD_HEIGHT - 4} rx="9"
+              fill="none" stroke="rgba(120,74,34,0.35)" strokeWidth="3" />
+          </>
+        )}
         {boardSkin && <image href={boardSkin} x="0" y="0" width={BOARD_WIDTH} height={BOARD_HEIGHT} rx="8" preserveAspectRatio="none" style={{ pointerEvents: 'none' }} />}
         {/* 棋盘皮肤已自带网格与「楚河 汉界」，仅在经典（无皮肤）样式下叠加绘制 SVG 网格，
            否则会与皮肤网格重叠产生「双线」且因 slice 裁切导致越偏越大 */}
-        {!boardSkin && <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 16} textAnchor="middle" fontSize="22" fill="#8B5A2B" letterSpacing="18" style={{ userSelect: 'none' }}>楚河 汉界</text>}
-        {!boardSkin && gridLines}{lastMoveMarks}{targetMarks}{pieces}
+        {!boardSkin && (
+          <text x={BOARD_WIDTH / 2} y={BOARD_PADDING + 4.5 * CELL + 9} textAnchor="middle" fontSize="23"
+            fill="#8a5a2a" opacity="0.78" letterSpacing="10" fontFamily={KAI_FONT}
+            style={{ userSelect: 'none' }}>楚河　汉界</text>
+        )}
+        {!boardSkin && positionTicks}
+        {!boardSkin && gridLines}
+        {lastMoveMarks}
+        {pieces}
+        {selectionMark}
+        {targetMarks}
+        {dragOverMark}
         {boardTag && (
           <g className="board-move-tag" pointerEvents="none">
             <circle cx={boardTag.x + 24} cy={boardTag.y - 24} r="13" fill="rgba(18,18,26,0.82)" />
@@ -433,6 +735,13 @@ export const Board: React.FC = () => {
             ))}
           </g>
         )}
+        {/* 拖动中的棋子：跟手 + 上移避开手指 + 放大投影 */}
+        {drag && (
+          <g pointerEvents="none" filter="url(#ghostShadow)"
+            transform={`translate(${drag.x} ${drag.y - DRAG_LIFT}) scale(1.12)`}>
+            {renderPieceBody(drag.piece, 0, 0, true)}
+          </g>
+        )}
         {anim && (() => {
           const color = isRed(anim.piece) ? 'red' : 'black'
           const glyph = GLYPHS[anim.piece] || '?'
@@ -449,12 +758,12 @@ export const Board: React.FC = () => {
               ) : (
                 <>
                   <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS}
-                    fill={color === 'red' ? '#f8e8c8' : '#2c2c2c'}
-                    stroke={color === 'red' ? '#c41e1e' : '#666'} strokeWidth="2.5" />
-                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS - 5}
-                    fill="none" stroke={color === 'red' ? '#c41e1e' : '#777'} strokeWidth="1" />
-                  <text x={anim.fromX} y={anim.fromY + 8} textAnchor="middle" fontSize="26"
-                    fontWeight="bold" fill={color === 'red' ? '#c41e1e' : '#eee'}
+                    fill="url(#pieceIvory)"
+                    stroke={color === 'red' ? '#9d2a1f' : '#3b352c'} strokeWidth="1.6" />
+                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS - 4.5}
+                    fill="none" stroke={color === 'red' ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
+                  <text x={anim.fromX} y={anim.fromY + 9.5} textAnchor="middle" fontSize="27"
+                    fontWeight="600" fontFamily={KAI_FONT} fill={color === 'red' ? '#b3261e' : '#26221d'}
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>
                     {glyph}
                   </text>
@@ -465,8 +774,12 @@ export const Board: React.FC = () => {
         })()}
       </svg>
       {isPlay && (
-        <div className={`player-info ${bottomSide === 'w' ? 'red-info' : 'black-info'}`}>
-          <span className="player-name">{board.turn === bottomSide ? '● ' : ''}{sideLabel(bottomSide)}</span>
+        <div className={`player-info ${bottomSide === 'w' ? 'red-info' : 'black-info'}${board.turn === bottomSide ? ' side-active' : ''}`}>
+          <span className="pi-left">
+            <span className={`pi-badge ${bottomSide === 'w' ? 'pi-badge-red' : 'pi-badge-black'}`}>{bottomSide === 'w' ? '帅' : '将'}</span>
+            <span className="player-name">{sideLabel(bottomSide)}</span>
+            {thinkingSide === bottomSide && <span className="pi-thinking">思考中<i /><i /><i /></span>}
+          </span>
           <span className="timer">{formatTime(sideTime(bottomSide))}</span>
         </div>
       )}
