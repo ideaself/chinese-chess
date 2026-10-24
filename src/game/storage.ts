@@ -575,6 +575,10 @@ export interface AppSettings {
   animationEnabled: boolean
   /** 按住棋子拖动走子（关闭后只保留「点棋子→点目标」） */
   dragToMove: boolean
+  /** 对局中保持屏幕常亮（移动端，避免思考时锁屏） */
+  keepAwake: boolean
+  /** 显示 AI 思考中的实时最优着（会剧透对方计划，默认关闭） */
+  showAiPreview: boolean
   autoPlaySpeed: number // ms per move
   // 音效与触感
   soundMove: boolean
@@ -591,6 +595,10 @@ export interface AppSettings {
   // 对局
   defaultSide: 'w' | 'b' | 'random'
   defaultDifficulty: string
+  /** 默认时间制：基础用时（毫秒），0 = 不限时 */
+  timeControlBaseMs: number
+  /** 每步加秒（毫秒） */
+  timeControlIncMs: number
   /**
    * 「我的棋手名」：用于识别导入棋谱里哪一方是玩家（进错题本/弱点分析/战绩统计）。
    * 留空则只识别 App 内建对局（header 写入的 '玩家'）。
@@ -628,6 +636,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   animationEnabled: true,
   // 天天象棋的默认手感是「点棋子 → 点目标」，拖动作为可选增强，默认关闭
   dragToMove: false,
+  keepAwake: true,
+  showAiPreview: false,
   autoPlaySpeed: 1000,
   soundMove: true,
   soundCapture: true,
@@ -638,6 +648,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   hapticEnabled: true,
   defaultSide: 'w',
   defaultDifficulty: 'medium',
+  timeControlBaseMs: 0,
+  timeControlIncMs: 0,
   myPlayerName: '',
   analysisDepth: 16,
   theme: 'dark',

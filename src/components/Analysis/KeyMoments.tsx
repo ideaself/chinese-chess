@@ -9,6 +9,7 @@ import React, { useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { MoveClassification } from '../../game/model'
 import { ERROR_LEVELS } from '../../game/model'
+import { exportMomentsImage } from '../../game/imageExport'
 
 const LABELS: Record<string, string> = {
   mistake: '疑问',
@@ -93,6 +94,23 @@ export const KeyMoments: React.FC = () => {
 
   if (!hasAnalysis || game.plies.length === 0) return null
 
+  /** 把当前筛选出的关键时刻导出成 3×3 分享图 */
+  const shareGrid = () => {
+    if (!moments.length) return
+    const shots = moments.slice(0, 9).map(m => {
+      const ply = game.plies[m.index]
+      const isSwing = m.kind === 'swing'
+      const tag = isSwing ? '转换' : (m.classification === 'mistake' ? '疑问' : m.classification === 'blunder' ? '失误' : '严重')
+      return {
+        ply: m.index,
+        tag,
+        tagColor: isSwing ? '#f39c12' : '#e06060',
+        label: `第 ${Math.floor(m.index / 2) + 1} 回合 · ${ply.moveCn || ''}`,
+      }
+    })
+    void exportMomentsImage(game, shots, { mode: 'share' })
+  }
+
   return (
     <div className="key-moments">
       <div className="key-moments-header">
@@ -107,6 +125,11 @@ export const KeyMoments: React.FC = () => {
               {label}
             </button>
           ))}
+          {moments.length > 0 && (
+            <button className="filter-btn" onClick={shareGrid} title="把当前筛选出的关键时刻导出为 3×3 分享图">
+              分享九宫格
+            </button>
+          )}
         </div>
       </div>
 

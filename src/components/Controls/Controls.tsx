@@ -10,7 +10,7 @@ import { useStore, DIFFICULTY_LABELS } from '../../store/useStore'
 import type { Difficulty, SideControl } from '../../store/useStore'
 import { getSettings } from '../../game/storage'
 import { exportGameImage } from '../../game/imageExport'
-import { TriRight } from '../ui/icons'
+import { Icon, TriRight } from '../ui/icons'
 import { CoachPanel } from '../Games/CoachPanel'
 
 export const Controls: React.FC = () => {
@@ -95,44 +95,44 @@ export const Controls: React.FC = () => {
         </div>
 
         {hotseat && (
-          <div className="hint-banner">👥 双人对战 — 同屏轮流行棋，红先</div>
+          <div className="hint-banner">双人对战 — 同屏轮流行棋，红先</div>
         )}
         {demo && (
-          <div className="hint-banner">🤖 AI 对弈演示中 — 点「新对局」可退出</div>
+          <div className="hint-banner">AI 对弈演示中 — 点「新对局」可退出</div>
         )}
 
         <div className="action-grid">
-          <button className={`btn ${showNewGame ? 'btn-active' : ''}`} onClick={() => setShowNewGame(!showNewGame)}>
-            🎮 新对局
+          <button className={`btn btn-ico ${showNewGame ? 'btn-active' : ''}`} onClick={() => setShowNewGame(!showNewGame)}>
+            <Icon name="plus" size={16} /> 新对局
           </button>
-          <button className="btn"
+          <button className="btn btn-ico"
             onClick={undo}
             disabled={isThinking || currentPlyIndex < 1 || game.result !== '*' || demo}
             title={demo ? '演示模式不可悔棋' : isThinking ? '对方思考中，暂不能悔棋' : '悔棋（撤回到你上一次行棋前）'}>
-            ↺ 悔棋
+            <Icon name="undo" size={16} /> 悔棋
           </button>
-          <button className="btn" onClick={() => aiHint()} disabled={!engineReady || isThinking || demo}>
-            {isThinking ? '⏳ 思考中' : '💡 提示'}
+          <button className="btn btn-ico" onClick={() => aiHint()} disabled={!engineReady || isThinking || demo}>
+            <Icon name="hint" size={16} /> {isThinking ? '思考中' : '提示'}
           </button>
-          <button className="btn" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }} disabled={isThinking || game.result !== '*' || demo} title="判为和棋并保存">🤝 求和</button>
-          <button className="btn" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }} disabled={game.result !== '*' || !singleHuman} title={singleHuman ? '判负并保存' : '仅人机对局可认输'}>🏳 认输</button>
-          <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
+          <button className="btn btn-ico" onClick={() => { if (confirm('确认求和？本局将判为和棋并保存。')) offerDraw() }} disabled={isThinking || game.result !== '*' || demo} title="判为和棋并保存"><Icon name="draw" size={16} /> 求和</button>
+          <button className="btn btn-ico" onClick={() => { if (confirm('确定认输？本局将判负并保存。')) resign() }} disabled={game.result !== '*' || !singleHuman} title={singleHuman ? '判负并保存' : '仅人机对局可认输'}><Icon name="flag" size={16} /> 认输</button>
+          <button className="btn btn-ico" onClick={flipBoard}><Icon name="flip" size={16} /> 翻转</button>
         </div>
 
         {showNewGame && (
           <div className="newgame-panel">
             <div className="ctrl-title">对局角色</div>
             <div className="action-grid cols-2">
-              <button className="btn" onClick={() => startRole('red')}>🔴 我执红（AI 执黑）</button>
-              <button className="btn" onClick={() => startRole('black')}>⚫ 我执黑（AI 执红）</button>
-              <button className="btn" onClick={() => startRole('random')}>🎲 随机执子</button>
-              <button className="btn" onClick={() => startRole('hotseat')}>👥 双人对战</button>
-              <button className="btn" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}>🤖 AI 对弈演示（红 vs 黑）</button>
+              <button className="btn btn-ico" onClick={() => startRole('red')}><span className="side-dot dot-red" /> 我执红（AI 执黑）</button>
+              <button className="btn btn-ico" onClick={() => startRole('black')}><span className="side-dot dot-black" /> 我执黑（AI 执红）</button>
+              <button className="btn btn-ico" onClick={() => startRole('random')}><Icon name="swap" size={16} /> 随机执子</button>
+              <button className="btn btn-ico" onClick={() => startRole('hotseat')}><Icon name="people" size={16} /> 双人对战</button>
+              <button className="btn btn-ico" style={{ gridColumn: 'span 2' }} onClick={() => startRole('demo')}><Icon name="robot" size={16} /> AI 对弈演示（红 vs 黑）</button>
             </div>
             <div className="ctrl-title" style={{ marginTop: 8 }}>快捷</div>
             <div className="action-grid cols-2">
-              <button className="btn" onClick={startWithDefaultSide}>⭐ 按默认设置</button>
-              <button className="btn" onClick={() => { restart(); setShowNewGame(false) }}>🔄 重开本局</button>
+              <button className="btn btn-ico" onClick={startWithDefaultSide}><Icon name="star" size={16} /> 按默认设置</button>
+              <button className="btn btn-ico" onClick={() => { restart(); setShowNewGame(false) }}><Icon name="undo" size={16} /> 重开本局</button>
             </div>
           </div>
         )}
@@ -177,10 +177,10 @@ export const Controls: React.FC = () => {
             const side = getSettings().defaultSide
             startNewGame(difficulty, side === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : side)
           }}>
-            ⚔ 新对局
+            新对局
           </button>
-          <button className="btn" onClick={flipBoard}>⇅ 翻转</button>
-          <button className="btn" onClick={() => exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })}>🖼 导出/分享图片</button>
+          <button className="btn btn-ico" onClick={flipBoard}><Icon name="flip" size={16} /> 翻转</button>
+          <button className="btn" onClick={() => exportGameImage(game, { plyIndex: currentPlyIndex, mode: 'share' })}>导出/分享图片</button>
           <button className="btn" onClick={() => {
             const pgn = exportCurrentPGN()
             const blob = new Blob([pgn], { type: 'text/plain' })
@@ -190,14 +190,14 @@ export const Controls: React.FC = () => {
             a.download = `xiangqi_${game.id}.pgn`
             a.click()
             URL.revokeObjectURL(url)
-          }}>📥 导出 PGN</button>
+          }}>导出 PGN</button>
         </div>
 
         {/* 变化试走入口：从当前局面自由分支 */}
         <button className="btn btn-primary" style={{ width: '100%', marginBottom: 8 }}
           title="从当前局面在棋盘上试走自己的着法，随时回到主线"
           onClick={() => { const s = useStore.getState(); s.startReplayVariation(); s.setSheetTab('variation') }}>
-          🌿 试走变化（分支推演）
+          试走变化（分支推演）
         </button>
 
         {/* 教练指导（复盘研习） */}
@@ -220,7 +220,7 @@ const EngineStatus: React.FC = () => {
       {engineReady
         ? <span className="status-ready">● 引擎就绪</span>
         : <span className="status-loading">● 引擎加载中…</span>}
-      {isThinking && <span className="status-thinking">⚙ 思考中…</span>}
+      {isThinking && <span className="status-thinking">思考中…</span>}
     </div>
   )
 }

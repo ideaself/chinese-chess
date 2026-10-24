@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import { useStore } from './store/useStore'
 import { getLegalMoves } from './game/rules'
+import { installGlobalErrorLogging } from './game/crashLog'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
+
+// 先把全局异常记进本地日志（白屏/闪退时可在设置页复制）
+installGlobalErrorLogging()
 
 // 暴露 store 供调试/自动化测试使用
 ;(window as any).__store = useStore
@@ -27,6 +32,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary name="app">
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 )

@@ -6,6 +6,32 @@ const path = require('path')
 async function run(ctx) {
   const { evalJs, sleep, check, results } = ctx
 
+  /** 等 AI 落子、引擎空闲（否则 offerDraw 会被「引擎思考中」挡掉，旧版 600ms 固定等待会偶发失败） */
+  async function waitEngineIdle(timeoutMs = 20000) {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      const st = await evalJs(`(() => {
+        const s = window.__store.getState()
+        return { thinking: s.isThinking, occupied: s.engineOccupied, plies: s.game.plies.length }
+      })()`)
+      if (!st.thinking && !st.occupied) return true
+      await sleep(300)
+    }
+    return false
+  }
+
+  /** 反复求和直到终局（AI 偶尔会以「引擎忙」拒绝，重试即可） */
+  async function drawUntilOver() {
+    for (let i = 0; i < 15; i++) {
+      await waitEngineIdle()
+      await evalJs(`window.__store.getState().offerDraw()`)
+      await sleep(700)
+      const result = await evalJs(`window.__store.getState().game.result`)
+      if (result !== '*') return result
+    }
+    return '*'
+  }
+
   // 开一局人机对局（入门难度，玩家执红）
   await evalJs(`window.__store.getState().startNewGame('beginner', 'w')`)
   await sleep(400)
@@ -13,8 +39,7 @@ async function run(ctx) {
   // 走一步棋（避免空局不保存），随后求和 → 和棋终局
   await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 4, row: 2 })`)
   await sleep(600)
-  await evalJs(`window.__store.getState().offerDraw()`)
-  await sleep(600)
+  const drawResult = await drawUntilOver()
 
   const s1 = JSON.parse(await evalJs(`JSON.stringify((() => {
     const s = window.__store.getState()
@@ -37,7 +62,7 @@ async function run(ctx) {
   // 同局重复保存不重复结算
   await evalJs(`window.__store.getState().saveCurrentGame()`)
   await sleep(300)
-  const dup = await evalJs(`JSON.parse(localStorage.getItem('xiangqi_rating')).history.length`)
+  const dup = await evalJs(`(JSON.parse(localStorage.getItem('xiangqi_rating') || '{}').history || []).length`)
   check('同局去重（重复保存不再计分）', dup === 1, String(dup))
 
   // 第二局再和棋（验证累计走势与二次结算）
@@ -45,11 +70,10 @@ async function run(ctx) {
   await sleep(300)
   await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 4, row: 2 })`)
   await sleep(600)
-  await evalJs(`window.__store.getState().offerDraw()`)
-  await sleep(600)
+  await drawUntilOver()
   const s2 = JSON.parse(await evalJs(`JSON.stringify((() => {
     const s = window.__store.getState()
-    return { change: s.lastRatingChange, n: JSON.parse(localStorage.getItem('xiangqi_rating')).history.length }
+    return { change: s.lastRatingChange, n: (JSON.parse(localStorage.getItem('xiangqi_rating') || '{}').history || []).length }
   })())`))
   check('第二局继续结算（1184→1168）', s2.change && s2.change.before === 1184 && s2.change.after === 1168 && s2.n === 2,
     JSON.stringify(s2))

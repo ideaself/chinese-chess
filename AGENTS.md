@@ -5,18 +5,19 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.24.1（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.0（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（265 项）
+npm test                # vitest 单测（281 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
-npm run e2e             # 需先 build；e2e 冒烟（6 套件），E2E_SUITES=master 可过滤套件
-                        # 注意：移动套件 17 项按 v1.18 前旧导航编写已失效；角色 1 项（提示箭头）为基线旧失败
+npm run e2e             # 需先 build；e2e 冒烟（6 套件 78 项，Windows 亦可跑）
+                        # E2E_CHROME 可指定浏览器；Windows 自动找 Edge/Chrome
+                        # E2E_SUITES=mobile 只跑移动端套件
 npm run dpxq            # 语料 → public/master-games/ 分片（mtime 增量缓存 v2，UCI 格式）
 npm run book            # 语料 → public/opening-book.json 大数据开局书
 npm run challenges      # 东萍抓取天天象棋残局挑战历史存档 → public/weekly-challenges.json
@@ -95,6 +96,24 @@ v1.24.0（本次发布，移动端手感/视觉向天天象棋靠拢）：
 
 v1.24.1（本次发布）：修复走子时棋盘上下抖动——评估条第二行（红优/深度/广度）此前只在有实时评分时渲染，走子后 FEN 变化会先消失再出现，把居中的棋盘推上推下（实测 9.5px）。现改为**常驻一行（`min-height:16px`）+ 用 `last` 缓存兜底显示上一次分数**，实测连续走两步 `svg.y` 恒为 208.6。注意：新增「常驻占位」后无数据时该行留空，不要再改回条件渲染。
 
+v1.25.0（本次发布，工程化 + 移动端补全）：
+- **屏幕常亮**：`utils/useWakeLock.ts`，对局进行中/复盘自动播放时持有 Wake Lock，切后台自动释放；设置「操作→屏幕常亮」可关（默认开）。
+- **AI 实时最优默认关闭**：会剧透对方计划，改到设置「AI 实时最优（剧透）」，默认关；关闭时既不画箭头也不显示浮标。
+- **非法落点抖动**：已选中棋子时点到空格/对方子，棋盘轻抖 220ms + 轻震（`board-shake`）。
+- **吃子展示**：`game/captured.ts` 由「初始 FEN − 当前局面」推导双方战果，显示在信息条（最多 6 枚 +N），悔棋/复盘自动跟随。
+- **崩溃兜底**：`components/ui/ErrorBoundary.tsx`（根级 + 面板级 compact）+ `game/crashLog.ts`（localStorage 环形 50 条，捕获 error/unhandledrejection/React 错误）；设置「诊断」可复制/清空。
+- **时间制**：`game/timeControl.ts`（纯函数：额度/剩余/格式/低时判定）。设置「对局→时间制/每步加秒」，新对局面板也有快捷选项。棋钟仍只记已用时间，`remaining = base + inc×已走着数 − elapsed`；超时由 `timeUp(side)` 判负并结算，信息条显示倒计时、≤30s 变红。
+- **桌面图标化**：`Controls.tsx` 的操作/新对局按钮改用 `Icon` + `.btn-ico`，不再混用 emoji。
+- **关键时刻九宫格**：`imageExport.ts` 新增 `exportMomentsImage`，`KeyMoments` 头部「分享九宫格」按当前筛选导出 3×3 图（Canvas 小棋盘复用）。
+- **包体**：`scripts/android-engine.mjs` 注入原生引擎后默认剔除 `assets/public/wasm`（省约 52MB，`--keep-wasm` 可保留）；删除未引用的 `public/opening-book-v2.json`（与 v1 完全相同，省 1.3MB）。
+- **原生引擎包**：新增 `.github/workflows/engine-apk.yml`，随 v* tag 从 Pikafish 官方 release（`Pikafish-2026-01-02`）下载 Android arm64 二进制 → `android-engine.mjs --src` 注入 → 出 `chinese-chess-vX.Y.Z-engine.apk` 并上传到同一个 Release；手动 dispatch 只出 artifact。本地实测：100.5MB（含 NNUE + 原生 .so，已去 WASM）。
+- **e2e 重写与修复**：`scripts/e2e/mobile.cjs` 按 v1.24 导航重写为 24 项真实路径（首页/对战/走子/悔棋/提示/返回/设置/拖动开关/5 分钟时间制/认输/评估条高度回归）；`lib.cjs` 优先选 localhost target（避开 Edge 同步对话框）、引擎等待打印诊断；`run.cjs` 改用 node 直跑 vite preview、Windows 用 taskkill+/T + `Browser.close` + profile 兜底清理、端口占用预检；`roles.cjs` 提示用例改为直接调 store 并重试（按钮 disabled 时不再误判）；`rating.cjs` 求和前等引擎空闲并重试。**全套 78 项全绿**。
+- **并发修复**：
+  - `gameSlice.scheduleAiMove` 绑定 `game.id` + 调度序号，旧局遗留 timer 不再在新局落子（曾导致新局 AI 抢走一步/提示分析到别的局面）。
+  - `engine/pikafish.ts` 增加搜索代号：stop 后管道里残留的 `info`/`bestmove` 不再串到新搜索（曾让提示返回上一局的着法）。
+  - `aiHint` 过滤「最佳着法在当前局面不成立」的 info，并用中文兜底行，避免提示条只剩「推荐 +0.xx」。
+- 回归：`tsc` 通过、单测 **281 项**（新增时间制/吃子/拖拽吸附 16 项）、`vite build` 通过、e2e 6 套件 78 项全绿。
+
 ## 已评估搁置
 
 - 多线程 WASM 引擎：**已取消（用户 2026-09-03 确认）**。当前原生进程版二进制性能很好，无需 MT WASM。
@@ -102,12 +121,16 @@ v1.24.1（本次发布）：修复走子时棋盘上下抖动——评估条第�
 
 ## 待办候选
 
-- e2e 移动套件按 v1.19 新导航重写（现 17 项失效）；角色套件提示箭头基线失败排查
+- 大师库/相似库分片（约 100MB）如要进一步压包体，可改为首次进入时按需下载（现在随 APK 全量打包）
+- 引擎包的 NNUE（50MB）与 WASM 包权重重复，后续可考虑只保留其一
 
 ## CI 说明
 
 - `.github/workflows/release.yml`：tag `v*` 或手动 dispatch 触发；npm ci → 单测 → build →
   `cap add android` → 版本注入 → 放行明文 HTTP → `scripts/ci-sign.mjs` → gradlew → GitHub Release。
   **已移除 Gitee 镜像步骤**（连续三次失败）；**签名 Secrets 已于 2026-09 换为新 keystore**，
-  CI 包与本地包同签名、可互相覆盖升级。CI 包不含原生引擎（二进制不入库），需要引擎请用
-  `chinese-chess-vX.Y.Z-engine.apk` 或本地按上面的流程自建。
+  CI 包与本地包同签名、可互相覆盖升级。CI 包不含原生引擎（二进制不入库）。
+- `.github/workflows/engine-apk.yml`：同一 tag 并行构建引擎版；从 Pikafish 官方 release 下载
+  arm64 二进制（GPLv3，源码见官方仓库）→ `android-engine.mjs --src` 注入并剔除 WASM →
+  等待主 Release 出现后 `gh release upload --clobber` 追加 `chinese-chess-vX.Y.Z-engine.apk`。
+  手动 dispatch 只产出 workflow artifact，不动 Release。

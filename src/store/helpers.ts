@@ -9,6 +9,7 @@ import { boardFromFen } from '../game/board'
 import { getStateAtPly } from '../game/model'
 import { applyGameResult } from '../game/rating'
 import { DIFFICULTY_LABELS } from './constants'
+import { movesPlayedBy, remainingMs } from '../game/timeControl'
 
 /**
  * 终局棋力分结算。
@@ -61,9 +62,16 @@ export function parseMoveFromUci(uci: string, turn: Turn): Move {
  */
 export function startGameClock(set: StoreSet, get: StoreGet): ReturnType<typeof setInterval> {
   return setInterval(() => {
-    const { mode, board, redTime, blackTime } = get()
-    if (mode !== 'play') return
-    if (board.turn === 'w') set({ redTime: redTime + 1000 })
-    else set({ blackTime: blackTime + 1000 })
+    const st = get()
+    if (st.mode !== 'play') return
+    const side = st.board.turn
+    const elapsed = (side === 'w' ? st.redTime : st.blackTime) + 1000
+    set(side === 'w' ? { redTime: elapsed } : { blackTime: elapsed })
+    // 限时对局：累计用时超过「基础 + 加秒×已走着数」即判负
+    const tc = st.timeControl
+    if (tc && tc.baseMs > 0) {
+      const moves = movesPlayedBy(st.game, side)
+      if (remainingMs(tc, elapsed, moves) <= 0) st.timeUp(side)
+    }
   }, 1000)
 }

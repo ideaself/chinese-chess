@@ -450,6 +450,7 @@ export function createPuzzleSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       analysis: null,
       redTime: 0,
       blackTime: 0,
+      timeControl: null,
       puzzlePlyIndex: null,
       // 移动端多层导航：残局训练切换到对战页
       mobilePage: 'play' as const,

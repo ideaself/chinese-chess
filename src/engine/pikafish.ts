@@ -51,6 +51,14 @@ export class PikafishEngine {
   private status: EngineStatus = 'idle'
   private onBestMoveCallback: ((move: string) => void) | null = null
   private onInfoCallback: ((info: EngineInfo) => void) | null = null
+  /**
+   * 搜索代号：每次新搜索 +1。引擎（尤其原生进程）在 stop 之后仍可能吐出上一轮
+   * 的 info 行，这些行会被当前的 onInfo 回调收到——表现为「新局面的提示/箭头
+   * 来自旧局面」。用代号拦截过期输出。
+   */
+  private searchGen = 0
+  /** 当前有效 bestmove 所属代号（旧搜索的 bestmove 不能结算新搜索） */
+  private bestMoveGen = 0
   private isInitialized = false
   private depth: number
   private uciOkResolve: (() => void) | null = null
@@ -330,14 +338,14 @@ export class PikafishEngine {
   async go(fen: string, moves: string[] = [], depth?: number, ms?: number, onInfo?: (info: EngineInfo) => void): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     this.abortPendingSearch()
-    this.onInfoCallback = onInfo ?? null
+    this.setInfoCallback(onInfo ?? null)
     return this.beginSearch(fen, moves, depth ?? this.depth, ms, move => move)
   }
 
   analyze(fen: string, moves: string[] = [], depth?: number, onInfo?: (info: EngineInfo) => void, ms?: number): Promise<string> {
     if (!this.isInitialized) throw new Error('引擎未初始化')
     this.abortPendingSearch()
-    this.onInfoCallback = onInfo ?? null
+    this.setInfoCallback(onInfo ?? null)
     return this.beginSearch(fen, moves, depth ?? this.depth, ms, move => move)
   }
 
@@ -361,14 +369,14 @@ export class PikafishEngine {
     this.sendCommand(`setoption name MultiPV value ${multiPV}`)
 
     const lines = new Map<number, EngineInfo>()
-    this.onInfoCallback = (info) => {
+    this.setInfoCallback((info) => {
       // 引擎可能在最佳着法后补发无 pv 的 info，保留上一条的有效 pv
       const key = info.multipv ?? 1
       const prev = lines.get(key)
       const merged = (prev && (!info.pv || info.pv.length === 0)) ? { ...info, pv: prev.pv } : info
       lines.set(key, merged)
       onUpdate?.(sortLines(lines))
-    }
+    })
     return this.beginSearch(fen, moves, depth, timeMs, () => {
       // 恢复单 PV，避免影响对局/复盘分析
       this.sendCommand('setoption name MultiPV value 1')
@@ -386,6 +394,7 @@ export class PikafishEngine {
   ): Promise<T> {
     this.status = 'thinking'
     return new Promise<T>((resolve) => {
+      this.bestMoveGen = this.searchGen
       this.onBestMoveCallback = (move) => {
         const value = finalize(move)
         this.clearSearch()
@@ -409,6 +418,16 @@ export class PikafishEngine {
     if (this.searchTimer) { clearTimeout(this.searchTimer); this.searchTimer = null }
     this.onBestMoveCallback = null
     this.onInfoCallback = null
+    // 让仍在管道里的旧 info 失效
+    this.searchGen++
+  }
+
+  /** 给回调打上「本次搜索」代号，过期输出直接丢弃 */
+  private setInfoCallback(cb: ((info: EngineInfo) => void) | null) {
+    const gen = ++this.searchGen
+    this.onInfoCallback = cb
+      ? (info: EngineInfo) => { if (gen === this.searchGen) cb(info) }
+      : null
   }
 
   /** 强制结算当前挂起的搜索（超时/stop 用），结果走 (none) 兜底 */
@@ -474,6 +493,8 @@ export class PikafishEngine {
 
   private handleLine(line: string) {
     if (line.startsWith('bestmove')) {
+      // 过期搜索的 bestmove（stop 之后管道里残留）直接丢弃
+      if (this.bestMoveGen !== this.searchGen) return
       const move = line.split(' ')[1]
       if (move && this.onBestMoveCallback) this.onBestMoveCallback(move)
     } else if (line.startsWith('info')) {

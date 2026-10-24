@@ -4,6 +4,7 @@
 import type { BoardState, Move, Pos, Turn } from '../game/board'
 import type { Game } from '../game/model'
 import type { AppSettings } from '../game/storage'
+import type { TimeControl } from '../game/timeControl'
 import type { RatingChange } from '../game/rating'
 import type { PikafishEngine } from '../engine/pikafish'
 import type { MobilePage } from './slices/uiSlice'
@@ -216,9 +217,11 @@ export interface AppState {
   lastMove: Move | null
 
   // ── 计时器 ──
-  redTime: number   // 毫秒
+  redTime: number   // 毫秒（累计已用）
   blackTime: number
   timerInterval: ReturnType<typeof setInterval> | null
+  /** 本局时间制：null = 不限时（棋钟只正计时） */
+  timeControl: TimeControl | null
 
   // ── 棋谱列表 ──
   savedGames: Game[]
@@ -239,6 +242,8 @@ export interface AppState {
   aiHint: () => Promise<void>
   resign: () => void
   offerDraw: () => void
+  /** 某方超时判负（棋钟驱动） */
+  timeUp: (side: Turn) => void
 
   // ── 棋谱操作 ──
   saveCurrentGame: () => void

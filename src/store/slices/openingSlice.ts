@@ -39,6 +39,7 @@ export function createOpeningSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       puzzlePlyIndex: null,
       redTime: 0,
       blackTime: 0,
+      timeControl: null,
       activeTab: 'play',
       // 移动端多层导航：开局训练切换到对战页
       mobilePage: 'play' as const,

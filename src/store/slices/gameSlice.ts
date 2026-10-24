@@ -15,6 +15,8 @@ import { ENDGAME_PRESETS } from '../../game/endgames'
 import { recordEndgameResult } from '../../game/progress'
 import { recordChallengeCleared } from '../../game/challenges'
 import { settleRating, boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
+import type { TimeControl } from '../../game/timeControl'
+import { timeControlHeader } from '../../game/timeControl'
 import { enrichMasterGame } from './masterQuizSlice'
 import type { SideControl } from '../types'
 import { playMoveSound, playCaptureSound, playCaptureVoice, playCheckSound, playCheckVoice, playCheckHaptic, playMoveHaptic, playGameOverHaptic, playIllegalHaptic } from '../../game/sound'
@@ -47,18 +49,24 @@ function playReplayStep(game: Game, plyIndex: number, forward: boolean) {
 
 
 export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
+    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'timeControl' | 'timeUp' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
   // AI（含 AI 演示）自动走棋调度：演示模式间隔 1 秒，并在引擎空闲后再落子，
   // 避免与 quickEval 并发搜索导致链断。
+  // 关键：调度要绑定「这一局」——旧局遗留的 setTimeout 在新局里不能再落子，
+  // 否则会出现「刚开新局 AI 抢先走一步 / 提示分析到别的局面」的竞态。
+  let aiScheduleSeq = 0
   const scheduleAiMove = (base: number) => {
     const st = get()
     if (st.mode !== 'play') return
     if (st.sideControl[st.board.turn] !== 'ai') return
     const demo = st.sideControl.w === 'ai' && st.sideControl.b === 'ai'
     const delay = demo ? 1000 : base
+    const gameId = st.game.id
+    const seq = ++aiScheduleSeq
     setTimeout(() => {
       const step = () => {
         const s = get()
+        if (s.game.id !== gameId || seq !== aiScheduleSeq) return
         if (s.mode !== 'play') return
         if (s.sideControl[s.board.turn] !== 'ai') return
         if (s.isThinking || s.engineOccupied || !s.engineReady || !s.engine) { setTimeout(step, 250); return }
@@ -107,6 +115,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     blackTime: 0,
 
+    timeControl: null,
+
     timerInterval: null,
 
   // ── 棋谱列表 ──
@@ -139,6 +149,14 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     }
     game.header.Difficulty = difficulty
 
+    // 时间制：演示局与残局训练不设限时
+    const settings = getSettings()
+    const timeControl: TimeControl | null = (!demo && settings.timeControlBaseMs > 0)
+      ? { baseMs: settings.timeControlBaseMs, incMs: settings.timeControlIncMs }
+      : null
+    const tcHeader = timeControlHeader(timeControl)
+    if (tcHeader) game.header.TimeControl = tcHeader
+
     set({
       mode: 'play',
       endgameTraining: false,
@@ -157,6 +175,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       lastRatingChange: null,
       redTime: 0,
       blackTime: 0,
+      timeControl,
     })
 
     // 更新引擎深度
@@ -442,6 +461,23 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     })
   },
 
+    /** 棋钟到期：该方判负（残局训练/题库/演示不计时，由 timeControl 为空兜底） */
+    timeUp: (side: Turn) => {
+    const { game, mode, timerInterval, timeControl } = get()
+    if (mode !== 'play' || game.result !== '*' || !timeControl) return
+    if (timerInterval) clearInterval(timerInterval)
+    const result = side === 'w' ? '0-1' : '1-0'
+    const updatedGame = { ...game, result, updatedAt: Date.now() }
+    set({ game: { ...updatedGame, header: { ...updatedGame.header, Result: result } }, timerInterval: null })
+    if (updatedGame.plies.length > 0) {
+      const change = settleRating(updatedGame)
+      if (change) set({ lastRatingChange: change })
+    }
+    playGameOverHaptic(getSettings().hapticEnabled)
+    get().showToast(side === 'w' ? '红方超时，黑方胜' : '黑方超时，红方胜')
+    get().saveCurrentGame()
+  },
+
     saveCurrentGame: () => {
     const { game, sideControl } = get()
     if (game.plies.length === 0) return
@@ -481,6 +517,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({
       mode: 'replay',
       game,
+      timeControl: null,
       board,
       currentPlyIndex: game.plies.length,
       selected: null,
@@ -520,6 +557,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({
       mode: 'replay',
       game: result.game,
+      timeControl: null,
       board,
       currentPlyIndex: result.game.plies.length,
       selected: null,

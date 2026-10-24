@@ -4,7 +4,7 @@
 import type { AppState, StoreSet, StoreGet } from '../types'
 import type { Difficulty } from '../types'
 import type { Game } from '../../game/model'
-import { boardToFen } from '../../game/board'
+import { boardFromFen, boardToFen } from '../../game/board'
 import { getAllLegalMoves, getSoleLegalMove, chineseFromFen, pvToChinese } from '../../game/rules'
 import {
   saveGame as storageSaveGame, getAllGames, getSettings, initGameStorage,
@@ -279,9 +279,20 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({ isThinking: true })
     const ui = createUiCoalescer(patch => set(patch))
     try {
-      // 引擎可能在最佳着法后补发一条无 pv 的 info，故本地保留最长 pv 的结果
+      // 引擎可能在最佳着法后补发一条无 pv 的 info，故本地保留最长 pv 的结果。
+      // 另外过滤掉「上一局搜索残留」的 info：若最佳着法在当前局面不成立（起点无子），
+      // 说明它不是这个局面的结果，直接丢弃，避免提示出 UCI 乱码/错误箭头。
+      const startState = boardFromFen(fen)
+      const isValidAtFen = (move: string) => {
+        if (!move || move.length < 4) return false
+        const fromCol = move.charCodeAt(0) - 97
+        const fromRow = parseInt(move[1])
+        if (fromCol < 0 || fromCol > 8 || fromRow < 0 || fromRow > 9) return false
+        return startState.board[fromCol][fromRow] !== '.'
+      }
       const holder: { latest: EngineInfo | null } = { latest: null }
       await engine.analyze(game.startFen, moveList, Math.min(engineDepth, 14), (info) => {
+        if (!isValidAtFen(info.move)) return
         if (!holder.latest || info.pv.length >= (holder.latest.pv?.length ?? 0)) holder.latest = info
         ui.push({
           analysis: {
@@ -296,15 +307,20 @@ export function createEngineSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       const latest = holder.latest
       if (latest && latest.move.length >= 4) {
         const lineUci = latest.pv.slice(0, 3) // pv[0] 即最佳着法，其后为对手应法与我方续着
-        const line = lineUci.length > 1 ? pvToChinese(fen, lineUci) : [chineseFromFen(fen, latest.move)]
+        // pvToChinese 遇到引擎 PV 里不合法的续着会提前截断（极端情况返回空），
+        // 此时至少回退到最佳着法，避免提示条只剩「推荐 +0.xx」没有着法。
+        const cnLine = pvToChinese(fen, lineUci)
+        const line = (cnLine.length ? cnLine : [chineseFromFen(fen, latest.move)]).slice(0, 3)
         set({
           hintInfo: {
             moveCn: chineseFromFen(fen, latest.move),
             score: latest.score,
-            line: line.slice(0, 3),
+            line,
             movesUci: lineUci,
           },
         })
+      } else {
+        get().showToast('引擎暂时没有给出有效着法，请再试一次')
       }
     } catch (e) {
       console.error('AI 提示失败:', e)

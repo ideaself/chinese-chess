@@ -2417,7 +2417,70 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 /* 认输/求和确认条：主按钮用金色，与操作条一致 */
 .mpb-confirm-actions .mpb-main { background: var(--gold); border-color: var(--gold); color: #241a05; }
 
-/* 大屏横屏时操作条不要被拉得过宽 */
+/* 吃子展示：信息条里的小棋子，最多 6 枚 +N */
+.captured {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 2px;
+  max-width: 92px;
+  overflow: hidden;
+  flex: 0 1 auto;
+}
+.cap {
+  font-family: 'STKaiti', 'KaiTi', 'Kaiti SC', 'Noto Serif CJK SC', serif;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.92;
+  flex: 0 0 auto;
+}
+.cap-red { color: #e8837b; }
+.cap-black { color: #b7c5d8; }
+.cap-more { font-size: 10px; color: var(--text-3); margin-left: 1px; flex: 0 0 auto; }
+
+/* 读秒：剩余 ≤30 秒变红并轻微呼吸 */
+.timer-low { color: #ff6b6b !important; animation: pulse 1s infinite; }
+
+/* 带图标的按钮（桌面操作面板） */
+.btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-ico svg { flex: 0 0 auto; opacity: 0.9; }
+
+/* 错误边界 */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--text-2);
+}
+.error-boundary.is-compact { padding: 18px 12px; }
+.error-boundary svg { color: var(--gold); }
+.error-boundary .eb-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.error-boundary .eb-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  max-width: 92%;
+  word-break: break-all;
+}
+.error-boundary .eb-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* 非法落点：棋盘轻抖（配合轻震，手机放桌上也能感知） */
+@keyframes board-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+.board-shake { animation: board-shake 0.22s ease-in-out; }
 @media (min-width: 720px) {
   .mpb-icons { width: 100%; max-width: 520px; margin: 0 auto; }
 }

@@ -146,15 +146,22 @@ async function run(ctx) {
   // 提示：天天象棋风格 — 棋盘上画带序号的三步箭头，不占用布局
   await evalJs(`window.__store.getState().startNewGame('medium', 'w')`)
   for (let i = 0; i < 40; i++) {
-    if (await evalJs(`window.__store.getState().engineReady`)) break
+    const ok = await evalJs(`(() => {
+      const s = window.__store.getState()
+      return s.engineReady && !s.isThinking && !s.engineOccupied
+    })()`)
+    if (ok) break
     await sleep(250)
   }
-  await evalJs(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('提示'))?.click()`)
+  // 直接调用 store：按钮在引擎/思考状态下会 disabled，测试不该依赖按钮可用性
   let mv = 0
-  for (let i = 0; i < 40; i++) {
-    mv = await evalJs(`(window.__store.getState().hintInfo?.movesUci || []).length`)
-    if (mv >= 3) break
-    await sleep(200)
+  for (let attempt = 0; attempt < 3 && mv < 3; attempt++) {
+    await evalJs(`window.__store.getState().aiHint()`)
+    for (let i = 0; i < 40; i++) {
+      mv = await evalJs(`(window.__store.getState().hintInfo?.movesUci || []).length`)
+      if (mv >= 3) break
+      await sleep(250)
+    }
   }
   const arrows = await evalJs(`document.querySelectorAll('.hint-arrows g').length`)
   const hintText = await evalJs(`document.querySelector('.board-hint-overlay')?.textContent || ''`)

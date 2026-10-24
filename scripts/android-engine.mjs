@@ -20,7 +20,7 @@
  * 找不到引擎目录时不报错（退出码 0），仅提示——此时 App 自动回退 WASM 引擎。
  */
 
-import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, chmodSync } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, chmodSync, rmSync } from 'fs'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -96,4 +96,15 @@ if (injected > 0) {
     console.log('[android-engine] AndroidManifest 已加 extractNativeLibs="true"')
   }
   console.log('[android-engine] 完成：构建前记得 npm run build && npx cap sync android')
+
+  // ── 5. 可选：剔除 WASM 引擎数据（原生引擎已随包，省 ~52MB）────────
+  // 默认剔除；加 --keep-wasm 保留（给需要在 x86/模拟器上跑 WASM 的构建用）。
+  // 必须在 cap sync 之后执行，删除的是已拷贝进 assets 的那份。
+  if (!process.argv.includes('--keep-wasm')) {
+    const wasmAssets = join(androidDir, 'app', 'src', 'main', 'assets', 'public', 'wasm')
+    if (existsSync(wasmAssets)) {
+      rmSync(wasmAssets, { recursive: true, force: true })
+      console.log('[android-engine] 已剔除 assets/public/wasm（减小包体；App 使用原生引擎）')
+    }
+  }
 }

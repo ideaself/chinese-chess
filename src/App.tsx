@@ -24,6 +24,9 @@ import { fetchModels } from './game/coach/aiCoach'
 import { APP_VERSION } from './version'
 import { BOARD_SKINS, PIECE_SKINS } from './skins'
 import { useMediaQuery, MOBILE_QUERY } from './utils/useMediaQuery'
+import { useWakeLock } from './utils/useWakeLock'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { clearCrashLog, crashLogText, getCrashLog } from './game/crashLog'
 import { MobilePlayBar } from './components/Controls/MobilePlayBar'
 import { MobileHome } from './components/Controls/MobileHome'
 import { ReplayTabs } from './components/Analysis/ReplayTabs'
@@ -77,6 +80,13 @@ export const App: React.FC = () => {
   const mobilePage = useStore(s => s.mobilePage)
   const setMobilePage = useStore(s => s.setMobilePage)
   const isMobile = useMediaQuery(MOBILE_QUERY)
+  const keepAwake = useStore(s => s.settings.keepAwake)
+  const autoPlaying = useStore(s => s.autoPlaying)
+
+  // 对局中（未结束）/ 复盘自动播放时保持屏幕常亮
+  useWakeLock(isMobile && keepAwake !== false && (
+    (mode === 'play' && game.result === '*') || (mode === 'replay' && autoPlaying)
+  ))
 
   useEffect(() => {
     init()
@@ -197,19 +207,23 @@ export const App: React.FC = () => {
   }, [selfAnalysis, variation, sheetTab, setSheetTab])
 
   const renderPanelContent = (key: string | null) => {
-    switch (key) {
-      case 'controls': return <Controls />
-      case 'games': return <GamesPanel />
-      case 'analysis': return <AnalysisPanel />
-      case 'settings': return <><StatsPanel /><SettingsPanel /></>
-      case 'setup': return <SetupPanel />
-      case 'puzzle': return <PuzzlePanel />
-      case 'variation': return <VariationPanel />
-      case 'quiz': return <MasterQuizPanel />
-      case 'opening': return <OpeningTrainingPanel />
-      case 'newgame': return <NewGamePanel />
-      default: return null
-    }
+    const content = (() => {
+      switch (key) {
+        case 'controls': return <Controls />
+        case 'games': return <GamesPanel />
+        case 'analysis': return <AnalysisPanel />
+        case 'settings': return <><StatsPanel /><SettingsPanel /></>
+        case 'setup': return <SetupPanel />
+        case 'puzzle': return <PuzzlePanel />
+        case 'variation': return <VariationPanel />
+        case 'quiz': return <MasterQuizPanel />
+        case 'opening': return <OpeningTrainingPanel />
+        case 'newgame': return <NewGamePanel />
+        default: return null
+      }
+    })()
+    // 面板级错误边界：某个面板崩了只替换这一块，不整页白屏
+    return content ? <ErrorBoundary name={`panel:${key}`} compact>{content}</ErrorBoundary> : null
   }
   const renderPanel = (key: string | null) => (
     <Suspense fallback={LazyFallback}>{renderPanelContent(key)}</Suspense>
@@ -616,6 +630,8 @@ const SettingsPanel: React.FC = () => {
   const updateSettings = useStore(s => s.updateSettings)
   const flipBoard = useStore(s => s.flipBoard)
   const boardFlipped = useStore(s => s.boardFlipped)
+  const showToast = useStore(s => s.showToast)
+  const [crashCount, setCrashCount] = useState(() => getCrashLog().length)
 
   // AI 模型列表自动获取（防抖，Key/地址变化后 600ms 触发）
   const [models, setModels] = useState<string[]>(FALLBACK_MODELS)
@@ -704,6 +720,16 @@ const SettingsPanel: React.FC = () => {
               onChange={e => update({ dragToMove: e.target.checked })} />
           </div>
           <div className="settings-row">
+            <span title="对局中保持屏幕常亮，避免思考时自动锁屏">屏幕常亮</span>
+            <input type="checkbox" checked={settings.keepAwake !== false}
+              onChange={e => update({ keepAwake: e.target.checked })} />
+          </div>
+          <div className="settings-row">
+            <span title="AI 思考时在棋盘上显示它的实时最优着。会剧透对方计划，默认关闭">AI 实时最优（剧透）</span>
+            <input type="checkbox" checked={settings.showAiPreview === true}
+              onChange={e => update({ showAiPreview: e.target.checked })} />
+          </div>
+          <div className="settings-row">
             <span>自动局面评估</span>
             <input type="checkbox" checked={settings.autoEval !== false}
               onChange={e => update({ autoEval: e.target.checked })} />
@@ -765,6 +791,29 @@ const SettingsPanel: React.FC = () => {
               {(Object.keys(DIFFICULTY_LABELS) as Difficulty[]).map(d => (
                 <option key={d} value={d}>{DIFFICULTY_LABELS[d]}</option>
               ))}
+            </select>
+          </div>
+          <div className="settings-row">
+            <span title="新对局的基础用时；不限时则棋钟只正计时">时间制</span>
+            <select className="settings-select" value={settings.timeControlBaseMs}
+              onChange={e => update({ timeControlBaseMs: Number(e.target.value) })}>
+              <option value={0}>不限时</option>
+              <option value={300000}>5 分钟</option>
+              <option value={600000}>10 分钟</option>
+              <option value={900000}>15 分钟</option>
+              <option value={1200000}>20 分钟</option>
+              <option value={1800000}>30 分钟</option>
+            </select>
+          </div>
+          <div className="settings-row">
+            <span title="每走一步补给的时间（天天象棋式的加秒）">每步加秒</span>
+            <select className="settings-select" value={settings.timeControlIncMs}
+              disabled={!settings.timeControlBaseMs}
+              onChange={e => update({ timeControlIncMs: Number(e.target.value) })}>
+              <option value={0}>不加秒</option>
+              <option value={3000}>3 秒</option>
+              <option value={5000}>5 秒</option>
+              <option value={10000}>10 秒</option>
             </select>
           </div>
           <div className="settings-row">
@@ -839,6 +888,26 @@ const SettingsPanel: React.FC = () => {
           </div>
         </div>
         <CloudSyncSection settings={settings} update={update} />
+        <div className="settings-group">
+          <h4>诊断</h4>
+          <div className="settings-row">
+            <span title="最近 50 条未处理异常，白屏/闪退时复制给开发者">崩溃日志</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm" onClick={() => {
+                void navigator.clipboard?.writeText(crashLogText())
+                showToast('崩溃日志已复制')
+              }}>复制</button>
+              <button className="btn btn-sm" onClick={() => {
+                clearCrashLog()
+                setCrashCount(0)
+                showToast('崩溃日志已清空')
+              }}>清空</button>
+            </div>
+          </div>
+          <div className="panel-hint" style={{ marginTop: -4 }}>
+            {crashCount > 0 ? `最近有 ${crashCount} 条错误记录，反馈问题时可一并复制。` : '暂无错误记录。'}
+          </div>
+        </div>
         <div className="settings-group">
           <h4>关于</h4>
           <div className="settings-row">

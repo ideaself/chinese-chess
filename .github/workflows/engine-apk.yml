@@ -1,0 +1,116 @@
+name: Engine APK
+
+# 生成「含原生 Pikafish 引擎」的 APK：
+#   - 从 Pikafish 官方 release 下载 Android arm64 二进制（不随仓库分发）
+#   - 注入 jniLibs + NNUE 资产 + 原生插件
+#   - 剔除 WASM 引擎数据（省约 52MB）
+# 触发：随 v* tag 自动构建并上传到同一个 Release；也可手动 dispatch 只出 artifact。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-engine-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 单元测试
+        run: npx vitest run
+
+      - name: Web 构建
+        run: npm run build
+
+      - name: 生成 Android 工程
+        run: npx cap add android && npx cap sync android
+
+      - name: 同步 Android 版本
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          VERSION_CODE="$(node -p "const [major, minor, patch] = require('./package.json').version.split('.').map(Number); major * 10000 + minor * 100 + patch")"
+          sed -i "s/versionCode [0-9]*/versionCode ${VERSION_CODE}/; s/versionName \"[^\"]*\"/versionName \"${VERSION}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - name: 放行明文 HTTP
+        run: |
+          sed -i 's|<application|<application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
+          grep -q usesCleartextTraffic android/app/src/main/AndroidManifest.xml
+
+      - name: 配置正式签名
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: node scripts/ci-sign.mjs
+
+      - name: 下载 Pikafish 官方 Android 引擎
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full
+          mkdir -p /tmp/pk
+          gh release download Pikafish-2026-01-02 -R official-pikafish/Pikafish -p "*.7z" -D /tmp/pk
+          7z x /tmp/pk/Pikafish.2026-01-02.7z -o/tmp/pikafish -y > /dev/null
+          ls /tmp/pikafish/Android
+
+      - name: 注入引擎（并剔除 WASM 数据）
+        run: node scripts/android-engine.mjs --src /tmp/pikafish
+
+      - name: 构建 APK
+        run: |
+          cd android && chmod +x gradlew && ./gradlew assembleRelease
+          mkdir -p ../apk-out
+          cp app/build/outputs/apk/release/app-release.apk ../apk-out/
+
+      - name: 重命名
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+          mv apk-out/app-release.apk "apk-out/chinese-chess-v${VERSION}-engine.apk"
+          ls -lh apk-out
+
+      - name: 等待同 tag 的 Release 就绪
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 40); do
+            if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then exit 0; fi
+            sleep 10
+          done
+          echo "Release 未出现，退出"; exit 1
+
+      - name: 上传引擎包到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" apk-out/*.apk --clobber
+
+      - name: 手动触发时上传构建产物
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-apk
+          path: apk-out/*.apk

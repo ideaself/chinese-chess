@@ -19,7 +19,12 @@ function getJson(url) {
 /** 连接页面并返回操作上下文 */
 async function connect(port = 9222) {
   const targets = await getJson(`http://localhost:${port}/json/list`)
-  const page = targets.find(t => t.type === 'page' && t.webSocketDebuggerUrl)
+  // Edge 首次启动可能把「同步确认」对话框开成第一个 page target，
+  // 必须优先选应用页面（localhost），否则会连到 edge:// 对话框上。
+  const isApp = t => t.type === 'page' && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(t.url) && t.webSocketDebuggerUrl
+  const page = targets.find(isApp)
+    || targets.find(t => t.type === 'page' && t.webSocketDebuggerUrl && !/^(edge|chrome|devtools):\/\//.test(t.url))
+    || targets.find(t => t.type === 'page' && t.webSocketDebuggerUrl)
   if (!page) throw new Error('未找到页面 target，Chrome 是否已带 URL 启动？')
 
   const ws = new WebSocket(page.webSocketDebuggerUrl)
@@ -75,13 +80,20 @@ async function connect(port = 9222) {
 
 /** 等待引擎就绪（最多 90s） */
 async function waitEngineReady(ctx) {
+  let last = null
   for (let i = 0; i < 30; i++) {
     await ctx.sleep(3000)
-    const ready = await ctx.evalJs(
-      `!!document.querySelector('.status-ready') || (window.__store && window.__store.getState().engineReady === true)`
-    )
-    if (ready) return true
+    last = await ctx.evalJs(`(() => ({
+      url: location.href,
+      state: document.readyState,
+      hasStore: !!window.__store,
+      engineReady: window.__store ? window.__store.getState().engineReady : null,
+      body: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').slice(0, 80),
+    }))()`)
+    if (last && (last.engineReady === true)) return true
+    if (i === 0) console.log('[e2e] 页面状态:', JSON.stringify(last))
   }
+  console.log('[e2e] 引擎未就绪，最后状态:', JSON.stringify(last), '控制台:', JSON.stringify(ctx.logs.slice(-5)))
   return false
 }
 

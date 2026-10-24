@@ -18,6 +18,8 @@ export const NewGamePanel: React.FC = () => {
   const startNewGame = useStore(s => s.startNewGame)
   const restart = useStore(s => s.restart)
   const setSheetTab = useStore(s => s.setSheetTab)
+  const settings = useStore(s => s.settings)
+  const updateSettings = useStore(s => s.updateSettings)
 
   const close = () => setSheetTab(BOARD_HOME)
 
@@ -51,6 +53,28 @@ export const NewGamePanel: React.FC = () => {
           ))}
         </select>
       </div>
+
+      <div className="ctrl-title">时间制</div>
+      <div className="action-grid cols-2">
+        {([[0, '不限时'], [300000, '5 分钟'], [600000, '10 分钟'], [900000, '15 分钟'], [1800000, '30 分钟']] as [number, string][]).map(([v, label]) => (
+          <button key={v}
+            className={`btn${settings.timeControlBaseMs === v ? ' btn-active' : ''}`}
+            onClick={() => updateSettings({ timeControlBaseMs: v })}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {settings.timeControlBaseMs > 0 && (
+        <div className="ctrl-hint" style={{ marginTop: 6 }}>
+          每步加秒：
+          {([[0, '不加'], [3000, '3 秒'], [5000, '5 秒']] as [number, string][]).map(([v, label]) => (
+            <button key={v}
+              className={`filter-btn${settings.timeControlIncMs === v ? ' btn-active' : ''}`}
+              style={{ marginLeft: 6 }}
+              onClick={() => updateSettings({ timeControlIncMs: v })}>{label}</button>
+          ))}
+        </div>
+      )}
 
       <div className="ctrl-title">对局角色</div>
       <div className="action-grid cols-2">

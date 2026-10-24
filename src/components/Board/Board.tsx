@@ -19,6 +19,8 @@ import { EvalBar } from './EvalBar'
 import { boardSkinGrids, DEFAULT_BOARD_GRID, type BoardGrid } from '../../game/boardSkinGrids'
 import { moveTag } from '../../game/moveTags'
 import { playPickHaptic } from '../../game/sound'
+import { capturedPieces, pieceGlyph } from '../../game/captured'
+import { formatClock, hasTimeControl, isLowTime, movesPlayedBy, remainingMs } from '../../game/timeControl'
 
 const CELL = 60
 const BOARD_COLS = 9
@@ -157,7 +159,7 @@ function cornerBrackets(cx: number, cy: number, half: number, arm: number, radiu
 }
 
 /** 拖动落点吸附：取指针附近最近的合法着点（≤0.62 格） */
-function nearestTarget(x: number, y: number, targets: Pos[], flipped: boolean, grid: BoardGrid): Pos | null {
+export function nearestTarget(x: number, y: number, targets: Pos[], flipped: boolean, grid: BoardGrid): Pos | null {
   const limit = Math.min(grid.xstep, grid.ystep) * 0.62
   let best: Pos | null = null
   let bestD = Infinity
@@ -167,6 +169,21 @@ function nearestTarget(x: number, y: number, targets: Pos[], flipped: boolean, g
     if (d <= limit && d < bestD) { best = t; bestD = d }
   }
   return best
+}
+
+/** 吃子展示：最多显示 6 枚，其余折叠为 +N */
+const Captured: React.FC<{ glyphs: string[] }> = ({ glyphs }) => {
+  if (!glyphs.length) return null
+  const shown = glyphs.slice(0, 6)
+  const rest = glyphs.length - shown.length
+  return (
+    <span className="captured" title={`已吃：${glyphs.map(pieceGlyph).join(' ')}`}>
+      {shown.map((g, i) => (
+        <span key={i} className={isRed(g) ? 'cap cap-red' : 'cap cap-black'}>{pieceGlyph(g)}</span>
+      ))}
+      {rest > 0 && <span className="cap-more">+{rest}</span>}
+    </span>
+  )
 }
 
 export const Board: React.FC = () => {
@@ -186,6 +203,7 @@ export const Board: React.FC = () => {
   const currentPlyIndex = useStore(s => s.currentPlyIndex)
   const redTime = useStore(s => s.redTime)
   const blackTime = useStore(s => s.blackTime)
+  const timeControl = useStore(s => s.timeControl)
   const isMobile = useMediaQuery(MOBILE_QUERY)
 
   // 非对局模式（复盘/推演）：桌面端在棋盘上方显示合并玩家栏；
@@ -208,11 +226,29 @@ export const Board: React.FC = () => {
   const sideLabel = (side: 'w' | 'b') => side === 'w' ? `红方（${redRole}）` : `黑方（${blackRole}）`
   const sideTime = (side: 'w' | 'b') => side === 'w' ? redTime : blackTime
 
+  // 限时对局显示剩余时间；不限时仍显示累计用时。
+  // 剩余 = 基础 + 加秒×该方已走着数 − 已用（见 game/timeControl.ts）
+  const clockMs = (side: 'w' | 'b') => {
+    const elapsed = sideTime(side)
+    if (!hasTimeControl(timeControl)) return elapsed
+    return remainingMs(timeControl, elapsed, movesPlayedBy(game, side))
+  }
+  const clockLow = (side: 'w' | 'b') => hasTimeControl(timeControl) && isLowTime(clockMs(side))
+  // 吃子展示：captured.w = 红方损失（黑方战果），captured.b = 黑方损失
+  const captured = useMemo(
+    () => isPlay ? capturedPieces(game.startFen, board) : { w: [] as string[], b: [] as string[] },
+    [isPlay, game.startFen, board],
+  )
+  const capturedBy = (side: 'w' | 'b') => side === 'w' ? captured.b : captured.w
+
   const svgRef = useRef<SVGSVGElement>(null)
   const prevBoardRef = useRef<string>('')
   const [anim, setAnim] = useState<AnimState | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const dragRef = useRef<DragSession | null>(null)
+  /** 非法落点：棋盘轻抖一下（比纯震动更容易感知） */
+  const [shake, setShake] = useState(false)
+  const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 拖拽落子已经「看到」目标位置，跳过滑行动画，避免回跳 */
   const skipAnimRef = useRef(false)
   // 响应式设置：改皮肤立即生效
@@ -262,8 +298,7 @@ export const Board: React.FC = () => {
     prevBoardRef.current = curr
   }, [board, lastMove, boardFlipped, mode, grid, settings.animationEnabled])
 
-  const getSvgCoords = useCallback((clientX: number, clientY: number) => {
-    const svg = svgRef.current
+  const getSvgCoords = useCallback((clientX: number, clientY: number) => {    const svg = svgRef.current
     if (!svg) return null
     const ctm = svg.getScreenCTM()
     if (!ctm) return null
@@ -291,6 +326,18 @@ export const Board: React.FC = () => {
     // 错误重走/题库/每日一题：点选走子做答（selectPiece/tryMove 内部路由到 puzzleTryMove）
     if (mode === 'puzzle') { selectPiece(pos); return }
     if (mode !== 'play') return
+    // 已选中棋子时点到非法目标（空格/对方子）→ 棋盘轻抖 + 轻震，反馈更明确
+    const st = useStore.getState()
+    if (st.selected && st.game.result === '*') {
+      const isTarget = st.legalTargets.some(t => t.col === pos.col && t.row === pos.row)
+      const piece = st.board.board[pos.col][pos.row]
+      const own = piece !== '.' && isRed(piece) === (st.board.turn === 'w')
+      if (!isTarget && !own) {
+        setShake(true)
+        if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current)
+        shakeTimerRef.current = setTimeout(() => setShake(false), 240)
+      }
+    }
     selectPiece(pos)
   }, [getSvgCoords, grid])
 
@@ -579,13 +626,13 @@ export const Board: React.FC = () => {
     })
   }, [hintInfo, boardFlipped, grid])
 
-  // ── AI 思考中实时最优箭头（橙色流动虚线，随搜索加深更新，仿天天象棋动态提示）──
+  // ── AI 思考中实时最优箭头（需在设置里显式开启：会剧透对方计划）──
   const aiArrow = React.useMemo(() => {
-    if (!aiPreview || mode !== 'play' || !aiPreview.move || aiPreview.move.length < 4) return null
+    if (!settings.showAiPreview || !aiPreview || mode !== 'play' || !aiPreview.move || aiPreview.move.length < 4) return null
     const fromPos = { col: aiPreview.move.charCodeAt(0) - 97, row: Number(aiPreview.move[1]) }
     const toPos = { col: aiPreview.move.charCodeAt(2) - 97, row: Number(aiPreview.move[3]) }
     return arrowGeometry(posToSvg(fromPos, boardFlipped, grid), posToSvg(toPos, boardFlipped, grid), 0)
-  }, [aiPreview, mode, boardFlipped, grid])
+  }, [aiPreview, mode, boardFlipped, grid, settings.showAiPreview])
 
   // ── 复盘：最后一手的评级角标（正/妙/软/次/劣/漏）──
   const boardTag = React.useMemo(() => {
@@ -625,7 +672,7 @@ export const Board: React.FC = () => {
   const thinkingSide = isPlay && isThinking && sideControl[board.turn] === 'ai' ? board.turn : null
 
   return (
-    <div className={`board-container${isPlay ? ' board-play' : ''}`}>
+    <div className={`board-container${isPlay ? ' board-play' : ''}${shake ? ' board-shake' : ''}`}>
       {isPlay ? (
         <>
           <EvalBar />
@@ -633,21 +680,22 @@ export const Board: React.FC = () => {
             <span className="pi-left">
               <span className={`pi-badge ${topSide === 'w' ? 'pi-badge-red' : 'pi-badge-black'}`}>{topSide === 'w' ? '帅' : '将'}</span>
               <span className="player-name">{sideLabel(topSide)}</span>
+              <Captured glyphs={capturedBy(topSide)} />
               {thinkingSide === topSide && <span className="pi-thinking">思考中<i /><i /><i /></span>}
             </span>
-            <span className="timer">{formatTime(sideTime(topSide))}</span>
+            <span className={`timer${clockLow(topSide) ? ' timer-low' : ''}`}>{formatClock(clockMs(topSide))}</span>
           </div>
         </>
       ) : !isMobile ? (
         <div className="player-bar">
           <span className="player-side">
             <span className="player-name">{board.turn === 'b' ? '● ' : ''}黑方（{blackRole}）</span>
-            <span className="timer">{formatTime(blackTime)}</span>
+            <span className={`timer${clockLow('b') ? ' timer-low' : ''}`}>{formatClock(clockMs('b'))}</span>
           </span>
           <span className="vs">vs</span>
           <span className="player-side">
             <span className="player-name">{board.turn === 'w' ? '● ' : ''}红方（{redRole}）</span>
-            <span className="timer">{formatTime(redTime)}</span>
+            <span className={`timer${clockLow('w') ? ' timer-low' : ''}`}>{formatClock(clockMs('w'))}</span>
           </span>
         </div>
       ) : mode === 'replay' && !variation ? (
@@ -778,13 +826,14 @@ export const Board: React.FC = () => {
           <span className="pi-left">
             <span className={`pi-badge ${bottomSide === 'w' ? 'pi-badge-red' : 'pi-badge-black'}`}>{bottomSide === 'w' ? '帅' : '将'}</span>
             <span className="player-name">{sideLabel(bottomSide)}</span>
+            <Captured glyphs={capturedBy(bottomSide)} />
             {thinkingSide === bottomSide && <span className="pi-thinking">思考中<i /><i /><i /></span>}
           </span>
-          <span className="timer">{formatTime(sideTime(bottomSide))}</span>
+          <span className={`timer${clockLow(bottomSide) ? ' timer-low' : ''}`}>{formatClock(clockMs(bottomSide))}</span>
         </div>
       )}
       {/* AI 思考中实时最优：覆在棋盘左上，随搜索加深更新（不占布局、不挡棋盘交互） */}
-      {aiPreview && mode === 'play' && (
+      {aiPreview && settings.showAiPreview && mode === 'play' && (
         <div className="board-live-best" title="AI 思考中实时最优着（随搜索加深更新，分数为 AI 方视角）">
           <span className="blb-pulse" />
           <span className="blb-move">{chineseFromFen(boardToFen(board), aiPreview.move)}</span>
@@ -804,11 +853,4 @@ export const Board: React.FC = () => {
       )}
     </div>
   )
-}
-
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
