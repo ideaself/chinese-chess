@@ -61,13 +61,18 @@ if (existsSync(engineSrc)) {
     injected++
   }
 
-  // ── 2. NNUE → public/engine（随 assets 分发） ────────────────────
+  // ── 2. NNUE → public/engine + 已同步的 assets ────────────────────
   const nnue = join(engineSrc, 'pikafish.nnue')
   if (existsSync(nnue)) {
     const dir = join(ROOT, 'public', 'engine')
     mkdirSync(dir, { recursive: true })
     copyFileSync(nnue, join(dir, 'pikafish.nnue'))
-    console.log('[android-engine] pikafish.nnue → public/engine/')
+    // 本脚本通常在 `cap sync` 之后执行（CI 里 NNUE 下载也在 build 之后），
+    // 只写 public/ 不会进 APK——必须同时写进已同步的 assets 目录。
+    const assetsDir = join(androidDir, 'app', 'src', 'main', 'assets', 'public', 'engine')
+    mkdirSync(assetsDir, { recursive: true })
+    copyFileSync(nnue, join(assetsDir, 'pikafish.nnue'))
+    console.log('[android-engine] pikafish.nnue → public/engine/ 与 assets/public/engine/')
   } else {
     console.warn('[android-engine] 缺少 pikafish.nnue，原生引擎会启动失败并回退 WASM')
   }

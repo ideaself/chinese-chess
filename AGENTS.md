@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.0（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.1（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -113,6 +113,8 @@ v1.25.0（本次发布，工程化 + 移动端补全）：
   - `engine/pikafish.ts` 增加搜索代号：stop 后管道里残留的 `info`/`bestmove` 不再串到新搜索（曾让提示返回上一局的着法）。
   - `aiHint` 过滤「最佳着法在当前局面不成立」的 info，并用中文兜底行，避免提示条只剩「推荐 +0.xx」。
 - 回归：`tsc` 通过、单测 **281 项**（新增时间制/吃子/拖拽吸附 16 项）、`vite build` 通过、e2e 6 套件 78 项全绿。
+
+v1.25.1（本次发布）：修复引擎包缺失 NNUE——`android-engine.mjs` 原先只把 `pikafish.nnue` 拷到 `public/engine/`，而 CI 在 `cap sync` 之后才注入，导致 NNUE 没进 APK（v1.25.0 的 `-engine.apk` 只有 43.7MB、原生引擎起不来且 WASM 已被剔除）。现同时写入 `android/app/src/main/assets/public/engine/`，本地重打验证：100.5MB，含 `assets/public/engine/pikafish.nnue` + `lib/arm64-v8a/libpikafish.so`，无 WASM。v1.25.0 的引擎包已作废，请用 v1.25.1 的。
 
 ## 已评估搁置
 
