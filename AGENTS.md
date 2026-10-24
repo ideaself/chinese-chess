@@ -5,17 +5,17 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.1（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.2（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（281 项）
+npm test                # vitest 单测（285 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
-npm run e2e             # 需先 build；e2e 冒烟（6 套件 78 项，Windows 亦可跑）
+npm run e2e             # 需先 build；e2e 冒烟（6 套件 86 项，Windows 亦可跑）
                         # E2E_CHROME 可指定浏览器；Windows 自动找 Edge/Chrome
                         # E2E_SUITES=mobile 只跑移动端套件
 npm run dpxq            # 语料 → public/master-games/ 分片（mtime 增量缓存 v2，UCI 格式）
@@ -115,6 +115,14 @@ v1.25.0（本次发布，工程化 + 移动端补全）：
 - 回归：`tsc` 通过、单测 **281 项**（新增时间制/吃子/拖拽吸附 16 项）、`vite build` 通过、e2e 6 套件 78 项全绿。
 
 v1.25.1（本次发布）：修复引擎包缺失 NNUE——`android-engine.mjs` 原先只把 `pikafish.nnue` 拷到 `public/engine/`，而 CI 在 `cap sync` 之后才注入，导致 NNUE 没进 APK（v1.25.0 的 `-engine.apk` 只有 43.7MB、原生引擎起不来且 WASM 已被剔除）。现同时写入 `android/app/src/main/assets/public/engine/`，本地重打验证：100.5MB，含 `assets/public/engine/pikafish.nnue` + `lib/arm64-v8a/libpikafish.so`，无 WASM。v1.25.0 的引擎包已作废，请用 v1.25.1 的。
+
+v1.25.2（本次发布，四项正确性修复）：
+- **返回键先关弹层**：`MobilePlayBar` 的「更多」菜单 / 复盘菜单 / 导航 / 认输求和确认条是组件内 state，store 的层级导航看不到；现用 `registerBackHandler` 注册，返回键按「确认条 → 更多 → 菜单 → 导航」顺序关闭，不再直接退出对战页。
+- **棋钟按真实时间差累计**：`startGameClock` 改为 `clockDelta(lastTickAt, now)`（`game/timeControl.ts`）。此前固定 `+1000ms`，手机切后台后 WebView 定时器被降频 → 限时对局白送时间；现在回前台第一跳补上真实间隔，时钟回拨按 0 处理。
+- **悔棋限次 + 不计分**：每局上限 `MAX_UNDO_PER_GAME = 3`（`store/constants.ts`），第 4 次提示「悔棋次数已用完」；`undoCount > 0` 的对局在 `resign/求和/超时/保存` 四处都不结算棋力分，结算弹窗显示「本局使用过悔棋，不计棋力分」。移动端悔棋按钮 title 显示剩余次数。
+- **长将判负**：`rules.perpetualCheckLoser(plies)` 检测「最近 6 手内一方每步都将军、另一方没有」，三次重复局面时把和棋改判为该方负（`result` 与 `header.Termination` 同步）；长捉/一将一捉仍按重复局面判和（简化判定，注释已说明）。
+- 结算弹窗新增终止原因（`header.Termination`，如「将死」「长将判负」）。
+- 回归：单测 **285 项**（新增 clockDelta / 长将 3 项）、e2e **86 项**（移动端新增返回键关菜单、悔棋上限、不计分弹窗 8 项）、`tsc` 与 `vite build` 通过。
 
 ## 已评估搁置
 

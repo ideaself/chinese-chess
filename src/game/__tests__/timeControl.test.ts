@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   allowanceMs,
+  clockDelta,
   formatClock,
   hasTimeControl,
   isLowTime,
@@ -50,3 +51,11 @@ describe('时间制', () => {
     expect(isLowTime(0)).toBe(false)
   })
 })
+
+  it('棋钟按真实时间差累计（后台节流后补回）', () => {
+    expect(clockDelta(1000, 4000)).toBe(3000)
+    expect(clockDelta(1000, 1000)).toBe(0)
+    // 时钟回拨/负值按 0 处理
+    expect(clockDelta(5000, 1000)).toBe(0)
+  })
+

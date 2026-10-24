@@ -513,6 +513,7 @@ const GameOverModal: React.FC<{
   const analyzeCurrentGame = useStore(s => s.analyzeCurrentGame)
   const lastRatingChange = useStore(s => s.lastRatingChange)
   const rank = useStore(s => (s.lastRatingChange ? getRank(s.lastRatingChange.after).tier.name : null))
+  const undoCount = useStore(s => s.undoCount)
   // 残局训练：结算后直接进入下一关 / 返回训练列表（此前只能"再来一局"开普通对局）
   const endgameTraining = useStore(s => s.endgameTraining)
   const startEndgameTraining = useStore(s => s.startEndgameTraining)
@@ -568,6 +569,12 @@ const GameOverModal: React.FC<{
             </span>
             {rank && <span className="rank-inline"> · {rank}</span>}
           </div>
+        )}
+        {undoCount > 0 && !lastRatingChange && (
+          <div className="rating-change-line rating-void">本局使用过悔棋，不计棋力分</div>
+        )}
+        {game.header.Termination && (
+          <div className="game-over-reason">{game.header.Termination}</div>
         )}
         <div className="game-over-stats">
           <div className="stat-item">

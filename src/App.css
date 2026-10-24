@@ -2445,6 +2445,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .btn-ico svg { flex: 0 0 auto; opacity: 0.9; }
 
+/* 对局结算：终止原因 / 用过悔棋不计分 */
+.game-over-reason {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.rating-change-line.rating-void {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 /* 错误边界 */
 .error-boundary {
   display: flex;

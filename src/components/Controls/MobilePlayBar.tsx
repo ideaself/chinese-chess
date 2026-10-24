@@ -12,8 +12,9 @@ import { useStore } from '../../store/useStore'
 import { exportPGN } from '../../game/pgn'
 import { boardToFen } from '../../game/board'
 import { exportGameImage } from '../../game/imageExport'
-import { BOARD_HOME } from '../../store/constants'
+import { BOARD_HOME, MAX_UNDO_PER_GAME } from '../../store/constants'
 import { findNextKeyPly, findPrevKeyPly } from '../../game/keyNav'
+import { registerBackHandler } from '../../game/backNav'
 import { Icon, type IconName } from '../ui/icons'
 
 interface BarItem {
@@ -50,6 +51,7 @@ export const MobilePlayBar: React.FC = () => {
   const showToast = useStore(s => s.showToast)
 
   const undo = useStore(s => s.undo)
+  const undoCount = useStore(s => s.undoCount)
   const flipBoard = useStore(s => s.flipBoard)
   const aiHint = useStore(s => s.aiHint)
   const resign = useStore(s => s.resign)
@@ -69,6 +71,19 @@ export const MobilePlayBar: React.FC = () => {
   const [navOpen, setNavOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [confirmKind, setConfirmKind] = useState<null | 'resign' | 'draw'>(null)
+
+  // 弹层纳入返回栈：安卓返回键/右滑先关「更多」菜单与认输/求和确认条，
+  // 而不是直接退出对战页（这些是组件内 state，store 的层级导航看不到）。
+  useEffect(() => {
+    if (!menuOpen && !navOpen && !moreOpen && !confirmKind) return
+    return registerBackHandler(() => {
+      if (confirmKind) { setConfirmKind(null); return true }
+      if (moreOpen) { setMoreOpen(false); return true }
+      if (menuOpen) { setMenuOpen(false); return true }
+      if (navOpen) { setNavOpen(false); return true }
+      return false
+    })
+  }, [menuOpen, navOpen, moreOpen, confirmKind])
 
   const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
   const demo = sideControl.w === 'ai' && sideControl.b === 'ai'
@@ -246,7 +261,8 @@ export const MobilePlayBar: React.FC = () => {
         {singleHuman ? (
           <>
             <BarButton icon="undo" label="悔棋" onClick={undo}
-              disabled={isThinking || currentPlyIndex < 1 || over} title={over ? '对局已结束' : '悔棋'} />
+              disabled={isThinking || currentPlyIndex < 1 || over}
+              title={over ? '对局已结束' : `悔棋（本局剩余 ${Math.max(0, MAX_UNDO_PER_GAME - undoCount)} 次）`} />
             <BarButton icon="hint" label="提示" onClick={() => aiHint()}
               disabled={!engineReady || isThinking || demo} title={isThinking ? '思考中' : '提示'} />
             <BarButton icon="flag" label="认输" onClick={() => setConfirmKind('resign')} disabled={over} />
@@ -255,7 +271,8 @@ export const MobilePlayBar: React.FC = () => {
         ) : (
           <>
             <BarButton icon="undo" label="悔棋" onClick={undo}
-              disabled={isThinking || currentPlyIndex < 1 || over || demo} title={demo ? '演示模式不可悔棋' : '悔棋'} />
+              disabled={isThinking || currentPlyIndex < 1 || over || demo}
+              title={demo ? '演示模式不可悔棋' : `悔棋（本局剩余 ${Math.max(0, MAX_UNDO_PER_GAME - undoCount)} 次）`} />
             <BarButton icon="hint" label="提示" onClick={() => aiHint()}
               disabled={!engineReady || isThinking || demo} />
             <BarButton icon="flip" label="翻转" onClick={flipBoard} />

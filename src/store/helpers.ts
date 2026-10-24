@@ -9,7 +9,7 @@ import { boardFromFen } from '../game/board'
 import { getStateAtPly } from '../game/model'
 import { applyGameResult } from '../game/rating'
 import { DIFFICULTY_LABELS } from './constants'
-import { movesPlayedBy, remainingMs } from '../game/timeControl'
+import { clockDelta, movesPlayedBy, remainingMs } from '../game/timeControl'
 
 /**
  * 终局棋力分结算。
@@ -61,11 +61,18 @@ export function parseMoveFromUci(uci: string, turn: Turn): Move {
  * 返回 interval id，调用方负责 clearInterval 并写入 timerInterval。
  */
 export function startGameClock(set: StoreSet, get: StoreGet): ReturnType<typeof setInterval> {
+  // 用真实时间差累计：切后台时 interval 会被降频，回前台后的第一跳补上真实间隔，
+  // 否则限时对局会「白送」后台时间（见 game/timeControl.ts clockDelta）。
+  let lastTickAt = Date.now()
   return setInterval(() => {
     const st = get()
-    if (st.mode !== 'play') return
+    if (st.mode !== 'play') { lastTickAt = Date.now(); return }
+    const now = Date.now()
+    const delta = clockDelta(lastTickAt, now)
+    lastTickAt = now
+    if (delta <= 0) return
     const side = st.board.turn
-    const elapsed = (side === 'w' ? st.redTime : st.blackTime) + 1000
+    const elapsed = (side === 'w' ? st.redTime : st.blackTime) + delta
     set(side === 'w' ? { redTime: elapsed } : { blackTime: elapsed })
     // 限时对局：累计用时超过「基础 + 加秒×已走着数」即判负
     const tc = st.timeControl

@@ -222,6 +222,8 @@ export interface AppState {
   timerInterval: ReturnType<typeof setInterval> | null
   /** 本局时间制：null = 不限时（棋钟只正计时） */
   timeControl: TimeControl | null
+  /** 本局已用悔棋次数（上限 3；>0 时本局不计棋力分） */
+  undoCount: number
 
   // ── 棋谱列表 ──
   savedGames: Game[]

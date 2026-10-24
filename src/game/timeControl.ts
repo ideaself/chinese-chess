@@ -53,6 +53,18 @@ export function isLowTime(ms: number): boolean {
   return ms > 0 && ms <= 30_000
 }
 
+/**
+ * 本次棋钟 tick 应补的毫秒数。
+ *
+ * 用「实际时间差」而不是固定 +1000：手机切后台后 WebView 的 setInterval 会被
+ * 降频/挂起，固定 +1000 会让限时对局白白多出时间。回到前台后的第一跳会把
+ * 真实间隔一次补上（时钟回拨/负值按 0 处理）。
+ */
+export function clockDelta(lastTickAt: number, now: number): number {
+  const d = now - lastTickAt
+  return d > 0 ? d : 0
+}
+
 /** PGN 头里的时间制写法，如 "600+5"（秒+秒） */
 export function timeControlHeader(tc: TimeControl | null): string | null {
   if (!hasTimeControl(tc)) return null

@@ -57,3 +57,7 @@ export const QUICK_EVAL_MOVE_TIME = 900
 export const BOARD_HOME = '__board__'
 
 
+
+/** 每局悔棋上限：用过悔棋的对局不计棋力分（防止刷分） */
+export const MAX_UNDO_PER_GAME = 3
+

@@ -64,6 +64,15 @@ async function run(ctx) {
   check('页头有返回首页按钮', await evalJs(`!!document.querySelector('.mobile-header-row .mobile-page-back')`))
   check('页头有走棋方状态胶囊', await evalJs(`!!document.querySelector('.turn-chip')`))
 
+  // ── 返回键先关弹层（更多菜单），而不是直接退出对战页 ──
+  await evalJs(barButton('更多'))
+  await sleep(300)
+  check('更多菜单打开', await evalJs(`!!document.querySelector('.mpb-more-menu')`))
+  await evalJs(`window.__store.getState().navigateBack()`)
+  await sleep(300)
+  check('返回键关闭更多菜单', !(await evalJs(`!!document.querySelector('.mpb-more-menu')`)))
+  check('关闭菜单后仍在对战页', (await evalJs(`window.__store.getState().mobilePage`)) === 'play')
+
   // ── 走子 + 评估条高度回归 ──
   const yBefore = await evalJs(`document.querySelector('.board-container svg').getBoundingClientRect().y`)
   await tapCell(7, 2)   // 炮二
@@ -147,6 +156,35 @@ async function run(ctx) {
   await evalJs(`[...document.querySelectorAll('.mpb-confirm-actions .mpb-btn')].find(b => b.textContent.trim() === '认输')?.click()`)
   await sleep(600)
   check('认输后对局结束', (await evalJs(`window.__store.getState().game.result`)) !== '*')
+
+  // ── 悔棋上限 3 次；用过悔棋的对局不计棋力分 ──
+  await evalJs(`window.__store.getState().startNewGame('medium', 'w', { w: 'human', b: 'human' })`)
+  await sleep(300)
+  for (let i = 0; i < 4; i++) {
+    await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 4, row: 2 })`)
+    await sleep(120)
+    await evalJs(`window.__store.getState().undo()`)
+    await sleep(120)
+  }
+  const undoCount = await evalJs(`window.__store.getState().undoCount`)
+  check('悔棋上限为 3 次', undoCount === 3, String(undoCount))
+  check('第 4 次悔棋被拒绝（最后一步保留）',
+    (await evalJs(`window.__store.getState().game.plies.length`)) === 1)
+  check('次数用完有提示', ((await evalJs(`document.querySelector('.toast')?.textContent || ''`)) || '').includes('悔棋'))
+
+  // 用过悔棋 → 认输终局不结算棋力分，结算弹窗给出说明
+  await evalJs(`window.__store.getState().startNewGame('beginner', 'w')`)
+  await sleep(300)
+  await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 4, row: 2 })`)
+  await sleep(150)
+  await evalJs(`window.__store.getState().undo()`)
+  await sleep(150)
+  await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 4, row: 2 })`)
+  await sleep(900)
+  await evalJs(`window.__store.getState().resign()`)
+  await sleep(500)
+  check('用过悔棋的对局不计棋力分', (await evalJs(`window.__store.getState().lastRatingChange`)) === null)
+  check('结算弹窗提示不计分', await evalJs(`!!document.querySelector('.rating-void')`))
 
   // 还原桌面视口，避免影响后续套件
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false })

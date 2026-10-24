@@ -5,12 +5,12 @@ import type { AppState, StoreSet, StoreGet } from '../types'
 import type { Turn } from '../types'
 import type { Game } from '../../game/model'
 import { boardFromFen, boardToFen, START_FEN } from '../../game/board'
-import { getLegalMoves, getGameStatus } from '../../game/rules'
+import { getLegalMoves, getGameStatus, perpetualCheckLoser } from '../../game/rules'
 import { createEmptyGame, addPlyToGame, getPositionStrings } from '../../game/model'
 import { parsePGN, exportPGN } from '../../game/pgn'
 import { saveGame as storageSaveGame, getAllGames, getSettings, deleteGame as storageDeleteGame } from '../../game/storage'
 import { scheduleAutoSync } from '../../game/webdav'
-import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS } from '../constants'
+import { DIFFICULTY_DEPTH, DIFFICULTY_LABELS, MAX_UNDO_PER_GAME } from '../constants'
 import { ENDGAME_PRESETS } from '../../game/endgames'
 import { recordEndgameResult } from '../../game/progress'
 import { recordChallengeCleared } from '../../game/challenges'
@@ -49,7 +49,7 @@ function playReplayStep(game: Game, plyIndex: number, forward: boolean) {
 
 
 export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'timeControl' | 'timeUp' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
+    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'timeControl' | 'timeUp' | 'undoCount' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
   // AI（含 AI 演示）自动走棋调度：演示模式间隔 1 秒，并在引擎空闲后再落子，
   // 避免与 quickEval 并发搜索导致链断。
   // 关键：调度要绑定「这一局」——旧局遗留的 setTimeout 在新局里不能再落子，
@@ -117,6 +117,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     timeControl: null,
 
+    undoCount: 0,
+
     timerInterval: null,
 
   // ── 棋谱列表 ──
@@ -176,6 +178,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       redTime: 0,
       blackTime: 0,
       timeControl,
+      undoCount: 0,
     })
 
     // 更新引擎深度
@@ -272,7 +275,20 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const newState = boardFromFen(ply.fenAfter)
 
     // 检查对局状态
-    const status = getGameStatus(newState, getPositionStrings(updatedGame))
+    let status = getGameStatus(newState, getPositionStrings(updatedGame))
+
+    // 三次重复局面里若一方一直将军 → 长将判负（而不是判和）
+    if (status.isGameOver && status.reason === '三次重复局面') {
+      const loser = perpetualCheckLoser(updatedGame.plies)
+      if (loser) {
+        const result = loser === 'w' ? '0-1' : '1-0'
+        updatedGame.result = result
+        status = { ...status, result, reason: '长将判负' }
+      }
+    }
+    if (status.isGameOver) {
+      updatedGame.header = { ...updatedGame.header, Result: status.result, Termination: status.reason }
+    }
 
     set({
       game: updatedGame,
@@ -339,6 +355,10 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     if (get().openingTraining) return // 开局训练中不可悔棋
     if (game.result !== '*') return
     if (currentPlyIndex <= 0) return
+    if (get().undoCount >= MAX_UNDO_PER_GAME) {
+      get().showToast(`本局悔棋次数已用完（${MAX_UNDO_PER_GAME} 次）`)
+      return
+    }
 
     const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
 
@@ -366,6 +386,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       game: updatedGame,
       board: boardFromGame(updatedGame, target),
       currentPlyIndex: target,
+      undoCount: get().undoCount + 1,
       selected: null,
       legalTargets: [],
       lastMove: target > 0
@@ -408,7 +429,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     set({ game: updatedGame, timerInterval: null })
     // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
     if (updatedGame.plies.length > 0) {
-      const change = settleRating(updatedGame)
+      // 用过悔棋的对局不计棋力分（防止「走错就悔」刷分）
+      const change = get().undoCount === 0 ? settleRating(updatedGame) : null
       if (change) set({ lastRatingChange: change })
     }
     get().saveCurrentGame()
@@ -429,7 +451,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       set({ game: updatedGame, timerInterval: null })
       // 先结算棋力分（在 set 之后、save 之前，确保 game.result 已更新）
       if (updatedGame.plies.length > 0) {
-        const change = settleRating(updatedGame)
+        const change = get().undoCount === 0 ? settleRating(updatedGame) : null
         if (change) set({ lastRatingChange: change })
       }
       get().saveCurrentGame()
@@ -470,7 +492,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     const updatedGame = { ...game, result, updatedAt: Date.now() }
     set({ game: { ...updatedGame, header: { ...updatedGame.header, Result: result } }, timerInterval: null })
     if (updatedGame.plies.length > 0) {
-      const change = settleRating(updatedGame)
+      // 用过悔棋的对局不计棋力分（防止「走错就悔」刷分）
+      const change = get().undoCount === 0 ? settleRating(updatedGame) : null
       if (change) set({ lastRatingChange: change })
     }
     playGameOverHaptic(getSettings().hapticEnabled)
@@ -486,7 +509,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
 
     // 棋力分结算（计划19节 V3: 仅人机对局终局，同局去重）
     if (game.result !== '*') {
-      const change = settleRating(game)
+      // 用过悔棋的对局不计棋力分（防止「走错就悔」刷分）
+      const change = get().undoCount === 0 ? settleRating(game) : null
       if (change) set({ lastRatingChange: change })
     }
 
@@ -518,6 +542,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       mode: 'replay',
       game,
       timeControl: null,
+
+    undoCount: 0,
       board,
       currentPlyIndex: game.plies.length,
       selected: null,
@@ -558,6 +584,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       mode: 'replay',
       game: result.game,
       timeControl: null,
+
+    undoCount: 0,
       board,
       currentPlyIndex: result.game.plies.length,
       selected: null,

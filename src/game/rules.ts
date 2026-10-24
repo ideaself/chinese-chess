@@ -9,7 +9,7 @@
  *   - 和棋判断（长将/长捉/60回合无吃子）
  */
 
-import type { BoardState, Move, Pos, PieceChar } from './board'
+import type { BoardState, Move, Pos, PieceChar, Turn } from './board'
 import {
   COLS, ROWS, isRed, isBlack, isInBounds, generateMoves,
   makeMove, createEmptyBoard, boardFromFen, boardToFen,
@@ -213,6 +213,29 @@ export function isThreefoldRepetition(positions: string[]): boolean {
 /** 检查是否60回合无吃子（自然和棋） */
 export function isSixtyMoveRule(halfmove: number): boolean {
   return halfmove >= 120 // 60 回合 = 120 半回合
+}
+
+/**
+ * 长将判负：三次重复局面里，若最近 6 手内一方「每一步都在将军」而另一方没有，
+ * 判该方负（中国象棋规则：长将一方作负）。
+ *
+ * 这是简化判定（只看最近 3 个回合的将军情况），用于覆盖最常见的「车/炮来回将」
+ * 场景；长捉、复杂一将一捉仍按三次重复判和。
+ */
+export function perpetualCheckLoser(
+  plies: Array<{ turn: Turn; fenAfter: string }>,
+): Turn | null {
+  if (plies.length < 6) return null
+  const window = plies.slice(-6)
+  const checksOf = (side: Turn): boolean[] =>
+    window.filter(p => p.turn === side).map(p => isInCheck(boardFromFen(p.fenAfter)))
+  const w = checksOf('w')
+  const b = checksOf('b')
+  const allCheck = (arr: boolean[]) => arr.length >= 2 && arr.every(Boolean)
+  const noCheck = (arr: boolean[]) => arr.length >= 2 && arr.every(v => !v)
+  if (allCheck(w) && noCheck(b)) return 'w'
+  if (allCheck(b) && noCheck(w)) return 'b'
+  return null
 }
 
 // ── 完整合法走法（含所有和棋判定） ────────────────────────────────
