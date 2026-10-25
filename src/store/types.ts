@@ -1,7 +1,7 @@
 /**
  * AppState 类型定义（自 useStore.ts 拆出）
  */
-import type { BoardState, Move, Pos, Turn } from '../game/board'
+import type { BoardState, Move, PieceChar, Pos, Turn } from '../game/board'
 import type { Game } from '../game/model'
 import type { AppSettings } from '../game/storage'
 import type { TimeControl } from '../game/timeControl'
@@ -279,6 +279,10 @@ export interface AppState {
   clearSetupBoard: () => void
   resetSetupBoard: () => void
   analyzeSetupPosition: () => Promise<void>
+  /** 拍照识别结果应用到摆棋（grid: 9×10，turn: 行棋方） */
+  applyRecognizedBoard: (grid: PieceChar[][], turn: Turn) => void
+  /** 从当前摆好的局面开始对局 */
+  startFromSetup: () => void
 
   // ── 错误重走 (计划第17节) ──
   startPuzzle: (plyIndex: number) => void

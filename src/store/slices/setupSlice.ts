@@ -4,12 +4,14 @@
 import type { AppState, StoreSet, StoreGet } from '../types'
 import type { GameMode } from '../types'
 import { boardFromFen, boardToFen, createEmptyBoard, START_FEN } from '../../game/board'
-import { boardFromGame, parseMoveFromUci } from '../helpers'
+import { boardFromGame, parseMoveFromUci, startGameClock } from '../helpers'
+import { createEmptyGame } from '../../game/model'
+import { DIFFICULTY_LABELS } from '../constants'
 
 
 
 export function createSetupSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'modeBeforeSetup' | 'setupTool' | 'setupTurn' | 'setupCandidates' | 'setupError' | 'enterSetup' | 'exitSetup' | 'setupClick' | 'setSetupTool' | 'setSetupTurn' | 'clearSetupBoard' | 'resetSetupBoard' | 'analyzeSetupPosition'> {
+    'modeBeforeSetup' | 'setupTool' | 'setupTurn' | 'setupCandidates' | 'setupError' | 'enterSetup' | 'exitSetup' | 'setupClick' | 'setSetupTool' | 'setSetupTurn' | 'clearSetupBoard' | 'resetSetupBoard' | 'analyzeSetupPosition' | 'applyRecognizedBoard' | 'startFromSetup'> {
   return {
     modeBeforeSetup: 'play',
 
@@ -106,6 +108,77 @@ export function createSetupSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       setupCandidates: null,
       setupError: '',
     })
+  },
+
+  /** 拍照识别结果落到摆棋盘面（默认红先，可传黑先） */
+
+    applyRecognizedBoard: (grid, turn) => {
+    set({
+      mode: 'setup',
+      modeBeforeSetup: 'play',
+      board: { board: grid.map(col => [...col]), turn, halfmove: 0, fullmove: 1 },
+      setupTurn: turn,
+      setupCandidates: null,
+      setupError: '',
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+    })
+  },
+
+  /** 以当前摆好的局面直接开一局（玩家执行棋方，AI 执另一方） */
+
+    startFromSetup: () => {
+    const { board, setupTurn, difficulty } = get()
+    let redKing = 0, blackKing = 0
+    for (let c = 0; c < 9; c++) for (let r = 0; r < 10; r++) {
+      if (board.board[c][r] === 'K') redKing++
+      if (board.board[c][r] === 'k') blackKing++
+    }
+    if (redKing !== 1 || blackKing !== 1) {
+      set({ setupError: '双方必须各有一个将/帅' })
+      return
+    }
+
+    const fen = boardToFen({ ...board, turn: setupTurn })
+    const { timerInterval } = get()
+    if (timerInterval) clearInterval(timerInterval)
+
+    const game = createEmptyGame()
+    game.startFen = fen
+    game.header.Event = '摆棋对局'
+    game.header.Red = setupTurn === 'w' ? '玩家' : '象棋引擎'
+    game.header.Black = setupTurn === 'b' ? '玩家' : '象棋引擎'
+    game.header.Difficulty = DIFFICULTY_LABELS[difficulty]
+
+    set({
+      mode: 'play',
+      game,
+      board: boardFromFen(fen),
+      playerSide: setupTurn,
+      sideControl: { w: setupTurn === 'w' ? 'human' : 'ai', b: setupTurn === 'b' ? 'human' : 'ai' },
+      currentPlyIndex: 0,
+      selected: null,
+      legalTargets: [],
+      lastMove: null,
+      analysis: null,
+      hintInfo: null,
+      redTime: 0,
+      blackTime: 0,
+      timeControl: null,
+      undoCount: 0,
+      lastRatingChange: null,
+      endgameTraining: false,
+      puzzlePlyIndex: null,
+      setupCandidates: null,
+      setupError: '',
+      mobilePage: 'play',
+      activeTab: 'play',
+      timerInterval: null,
+    })
+
+    const interval = startGameClock(set, get)
+    set({ timerInterval: interval })
   },
 
   /** 分析摆好的局面（多 PV 候选，计划第16节） */

@@ -6,11 +6,12 @@
  * - 开始分析 → 红方评价 + 最佳着法 + 候选着法
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { SetupTool } from '../../store/useStore'
 import { chineseFromFen } from '../../game/rules'
 import { boardToFen } from '../../game/board'
+import { PhotoSetupPanel } from './PhotoSetupPanel'
 
 const RED_PIECES = ['K', 'A', 'B', 'N', 'R', 'C', 'P']
 const BLACK_PIECES = ['k', 'a', 'b', 'n', 'r', 'c', 'p']
@@ -44,6 +45,9 @@ export const SetupPanel: React.FC = () => {
   const analyzeSetupPosition = useStore(s => s.analyzeSetupPosition)
   const exitSetup = useStore(s => s.exitSetup)
   const flipBoard = useStore(s => s.flipBoard)
+  const startFromSetup = useStore(s => s.startFromSetup)
+  const applyRecognizedBoard = useStore(s => s.applyRecognizedBoard)
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const renderPieceBtn = (piece: string) => {
     const active = setupTool.kind === 'piece' && setupTool.piece === piece
@@ -105,6 +109,7 @@ export const SetupPanel: React.FC = () => {
             <button className="btn btn-sm" onClick={clearSetupBoard}>清空</button>
             <button className="btn btn-sm" onClick={resetSetupBoard}>初始局面</button>
             <button className="btn btn-sm" onClick={flipBoard}>翻转</button>
+            <button className="btn btn-sm" onClick={() => setPhotoOpen(true)}>拍照摆棋</button>
             <button
               className="btn btn-primary"
               style={{ padding: '8px 16px' }}
@@ -112,6 +117,13 @@ export const SetupPanel: React.FC = () => {
               onClick={() => analyzeSetupPosition()}
             >
               {isThinking ? '分析中…' : '开始分析'}
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ padding: '8px 16px' }}
+              onClick={() => startFromSetup()}
+            >
+              开始对局
             </button>
           </div>
           {setupError && <div className="setup-error">{setupError}</div>}
@@ -142,6 +154,16 @@ export const SetupPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {photoOpen && (
+        <PhotoSetupPanel
+          onClose={() => setPhotoOpen(false)}
+          onApply={(grid, turn) => {
+            applyRecognizedBoard(grid, turn)
+            setPhotoOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }

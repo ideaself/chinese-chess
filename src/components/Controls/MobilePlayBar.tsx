@@ -15,6 +15,7 @@ import { exportGameImage } from '../../game/imageExport'
 import { BOARD_HOME, MAX_UNDO_PER_GAME } from '../../store/constants'
 import { findNextKeyPly, findPrevKeyPly } from '../../game/keyNav'
 import { registerBackHandler } from '../../game/backNav'
+import { PhotoSetupPanel } from '../Analysis/PhotoSetupPanel'
 import { Icon, type IconName } from '../ui/icons'
 
 interface BarItem {
@@ -52,6 +53,7 @@ export const MobilePlayBar: React.FC = () => {
 
   const undo = useStore(s => s.undo)
   const undoCount = useStore(s => s.undoCount)
+  const applyRecognizedBoard = useStore(s => s.applyRecognizedBoard)
   const flipBoard = useStore(s => s.flipBoard)
   const aiHint = useStore(s => s.aiHint)
   const resign = useStore(s => s.resign)
@@ -70,20 +72,22 @@ export const MobilePlayBar: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [confirmKind, setConfirmKind] = useState<null | 'resign' | 'draw'>(null)
 
   // 弹层纳入返回栈：安卓返回键/右滑先关「更多」菜单与认输/求和确认条，
   // 而不是直接退出对战页（这些是组件内 state，store 的层级导航看不到）。
   useEffect(() => {
-    if (!menuOpen && !navOpen && !moreOpen && !confirmKind) return
+    if (!menuOpen && !navOpen && !moreOpen && !confirmKind && !photoOpen) return
     return registerBackHandler(() => {
+      if (photoOpen) { setPhotoOpen(false); return true }
       if (confirmKind) { setConfirmKind(null); return true }
       if (moreOpen) { setMoreOpen(false); return true }
       if (menuOpen) { setMenuOpen(false); return true }
       if (navOpen) { setNavOpen(false); return true }
       return false
     })
-  }, [menuOpen, navOpen, moreOpen, confirmKind])
+  }, [menuOpen, navOpen, moreOpen, confirmKind, photoOpen])
 
   const hotseat = sideControl.w === 'human' && sideControl.b === 'human'
   const demo = sideControl.w === 'ai' && sideControl.b === 'ai'
@@ -253,6 +257,7 @@ export const MobilePlayBar: React.FC = () => {
               void navigator.clipboard?.writeText(exportPGN(game))
               showToast('棋谱 PGN 已复制到剪贴板')
             }}><Icon name="list" size={18} /> 复制棋谱</button>
+            <button onClick={() => { setMoreOpen(false); setPhotoOpen(true) }}><Icon name="camera" size={18} /> 拍照摆棋</button>
             <button onClick={() => { setMoreOpen(false); setSheetTab('controls') }}><Icon name="gear" size={18} /> 设置</button>
           </div>
         </>
@@ -300,6 +305,16 @@ export const MobilePlayBar: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {photoOpen && (
+        <PhotoSetupPanel
+          onClose={() => setPhotoOpen(false)}
+          onApply={(grid, turn) => {
+            applyRecognizedBoard(grid, turn)
+            setPhotoOpen(false)
+          }}
+        />
       )}
     </div>
   )

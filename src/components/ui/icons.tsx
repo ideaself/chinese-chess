@@ -11,9 +11,11 @@ export type IconName =
   | 'undo' | 'hint' | 'flag' | 'draw' | 'flip' | 'gear' | 'more'
   | 'plus' | 'menu' | 'nav' | 'chart' | 'branch' | 'close'
   | 'prev' | 'next' | 'start' | 'end' | 'play' | 'pause' | 'list' | 'swap'
-  | 'trophy' | 'book' | 'swords' | 'people' | 'robot' | 'star' | 'rotate'
+  | 'trophy' | 'book' | 'swords' | 'people' | 'robot' | 'star' | 'rotate' | 'camera'
 
 const PATHS: Record<IconName, ReactNode> = {
+  // 相机：拍照摆棋
+  camera: <><path d="M4 8.5h3l1.4-2h7.2L17 8.5h3v10H4z" /><circle cx="12" cy="13" r="3.2" /></>,
   // 悔棋：回转箭头
   undo: <><path d="M9.5 14.5 4.5 9.5l5-5" /><path d="M4.5 9.5h9a6 6 0 0 1 0 12H10" /></>,
   // 提示：灯泡

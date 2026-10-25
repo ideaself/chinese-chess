@@ -5,14 +5,14 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.5（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.26.0（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
 ## 常用命令
 
 ```bash
-npm test                # vitest 单测（285 项）
+npm test                # vitest 单测（294 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
 npm run e2e             # 需先 build；e2e 冒烟（6 套件 90 项，Windows 亦可跑）
@@ -135,6 +135,14 @@ v1.25.3（本次发布，视觉与棋钟）：
 v1.25.4（本次发布）：红黑分数条按用户要求再加高到 **20px**（圆角 10），meta 行 16px 与棋盘位置不变（走子前后 `svg.y` 实测零位移）；e2e 断言阈值仍为 ≥12px，继续覆盖。
 
 v1.25.5（本次发布）：修复复盘趋势图拖动时音效轰炸——`EvalCurve` 拖动会连续调用 `goToPly`，而 `goToPly` 以前每跳一手都走 `playReplayStep`，把跨过的所有吃子/走子音效一次性播完。现在 `goToPly` 定义为「跳转、不发声」，`goBack/goForward/goToEnd`（单步/自动播放）保留复盘音效。实测在真实 `.eval-curve-svg` 上拖动 20 次音效计数为 0，单步前进仍 >0；e2e 新增两条断言（全 90 项）。大师库按用户决定继续随包集成，不做按需下载。
+
+v1.26.0（本次发布，拍照摆棋）：
+- **`game/photoBoard.ts`**：全离线识别管线。四角透视校正（`solveHomography` + 逆映射双线性 `warpBoard`，四角映射到内缩 30px 的格线矩形，保证交叉点落在 `GRID_PAD + c/row*CELL`）；每格与棋盘底色差异判「有无棋子」（整块圆盘 vs 空格的细格线）；红色像素比例判红黑；**红黑两套字形模板**（车马炮相仕帅兵 / 车马炮象士将卒）× 3 种字体，裁包围盒归一化 24×24 后用 Dice 匹配；置信度取「最佳−次佳差距」与绝对匹配度，低置信在 UI 标黄。
+- **`Analysis/PhotoSetupPanel.tsx`**：拍照/选图（`<input capture>`，Android WebView 直接调相机，无需插件）→ 拖四角 → 识别 → 9×10 预览（低置信黄框）→ **默认红先、可切黑先** → 应用到摆棋。
+- **入口**：摆棋面板「拍照摆棋」；移动端对战页「更多 → 拍照摆棋」（新增 `camera` 图标）；弹层纳入返回栈（返回键先关它）。
+- **「开始对局」**：摆棋新增 `startFromSetup()`，以当前摆好局面 + `setupTurn` 开局（玩家执行棋方、AI 执另一方），补上了「确认就进入对局」的落点。
+- **已知限制**：位置识别在合成棋盘上 32/32 全中；**兵种识别是模板匹配**，物理棋子的字体/材质与模板差异大时会错，需要人工核对（低置信已标黄）。真实照片的准确率要拿实拍样本再调参或训练小模型。
+- 回归：单测 **294 项**（新增 photoBoard 9 项：透视/拉正/空盘/4 子/32 子/FEN/红先黑先）、e2e 90 项全绿、`tsc`/`vite build` 通过。
 
 ## 已评估搁置
 
