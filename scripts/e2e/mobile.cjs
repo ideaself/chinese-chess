@@ -82,6 +82,8 @@ async function run(ctx) {
   check('点击走子生效', plies >= 1, `plies=${plies}`)
   const yAfter = await evalJs(`document.querySelector('.board-container svg').getBoundingClientRect().y`)
   check('走子后棋盘不位移（评估条高度恒定）', Math.abs(yAfter - yBefore) < 1, `${yBefore} → ${yAfter}`)
+  const barH = await evalJs(`document.querySelector('.eval-bar-track')?.getBoundingClientRect().height || 0`)
+  check('红黑分数条已加粗（≥12px）', barH >= 12, String(barH))
 
   // ── 悔棋 ──
   await evalJs(barButton('悔棋'))
@@ -185,6 +187,14 @@ async function run(ctx) {
   await sleep(500)
   check('用过悔棋的对局不计棋力分', (await evalJs(`window.__store.getState().lastRatingChange`)) === null)
   check('结算弹窗提示不计分', await evalJs(`!!document.querySelector('.rating-void')`))
+
+  // 首启会话（没点过「新对局」）的初始局面也要走棋钟——此前 interval 从未创建，双方一直 00:00
+  await send('Page.reload', {})
+  for (let i = 0; i < 60; i++) { await sleep(250); if (await evalJs(`!!window.__store`)) break }
+  await evalJs(`window.__store.getState().setMobilePage('play')`)
+  await sleep(2500)
+  const bootTimers = await evalJs(`[...document.querySelectorAll('.player-info .timer')].map(e => e.textContent)`)
+  check('新会话首启对局棋钟会走', Array.isArray(bootTimers) && bootTimers.some(t => t !== '00:00'), JSON.stringify(bootTimers))
 
   // 还原桌面视口，避免影响后续套件
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false })

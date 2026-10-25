@@ -246,6 +246,8 @@ export interface AppState {
   offerDraw: () => void
   /** 某方超时判负（棋钟驱动） */
   timeUp: (side: Turn) => void
+  /** 确保对局棋钟在跑（首启初始局面/从后台恢复时兜底） */
+  ensureClock: () => void
 
   // ── 棋谱操作 ──
   saveCurrentGame: () => void

@@ -206,12 +206,12 @@ body { overflow: hidden; }
 .eval-bar {
   position: relative;
   width: 100%;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 .eval-bar-track {
   display: flex;
-  height: 9px;
-  border-radius: 5px;
+  height: 14px;
+  border-radius: 7px;
   overflow: hidden;
   border: 1px solid var(--line);
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
@@ -305,8 +305,8 @@ html[data-theme='light'] .eval-bar-meta .eval-score.label-black { color: #35608f
   font-family: 'STKaiti', 'KaiTi', 'Kaiti SC', 'Noto Serif CJK SC', serif;
   line-height: 1;
 }
-.pi-badge-red { color: #ffb3ac; background: rgba(224,85,85,0.16); border: 1px solid rgba(224,85,85,0.5); }
-.pi-badge-black { color: #cfdcee; background: rgba(150,175,210,0.12); border: 1px solid rgba(150,175,210,0.4); }
+.pi-badge-red { color: #ff9c92; background: rgba(224,85,85,0.24); border: 1.5px solid rgba(224,85,85,0.7); }
+.pi-badge-black { color: #e9effa; background: rgba(165,190,225,0.18); border: 1.5px solid rgba(175,200,235,0.55); }
 .player-info .player-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 对方思考中：三点呼吸 */
 .pi-thinking {
@@ -2429,14 +2429,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 }
 .cap {
   font-family: 'STKaiti', 'KaiTi', 'Kaiti SC', 'Noto Serif CJK SC', serif;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
-  opacity: 0.92;
+  opacity: 1;
   flex: 0 0 auto;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
-.cap-red { color: #e8837b; }
-.cap-black { color: #b7c5d8; }
-.cap-more { font-size: 10px; color: var(--text-3); margin-left: 1px; flex: 0 0 auto; }
+.cap-red { color: #ff8478; }
+.cap-black { color: #f0f4fb; }
+.cap-more { font-size: 11px; color: #aab2c4; margin-left: 1px; flex: 0 0 auto; }
 
 /* 读秒：剩余 ≤30 秒变红并轻微呼吸 */
 .timer-low { color: #ff6b6b !important; animation: pulse 1s infinite; }

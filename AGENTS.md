@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.2（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.3（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -15,7 +15,7 @@ React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 npm test                # vitest 单测（285 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
-npm run e2e             # 需先 build；e2e 冒烟（6 套件 86 项，Windows 亦可跑）
+npm run e2e             # 需先 build；e2e 冒烟（6 套件 88 项，Windows 亦可跑）
                         # E2E_CHROME 可指定浏览器；Windows 自动找 Edge/Chrome
                         # E2E_SUITES=mobile 只跑移动端套件
 npm run dpxq            # 语料 → public/master-games/ 分片（mtime 增量缓存 v2，UCI 格式）
@@ -124,6 +124,13 @@ v1.25.2（本次发布，四项正确性修复）：
 - 结算弹窗新增终止原因（`header.Termination`，如「将死」「长将判负」）。
 - 回归：单测 **285 项**（新增 clockDelta / 长将 3 项）、e2e **86 项**（移动端新增返回键关菜单、悔棋上限、不计分弹窗 8 项）、`tsc` 与 `vite build` 通过。
 
+v1.25.3（本次发布，视觉与棋钟）：
+- **修复双方用时一直 00:00**：App 首启的对局是 `createEmptyGame()` 的初始局面，不是 `startNewGame()` 创建的，`timerInterval` 从来是 null，所以棋钟根本没跑（e2e 用 `Page.reload` 复现）。新增 `gameSlice.ensureClock()`，App 在「进入对战页 + 对局未结束 + 无 interval」时兜底启动；移动端只在 `mobilePage === 'play'` 时启动，避免在首页/棋谱页把初始局时间白跑掉。
+- **棋子放大**：`PIECE_RADIUS` 26 → 27.5、字号 27 → 29（直径 55，格宽 60），内圈/落影同步微调。
+- **红黑分数条加粗**：评估条 9px → 14px（圆角 7、内阴影、外边距 6），v1.24.1 的「走子棋盘不位移」断言仍通过。
+- **将/帅徽标加深**：红 `#ff9c92` / 黑 `#e9effa`，边框 1.5px、底色更实，解决“颜色太淡”。
+- **吃子展示提亮**：字号 13 → 15、字重 700、加深色描边；黑子 `#f0f4fb`（近白）、红子 `#ff8478`，不再用发灰的浅蓝。
+- 回归：单测 285 项、e2e 88 项（移动端新增「首启对局棋钟会走」「分数条 ≥12px」2 项）、`tsc`/`vite build` 通过。
 ## 已评估搁置
 
 - 多线程 WASM 引擎：**已取消（用户 2026-09-03 确认）**。当前原生进程版二进制性能很好，无需 MT WASM。

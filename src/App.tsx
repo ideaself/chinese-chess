@@ -88,6 +88,14 @@ export const App: React.FC = () => {
     (mode === 'play' && game.result === '*') || (mode === 'replay' && autoPlaying)
   ))
 
+  // 首启/恢复的对局可能没有棋钟（startNewGame 才创建 interval），进对战页时兜底启动。
+  // 只在真正进入对战页时启动，避免在首页/棋谱页把初始局的时间白跑掉。
+  useEffect(() => {
+    if (mode !== 'play' || game.result !== '*') return
+    if (isMobile && mobilePage !== 'play') return
+    useStore.getState().ensureClock()
+  }, [mode, game.result, isMobile, mobilePage])
+
   useEffect(() => {
     init()
     // 应用默认难度设置（计划第20节）

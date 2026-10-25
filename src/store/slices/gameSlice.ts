@@ -49,7 +49,7 @@ function playReplayStep(game: Game, plyIndex: number, forward: boolean) {
 
 
 export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
-    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'timeControl' | 'timeUp' | 'undoCount' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
+    'mode' | 'game' | 'board' | 'difficulty' | 'playerSide' | 'sideControl' | 'boardFlipped' | 'lastRatingChange' | 'autoPlaying' | 'setAutoPlaying' | 'currentPlyIndex' | 'selected' | 'legalTargets' | 'lastMove' | 'redTime' | 'blackTime' | 'timerInterval' | 'timeControl' | 'timeUp' | 'undoCount' | 'ensureClock' | 'savedGames' | 'startNewGame' | 'selectPiece' | 'tryMove' | 'undo' | 'restart' | 'flipBoard' | 'resign' | 'offerDraw' | 'saveCurrentGame' | 'loadGame' | 'loadGameObject' | 'loadFromPGN' | 'exportCurrentPGN' | 'deleteGameById' | 'goToStart' | 'goToEnd' | 'goBack' | 'goForward' | 'goToPly' | 'refreshSavedGames'> {
   // AI（含 AI 演示）自动走棋调度：演示模式间隔 1 秒，并在引擎空闲后再落子，
   // 避免与 quickEval 并发搜索导致链断。
   // 关键：调度要绑定「这一局」——旧局遗留的 setTimeout 在新局里不能再落子，
@@ -481,6 +481,15 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
       acceptDraw()
       get().showToast('对方接受和棋')
     })
+  },
+
+    /** 确保对局棋钟在跑（首启的初始局面不是 startNewGame 创建的，没有 interval） */
+    ensureClock: () => {
+    const st = get()
+    if (st.mode !== 'play' || st.game.result !== '*') return
+    if (st.timerInterval) return
+    const interval = startGameClock(set, get)
+    set({ timerInterval: interval })
   },
 
     /** 棋钟到期：该方判负（残局训练/题库/演示不计时，由 timeControl 为空兜底） */

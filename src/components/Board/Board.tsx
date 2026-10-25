@@ -28,7 +28,7 @@ const BOARD_ROWS = 10
 const BOARD_PADDING = 40
 const BOARD_WIDTH = BOARD_PADDING * 2 + (BOARD_COLS - 1) * CELL
 const BOARD_HEIGHT = BOARD_PADDING * 2 + (BOARD_ROWS - 1) * CELL
-const PIECE_RADIUS = 26
+const PIECE_RADIUS = 27.5
 /** 拖动时棋子相对手指上移的距离（SVG 单位），避免手指挡住棋子 */
 const DRAG_LIFT = 22
 /** 拖动起手判定阈值（CSS 像素）——低于此值仍按点击处理，避免手抖被误判成拖动 */
@@ -515,7 +515,7 @@ export const Board: React.FC = () => {
         nodes.push(
           <g key={`p${c}${r}`} className={isSel && !drag ? 'piece-lift' : undefined}
             style={isDragging ? { opacity: 0 } : undefined}>
-            {!skinFile && <ellipse cx={x} cy={y + 20} rx={21} ry={5.5} fill="rgba(58,34,10,0.22)" />}
+            {!skinFile && <ellipse cx={x} cy={y + 20} rx={22.5} ry={6} fill="rgba(58,34,10,0.22)" />}
             {isCheck && <circle cx={x} cy={y} r={PIECE_RADIUS + 5} fill="none" stroke="#e74c3c" strokeWidth="2.5" opacity="0.85">
               <animate attributeName="r" values={`${PIECE_RADIUS + 3};${PIECE_RADIUS + 8};${PIECE_RADIUS + 3}`} dur="1s" repeatCount="indefinite" />
             </circle>}
@@ -526,9 +526,9 @@ export const Board: React.FC = () => {
               <>
                 <circle cx={x} cy={y} r={PIECE_RADIUS} fill="url(#pieceIvory)"
                   stroke={red ? '#9d2a1f' : '#3b352c'} strokeWidth="1.6" />
-                <circle cx={x} cy={y} r={PIECE_RADIUS - 4.5} fill="none"
+                <circle cx={x} cy={y} r={PIECE_RADIUS - 5} fill="none"
                   stroke={red ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
-                <text x={x} y={y + 9.5} textAnchor="middle" fontSize="27" fontWeight="600"
+                <text x={x} y={y + 9.5} textAnchor="middle" fontSize="29" fontWeight="600"
                   fontFamily={KAI_FONT} fill={ink}
                   style={{ userSelect: 'none', pointerEvents: 'none' }}>
                   {GLYPHS[piece]}
@@ -657,9 +657,9 @@ export const Board: React.FC = () => {
           <>
             <circle cx={x} cy={y} r={PIECE_RADIUS} fill="url(#pieceIvory)"
               stroke={ghost ? '#f2c14e' : red ? '#9d2a1f' : '#3b352c'} strokeWidth={ghost ? 2 : 1.6} />
-            <circle cx={x} cy={y} r={PIECE_RADIUS - 4.5} fill="none"
+            <circle cx={x} cy={y} r={PIECE_RADIUS - 5} fill="none"
               stroke={red ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
-            <text x={x} y={y + 9.5} textAnchor="middle" fontSize="27" fontWeight="600"
+            <text x={x} y={y + 9.5} textAnchor="middle" fontSize="29" fontWeight="600"
               fontFamily={KAI_FONT} fill={ink} style={{ userSelect: 'none', pointerEvents: 'none' }}>
               {GLYPHS[piece]}
             </text>
@@ -808,9 +808,9 @@ export const Board: React.FC = () => {
                   <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS}
                     fill="url(#pieceIvory)"
                     stroke={color === 'red' ? '#9d2a1f' : '#3b352c'} strokeWidth="1.6" />
-                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS - 4.5}
+                  <circle cx={anim.fromX} cy={anim.fromY} r={PIECE_RADIUS - 5}
                     fill="none" stroke={color === 'red' ? 'rgba(157,42,31,0.55)' : 'rgba(59,53,44,0.55)'} strokeWidth="1" />
-                  <text x={anim.fromX} y={anim.fromY + 9.5} textAnchor="middle" fontSize="27"
+                  <text x={anim.fromX} y={anim.fromY + 9.5} textAnchor="middle" fontSize="29"
                     fontWeight="600" fontFamily={KAI_FONT} fill={color === 'red' ? '#b3261e' : '#26221d'}
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>
                     {glyph}
