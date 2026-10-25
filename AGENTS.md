@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.3（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.4（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -131,6 +131,8 @@ v1.25.3（本次发布，视觉与棋钟）：
 - **将/帅徽标加深**：红 `#ff9c92` / 黑 `#e9effa`，边框 1.5px、底色更实，解决“颜色太淡”。
 - **吃子展示提亮**：字号 13 → 15、字重 700、加深色描边；黑子 `#f0f4fb`（近白）、红子 `#ff8478`，不再用发灰的浅蓝。
 - 回归：单测 285 项、e2e 88 项（移动端新增「首启对局棋钟会走」「分数条 ≥12px」2 项）、`tsc`/`vite build` 通过。
+
+v1.25.4（本次发布）：红黑分数条按用户要求再加高到 **20px**（圆角 10），meta 行 16px 与棋盘位置不变（走子前后 `svg.y` 实测零位移）；e2e 断言阈值仍为 ≥12px，继续覆盖。
 ## 已评估搁置
 
 - 多线程 WASM 引擎：**已取消（用户 2026-09-03 确认）**。当前原生进程版二进制性能很好，无需 MT WASM。
