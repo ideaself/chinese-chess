@@ -188,6 +188,52 @@ async function run(ctx) {
   check('用过悔棋的对局不计棋力分', (await evalJs(`window.__store.getState().lastRatingChange`)) === null)
   check('结算弹窗提示不计分', await evalJs(`!!document.querySelector('.rating-void')`))
 
+  // ── 复盘趋势图拖动不应把之前每一手的音效都播一遍 ──
+  await evalJs(`window.__store.getState().startNewGame('medium', 'w', { w: 'human', b: 'human' })`)
+  await sleep(300)
+  await evalJs(`window.__store.getState().tryMove({ col: 7, row: 2 }, { col: 7, row: 9 })`) // 炮二进七吃马
+  await sleep(400)
+  await evalJs(`window.__store.getState().saveCurrentGame()`)
+  await sleep(300)
+  await evalJs(`(() => {
+    const s = window.__store.getState()
+    s.loadGame(s.savedGames[0].id)
+  })()`)
+  await sleep(400)
+  // 统计所有发声路径：音频元素 / 缓冲源 / 振荡器 / TTS
+  await evalJs(`(() => {
+    window.__sfx = 0
+    if (window.__sfxPatched) { window.__sfx = 0; return }
+    const bump = () => { window.__sfx++ }
+    const patch = (proto, name) => {
+      if (!proto || !proto[name]) return
+      const orig = proto[name]
+      proto[name] = function (...a) { bump(); return orig.apply(this, a) }
+    }
+    patch(window.HTMLMediaElement && HTMLMediaElement.prototype, 'play')
+    patch(window.AudioBufferSourceNode && AudioBufferSourceNode.prototype, 'start')
+    patch(window.OscillatorNode && OscillatorNode.prototype, 'start')
+    try {
+      const synth = window.speechSynthesis
+      if (synth) { const orig = synth.speak.bind(synth); synth.speak = (u) => { bump(); return orig(u) } }
+    } catch {}
+    window.__sfxPatched = true
+  })()`)
+  await evalJs(`(() => {
+    const s = window.__store.getState()
+    const n = s.game.plies.length
+    for (let i = 0; i <= n; i++) s.goToPly(i)
+  })()`)
+  await sleep(300)
+  const sfxDrag = await evalJs(`window.__sfx`)
+  check('趋势图拖动不重复播放音效', sfxDrag === 0, String(sfxDrag))
+  await evalJs(`window.__store.getState().goToPly(0)`)
+  await sleep(150)
+  await evalJs(`window.__store.getState().goForward()`)
+  await sleep(300)
+  const sfxStep = await evalJs(`window.__sfx`)
+  check('复盘单步前进仍保留走子音效', sfxStep > 0, String(sfxStep))
+
   // 首启会话（没点过「新对局」）的初始局面也要走棋钟——此前 interval 从未创建，双方一直 00:00
   await send('Page.reload', {})
   for (let i = 0; i < 60; i++) { await sleep(250); if (await evalJs(`!!window.__store`)) break }

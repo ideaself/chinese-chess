@@ -5,7 +5,7 @@
 React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 核心功能：人机对战（Pikafish WASM）、复盘分析、大师棋谱库、名局拆解训练、AI 教练（DeepSeek）。
 
-- **当前版本**: v1.25.4（version.ts / package.json / android build.gradle 三处同步）
+- **当前版本**: v1.25.5（version.ts / package.json / android build.gradle 三处同步）
 - **仓库**: github.com/ideaself/chinese-chess（main 分支）
 - **数据源**: `../chinese-chess-qipu/data/raw/dpxq_master/` 东萍棋谱语料（全量 ~14.2 万局）；整理库 `../xiangqi-qipu/chess.db`（similar 索引/insights 由此生成）
 
@@ -15,7 +15,7 @@ React + TypeScript + Vite 的中国象棋应用（Web + Android/Capacitor）。
 npm test                # vitest 单测（285 项）
 npx tsc --noEmit        # 类型检查
 npm run build           # tsc + vite build → dist/
-npm run e2e             # 需先 build；e2e 冒烟（6 套件 88 项，Windows 亦可跑）
+npm run e2e             # 需先 build；e2e 冒烟（6 套件 90 项，Windows 亦可跑）
                         # E2E_CHROME 可指定浏览器；Windows 自动找 Edge/Chrome
                         # E2E_SUITES=mobile 只跑移动端套件
 npm run dpxq            # 语料 → public/master-games/ 分片（mtime 增量缓存 v2，UCI 格式）
@@ -133,6 +133,9 @@ v1.25.3（本次发布，视觉与棋钟）：
 - 回归：单测 285 项、e2e 88 项（移动端新增「首启对局棋钟会走」「分数条 ≥12px」2 项）、`tsc`/`vite build` 通过。
 
 v1.25.4（本次发布）：红黑分数条按用户要求再加高到 **20px**（圆角 10），meta 行 16px 与棋盘位置不变（走子前后 `svg.y` 实测零位移）；e2e 断言阈值仍为 ≥12px，继续覆盖。
+
+v1.25.5（本次发布）：修复复盘趋势图拖动时音效轰炸——`EvalCurve` 拖动会连续调用 `goToPly`，而 `goToPly` 以前每跳一手都走 `playReplayStep`，把跨过的所有吃子/走子音效一次性播完。现在 `goToPly` 定义为「跳转、不发声」，`goBack/goForward/goToEnd`（单步/自动播放）保留复盘音效。实测在真实 `.eval-curve-svg` 上拖动 20 次音效计数为 0，单步前进仍 >0；e2e 新增两条断言（全 90 项）。大师库按用户决定继续随包集成，不做按需下载。
+
 ## 已评估搁置
 
 - 多线程 WASM 引擎：**已取消（用户 2026-09-03 确认）**。当前原生进程版二进制性能很好，无需 MT WASM。
@@ -140,7 +143,6 @@ v1.25.4（本次发布）：红黑分数条按用户要求再加高到 **20px**�
 
 ## 待办候选
 
-- 大师库/相似库分片（约 100MB）如要进一步压包体，可改为首次进入时按需下载（现在随 APK 全量打包）
 - 引擎包的 NNUE（50MB）与 WASM 包权重重复，后续可考虑只保留其一
 
 ## CI 说明

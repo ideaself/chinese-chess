@@ -679,7 +679,7 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
     },
 
     goToPly: (index) => {
-      const { game, currentPlyIndex: prevIdx } = get()
+      const { game } = get()
       const clamped = Math.max(0, Math.min(index, game.plies.length))
       set({
         currentPlyIndex: clamped,
@@ -690,7 +690,8 @@ export function createGameSlice(set: StoreSet, get: StoreGet): Pick<AppState,
           ? parseMoveFromUci(game.plies[clamped - 1].move, game.plies[clamped - 1].turn)
           : null,
       })
-      if (clamped > 0) playReplayStep(game, clamped - 1, clamped >= prevIdx)
+      // 跳转类导航不发声：趋势图拖动/滑块会连续调用 goToPly，逐手播放音效会糊成一片。
+      // 单步前进/后退（goForward/goBack/goToEnd）仍保留复盘音效。
     },
 
 
